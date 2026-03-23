@@ -7,6 +7,8 @@ import type {
   SurfaceSendMessageRequest,
   SurfaceSendMessageResponse,
   SurfaceThreadsResponse,
+  ShellCommandRequest,
+  SurfaceShellCommandResponse,
 } from "@clog/types";
 
 export interface AgentGatewaySurface {
@@ -16,4 +18,5 @@ export interface AgentGatewaySurface {
   sendMessage(input: SurfaceSendMessageRequest): Promise<SurfaceSendMessageResponse>;
   acknowledgeFinding(input: SurfaceAcknowledgeFindingRequest): Promise<SurfaceFindingsResponse>;
   executeAction(input: ActionExecutionRequest): Promise<SurfaceActionExecutionResponse>;
+  runShellCommand(input: ShellCommandRequest): Promise<SurfaceShellCommandResponse>;
 }

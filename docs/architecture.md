@@ -68,6 +68,10 @@ Bootstrapping plus the HTTP transport. This is where the system becomes a server
 
 `frontends/telegram/src/telegram-ui.ts` is the first adapter that connects the runtime gateway to Telegram via the Vercel Chat SDK. It uses the workspace stub in `packages/vercel-chat` today, but the handler pattern keeps it swap-ready for the official SDK. GUI or CLI adapters can re-use the same runtime surface (`/api/*`) without additional wiring.
 
+### `shell tooling`
+
+`apps/clog/src/runtime/tools/shell-executor.ts` is the safe command runner. It only allows a small command set (`ls`, `cat`, `rg`, etc.), enforces that the requested working directory lives inside the permitted roots (`process.cwd()`, the `.runtime` contract, and `.runtime/workspace`), and streams the captured stdout/stderr back through `/api/shell`. Every frontend should go through that endpoint instead of spawning arbitrary shells.
+
 ## `.runtime` contract
 
 `.runtime` now stores the runtime contract and guarded state slices:

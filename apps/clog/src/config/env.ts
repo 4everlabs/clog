@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import type { AgentExecutionMode, IntegrationCapabilitySnapshot, SurfaceChannelKind } from "@clog/types";
 
 const readBoolean = (value: string | undefined, fallback: boolean): boolean => {
@@ -72,6 +73,15 @@ export const loadAgentEnvironment = (env: NodeJS.ProcessEnv = process.env): Agen
       chat: {
         canSendOperatorMessages: readBoolean(env.POSTHOG_CLAW_CHAT_NOTIFY, true),
         supportedChannels: channels,
+      },
+      shell: {
+        canExecute: readBoolean(env.POSTHOG_CLAW_SHELL_EXECUTE, true),
+        safeCommands: ["ls", "cat", "rg", "grep", "head", "tail", "wc", "find"],
+        safeRoots: [
+          process.cwd(),
+          join(process.cwd(), ".runtime"),
+          join(process.cwd(), ".runtime", "workspace"),
+        ],
       },
     },
   };

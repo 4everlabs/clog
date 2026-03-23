@@ -42,6 +42,11 @@ export interface IntegrationCapabilitySnapshot {
     readonly canSendOperatorMessages: boolean;
     readonly supportedChannels: readonly SurfaceChannelKind[];
   };
+  readonly shell: {
+    readonly canExecute: boolean;
+    readonly safeCommands: readonly string[];
+    readonly safeRoots: readonly string[];
+  };
 }
 
 export interface IntegrationHealthView {
@@ -172,4 +177,26 @@ export interface ActionExecutionResult {
 
 export interface SurfaceActionExecutionResponse {
   readonly result: ActionExecutionResult;
+}
+
+export interface ShellCommandRequest {
+  readonly command: string;
+  readonly args?: readonly string[];
+  readonly cwd?: string;
+  readonly env?: Record<string, string>;
+}
+
+export interface ShellCommandResponse {
+  readonly ok: boolean;
+  readonly command: string;
+  readonly args: readonly string[];
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly exitCode: number;
+  readonly durationMs: number;
+  readonly workingDirectory: string;
+}
+
+export interface SurfaceShellCommandResponse {
+  readonly result: ShellCommandResponse;
 }

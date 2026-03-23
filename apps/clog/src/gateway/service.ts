@@ -2,18 +2,21 @@ import type {
   ActionExecutionRequest,
   ActionExecutionResult,
   AgentRuntimeSummary,
+  ShellCommandRequest,
   SurfaceAcknowledgeFindingRequest,
   SurfaceActionExecutionResponse,
   SurfaceBootstrapResponse,
   SurfaceFindingsResponse,
   SurfaceSendMessageRequest,
   SurfaceSendMessageResponse,
+  SurfaceShellCommandResponse,
   SurfaceThreadsResponse,
 } from "@clog/types";
 import type { AgentEnvironment } from "../config/env";
 import { RemediationPlanner } from "../agent/planner";
 import type { MonitoringLoop } from "../agent/monitor-loop";
 import { InMemoryRuntimeStore } from "../storage/in-memory-runtime-store";
+import { ShellExecutor } from "../runtime/tools/shell-executor";
 import type { AgentGatewaySurface } from "./contracts";
 
 export interface AgentGatewayDependencies {
@@ -120,6 +123,14 @@ export class AgentGateway implements AgentGatewaySurface {
       this.deps.planner.planForFinding(finding);
     }
 
+    return { result };
+  }
+
+  async runShellCommand(input: ShellCommandRequest): Promise<SurfaceShellCommandResponse> {
+    if (!this.deps.env.capabilities.shell.canExecute) {
+      throw new Error("Shell execution is disabled in the current configuration");
+    }
+    const result = ShellExecutor.execute(input, this.deps.env.capabilities.shell.safeRoots);
     return { result };
   }
 }

@@ -10,4 +10,4 @@ Planned clients:
 
 Each frontend should treat `apps/clog` as the authority and `@clog/types` as the stable interface.
 
-The Telegram adapter boots first and uses the Vercel Chat SDK stub in `packages/vercel-chat` as the outbound notifier. GUI and CLI adapters can be added later without touching the runtime surface.
+The Telegram adapter boots first and uses the Vercel Chat SDK stub in `packages/vercel-chat` as the outbound notifier. GUI and CLI adapters can be added later without touching the runtime surface. All frontends should call the guarded `/api/shell` endpoint when they need to `ls`, `rg`, `cat`, or otherwise inspect repository state; the server enforces the allow list and safe roots so the model never escapes the sandbox.

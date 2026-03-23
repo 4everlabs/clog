@@ -29,6 +29,10 @@ bun run ci   # lint + typecheck + build
 3. Monitoring, findings, and proposed actions stay in `apps/clog/src/storage` and `gateway`.
 4. Frontends such as `frontends/telegram` talk to `/api/*` on `apps/clog` so Telegram, GUI, and CLI can share the same surface.
 
+## Shell tooling
+
+`apps/clog/src/runtime/tools/shell-executor.ts` exposes a restricted `/api/shell` endpoint. The executor enforces an allow list (`ls`, `cat`, `rg`, `grep`, `head`, `tail`, `wc`, `find`), always runs inside safe roots (`process.cwd()`, `.runtime`, `.runtime/workspace`), and captures stdout/stderr/duration so the model can grep or inspect data without escaping the sandbox.
+
 ## `.runtime` structure
 
 The `.runtime` folder is the protected contract area that the runtime expects. It contains:

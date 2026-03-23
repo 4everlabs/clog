@@ -1,5 +1,6 @@
 import type {
   ActionExecutionRequest,
+  ShellCommandRequest,
   SurfaceAcknowledgeFindingRequest,
   SurfaceSendMessageRequest,
 } from "@clog/types";
@@ -45,6 +46,10 @@ export class AgentSurfaceTransport {
 
     if (pathname === "/api/chat" && request.method === "POST") {
       return json(await this.runtime.gateway.sendMessage(await parseJson<SurfaceSendMessageRequest>(request)));
+    }
+
+    if (pathname === "/api/shell" && request.method === "POST") {
+      return json(await this.runtime.gateway.runShellCommand(await parseJson<ShellCommandRequest>(request)));
     }
 
     if (pathname === "/api/findings/acknowledge" && request.method === "POST") {
