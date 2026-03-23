@@ -1,0 +1,6 @@
+{
+  "monitorIntervalMs": 60000,
+  "channels": ["telegram", "web"],
+  "aiModel": "gpt-5.4",
+  "safetyProfile": "safe"
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@clog/core",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "dependencies": {
+    "@clog/types": "workspace:*",
+    "@vercel/ai": "workspace:*",
+    "@vercel/chat": "workspace:*"
+  }
+}
