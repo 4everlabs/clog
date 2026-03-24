@@ -8,13 +8,14 @@ import type {
   ProposedAction,
   SurfaceChannelKind,
 } from "@clog/types";
+import type { RuntimeStore } from "./store";
 
 const createId = (prefix: string): string => `${prefix}_${crypto.randomUUID()}`;
 
 const sortThreads = (threads: readonly ConversationThread[]): ConversationThread[] =>
   [...threads].sort((left, right) => right.updatedAt - left.updatedAt);
 
-export class InMemoryRuntimeStore {
+export class InMemoryRuntimeStore implements RuntimeStore {
   private status: AgentStatus = "booting";
   private findings = new Map<string, AgentFinding>();
   private threads = new Map<string, ConversationThread>();

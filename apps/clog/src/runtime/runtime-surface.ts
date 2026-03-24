@@ -1,5 +1,8 @@
 import type {
   ActionExecutionRequest,
+  PostHogEndpointDiffRequest,
+  PostHogEndpointRunRequest,
+  PostHogInsightQueryRequest,
   ShellCommandRequest,
   SurfaceAcknowledgeFindingRequest,
   SurfaceSendMessageRequest,
@@ -50,6 +53,22 @@ export class AgentSurfaceTransport {
 
     if (pathname === "/api/shell" && request.method === "POST") {
       return json(await this.runtime.gateway.runShellCommand(await parseJson<ShellCommandRequest>(request)));
+    }
+
+    if (pathname === "/api/posthog/errors" && request.method === "GET") {
+      return json(await this.runtime.gateway.listPostHogErrors());
+    }
+
+    if (pathname === "/api/posthog/query" && request.method === "POST") {
+      return json(await this.runtime.gateway.queryPostHogInsight(await parseJson<PostHogInsightQueryRequest>(request)));
+    }
+
+    if (pathname === "/api/posthog/endpoints/diff" && request.method === "POST") {
+      return json(await this.runtime.gateway.diffPostHogEndpoints(await parseJson<PostHogEndpointDiffRequest>(request)));
+    }
+
+    if (pathname === "/api/posthog/endpoints/run" && request.method === "POST") {
+      return json(await this.runtime.gateway.runPostHogEndpoint(await parseJson<PostHogEndpointRunRequest>(request)));
     }
 
     if (pathname === "/api/findings/acknowledge" && request.method === "POST") {

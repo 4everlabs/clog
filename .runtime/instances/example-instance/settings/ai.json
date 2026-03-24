@@ -1,6 +1,6 @@
 {
   "mode": "propose",
-  "notifyChannels": ["telegram"],
+  "notifyChannels": ["slack"],
   "llm": {
     "model": "gpt-5.4",
     "temperature": 0.2

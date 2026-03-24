@@ -32,3 +32,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# runtime instances
+.runtime/instances/personal-instance/
+.runtime/instances/*/brain/storage/*.sqlite
+.runtime/instances/*/brain/storage/*.sqlite-shm
+.runtime/instances/*/brain/storage/*.sqlite-wal

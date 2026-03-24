@@ -6,8 +6,8 @@ Backend-first scaffold for the `clog` oversight agent (short for “claw post ho
 
 - `apps/clog`: runtime, monitoring loop, gateway, and AI bridge.
 - `apps/types`: shared contract for every frontend channel.
-- `frontends/telegram`: first adapter using the Vercel Chat SDK stub.
-- `packages/vercel-*`: workspace placeholders for `@vercel/ai` v6 and `@vercel/chat` while offline.
+- `apps/frontends/slack`: first adapter using Vercel's Chat SDK for Slack.
+- `packages/vercel-ai`: workspace placeholder for `@vercel/ai` v6 while offline.
 - `.runtime/`: runtime-centered settings, brain, and workspace structure (see below).
 
 ## Commands
@@ -27,7 +27,7 @@ bun run ci   # lint + typecheck + build
 1. The environment loader in `apps/clog/src/config/env.ts` shapes capability flags, monitor intervals, and channel broadcasts.
 2. `apps/clog/src/runtime/ai/vercel.ts` creates a Vercel AI `Chat` helper (currently wired to the workspace stub). `bootstrap.ts` exposes it via `runtime.aiRuntime`.
 3. Monitoring, findings, and proposed actions stay in `apps/clog/src/storage` and `gateway`.
-4. Frontends such as `frontends/telegram` talk to `/api/*` on `apps/clog` so Telegram, GUI, and CLI can share the same surface.
+4. Frontends such as `apps/frontends/slack` talk to `/api/*` on `apps/clog` so Slack, GUI, and CLI can share the same surface.
 
 ## Shell tooling
 

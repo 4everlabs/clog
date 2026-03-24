@@ -6,7 +6,7 @@ export type IntegrationKind = "posthog" | "github" | "vercel" | "chat";
 
 export type IntegrationStatus = "ready" | "degraded" | "missing-config";
 
-export type SurfaceChannelKind = "web" | "telegram" | "cli" | "system";
+export type SurfaceChannelKind = "web" | "slack" | "cli" | "system";
 
 export type FindingSeverity = "info" | "warning" | "critical";
 
@@ -29,6 +29,11 @@ export interface IntegrationCapabilitySnapshot {
   readonly posthog: {
     readonly canReadInsights: boolean;
     readonly canReadErrors: boolean;
+    readonly canReadLogs: boolean;
+    readonly canReadFlags: boolean;
+    readonly canReadExperiments: boolean;
+    readonly canManageEndpoints: boolean;
+    readonly canUploadSourcemaps: boolean;
   };
   readonly github: {
     readonly canReadRepository: boolean;
@@ -177,6 +182,58 @@ export interface ActionExecutionResult {
 
 export interface SurfaceActionExecutionResponse {
   readonly result: ActionExecutionResult;
+}
+
+export interface PostHogInsightQueryRequest {
+  readonly name: string;
+  readonly query: string;
+}
+
+export interface PostHogInsightQueryResult {
+  readonly name: string;
+  readonly columns: readonly string[];
+  readonly results: readonly Record<string, unknown>[];
+}
+
+export interface SurfacePostHogInsightResponse {
+  readonly result: PostHogInsightQueryResult;
+}
+
+export interface SurfacePostHogErrorsResponse {
+  readonly observations: readonly RuntimeObservation[];
+}
+
+export interface PostHogEndpointDiffRequest {
+  readonly path: string;
+  readonly cwd?: string;
+}
+
+export interface PostHogEndpointRunRequest {
+  readonly endpointName?: string;
+  readonly filePath?: string;
+  readonly cwd?: string;
+  readonly variables?: Record<string, string>;
+  readonly json?: boolean;
+}
+
+export interface PostHogCliCommandResponse {
+  readonly ok: boolean;
+  readonly command: string;
+  readonly args: readonly string[];
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly exitCode: number;
+  readonly durationMs: number;
+  readonly workingDirectory: string;
+  readonly parsedJson?: unknown;
+}
+
+export interface SurfacePostHogEndpointDiffResponse {
+  readonly result: PostHogCliCommandResponse;
+}
+
+export interface SurfacePostHogEndpointRunResponse {
+  readonly result: PostHogCliCommandResponse;
 }
 
 export interface ShellCommandRequest {

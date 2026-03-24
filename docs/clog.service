@@ -1,0 +1,23 @@
+[Unit]
+Description=clog oversight runtime
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=clog
+Group=clog
+WorkingDirectory=/opt/clog
+EnvironmentFile=-/etc/clog.env
+ExecStart=/home/clog/.bun/bin/bun run index.ts
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/opt/clog
+
+[Install]
+WantedBy=multi-user.target

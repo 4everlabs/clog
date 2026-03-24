@@ -8,6 +8,6 @@
   "dependencies": {
     "@clog/types": "workspace:*",
     "@vercel/ai": "workspace:*",
-    "@vercel/chat": "workspace:*"
+    "posthog-node": "^5.28.5"
   }
 }

@@ -15,7 +15,7 @@ This scaffold is intentionally runtime-first:
 - `frontends/*`
   - adapters, not authorities
 
-That keeps the web UI, Telegram bot, and CLI interchangeable. Each client talks to the same gateway and renders the same domain objects.
+That keeps the web UI, Slack bot, and CLI interchangeable. Each client talks to the same gateway and renders the same domain objects.
 
 ## Runtime Layers
 
@@ -54,7 +54,7 @@ Currently in-memory only. This should eventually own:
 
 ### `gateway`
 
-The transport-agnostic typed surface. This is the layer web, Telegram, and CLI should all target.
+The transport-agnostic typed surface. This is the layer web, Slack, and CLI should all target.
 
 ### `runtime`
 
@@ -64,9 +64,9 @@ Bootstrapping plus the HTTP transport. This is where the system becomes a server
 
 `apps/clog/src/runtime/ai/vercel.ts` instantiates a Vercel AI `Chat` helper (currently backed by the local workspace version of `@vercel/ai`). The helper reads prompts from `apps/clog/src/ai/prompts` (`clog-system.md` and `primary-mode.md`) and surfaces them to the runtime so the planner is always operating with the correct system instructions. It is wired into `bootstrap.ts` as `aiRuntime`, so planners and operators can ask the same chat surface for concise summaries or prompts once the real Vercel AI credentials are provided.
 
-### `telegram front-end`
+### `slack front-end`
 
-`frontends/telegram/src/telegram-ui.ts` is the first adapter that connects the runtime gateway to Telegram via the Vercel Chat SDK. It uses the workspace stub in `packages/vercel-chat` today, but the handler pattern keeps it swap-ready for the official SDK. GUI or CLI adapters can re-use the same runtime surface (`/api/*`) without additional wiring.
+`apps/frontends/slack/src/slack-ui.ts` is the first adapter that connects the runtime gateway to Slack via Vercel's Chat SDK. It uses the official `chat` and `@chat-adapter/slack` packages so GUI or CLI adapters can re-use the same runtime surface (`/api/*`) without additional wiring.
 
 ### `shell tooling`
 

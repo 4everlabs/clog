@@ -2,21 +2,31 @@ import type {
   ActionExecutionRequest,
   ActionExecutionResult,
   AgentRuntimeSummary,
+  PostHogEndpointDiffRequest,
+  PostHogEndpointRunRequest,
+  PostHogInsightQueryRequest,
   ShellCommandRequest,
   SurfaceAcknowledgeFindingRequest,
   SurfaceActionExecutionResponse,
   SurfaceBootstrapResponse,
   SurfaceFindingsResponse,
+  SurfacePostHogEndpointDiffResponse,
+  SurfacePostHogEndpointRunResponse,
+  SurfacePostHogErrorsResponse,
+  SurfacePostHogInsightResponse,
   SurfaceSendMessageRequest,
   SurfaceSendMessageResponse,
   SurfaceShellCommandResponse,
   SurfaceThreadsResponse,
 } from "@clog/types";
-import type { AgentEnvironment } from "../config/env";
-import { RemediationPlanner } from "../agent/planner";
-import type { MonitoringLoop } from "../agent/monitor-loop";
-import { InMemoryRuntimeStore } from "../storage/in-memory-runtime-store";
-import { ShellExecutor } from "../runtime/tools/shell-executor";
+import type { AgentEnvironment } from "../config";
+import type { PostHogIntegrationClient } from "./integrations/posthog/client";
+import { RemediationPlanner } from "../runtime/ai/agent/planner";
+import { PostHogApiClient } from "../runtime/ai/tools/posthog-api";
+import { PostHogCliTool } from "../runtime/ai/tools/posthog-cli";
+import type { MonitoringLoop } from "../runtime/ai/agent/monitor-loop";
+import { ShellExecutor } from "../runtime/ai/tools/shell-executor";
+import type { RuntimeStore } from "../runtime/storage/store";
 import type { AgentGatewaySurface } from "./contracts";
 
 export interface AgentGatewayDependencies {
@@ -24,7 +34,10 @@ export interface AgentGatewayDependencies {
   readonly bootedAt: number;
   readonly planner: RemediationPlanner;
   readonly monitorLoop: MonitoringLoop;
-  readonly store: InMemoryRuntimeStore;
+  readonly posthog: PostHogIntegrationClient;
+  readonly posthogApi: PostHogApiClient;
+  readonly posthogCli: PostHogCliTool;
+  readonly store: RuntimeStore;
 }
 
 export class AgentGateway implements AgentGatewaySurface {
@@ -132,5 +145,51 @@ export class AgentGateway implements AgentGatewaySurface {
     }
     const result = ShellExecutor.execute(input, this.deps.env.capabilities.shell.safeRoots);
     return { result };
+  }
+
+  async listPostHogErrors(): Promise<SurfacePostHogErrorsResponse> {
+    if (!this.deps.env.capabilities.posthog.canReadErrors) {
+      throw new Error("PostHog error reads are disabled in the current configuration");
+    }
+
+    return {
+      observations: await this.deps.posthog.listErrorObservations(),
+    };
+  }
+
+  async queryPostHogInsight(input: PostHogInsightQueryRequest): Promise<SurfacePostHogInsightResponse> {
+    if (!this.deps.env.capabilities.posthog.canReadInsights) {
+      throw new Error("PostHog insight reads are disabled in the current configuration");
+    }
+
+    const name = input.name.trim() || "PostHog insight query";
+    const query = input.query.trim();
+    if (!query) {
+      throw new Error("PostHog insight query cannot be empty");
+    }
+
+    return {
+      result: await this.deps.posthogApi.runInsightQuery(name, query),
+    };
+  }
+
+  async diffPostHogEndpoints(input: PostHogEndpointDiffRequest): Promise<SurfacePostHogEndpointDiffResponse> {
+    if (!this.deps.env.capabilities.posthog.canManageEndpoints) {
+      throw new Error("PostHog endpoint management is disabled in the current configuration");
+    }
+
+    return {
+      result: this.deps.posthogCli.diffEndpoints(input.path, input.cwd),
+    };
+  }
+
+  async runPostHogEndpoint(input: PostHogEndpointRunRequest): Promise<SurfacePostHogEndpointRunResponse> {
+    if (!this.deps.env.capabilities.posthog.canManageEndpoints) {
+      throw new Error("PostHog endpoint management is disabled in the current configuration");
+    }
+
+    return {
+      result: this.deps.posthogCli.runEndpoint(input),
+    };
   }
 }

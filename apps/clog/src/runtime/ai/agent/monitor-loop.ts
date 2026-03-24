@@ -1,12 +1,12 @@
 import type { AgentFinding, IntegrationHealthView, RuntimeObservation } from "@clog/types";
-import { buildFindingsFromObservations } from "../findings/evaluator";
-import type { GitHubIntegrationClient } from "../integrations/github/client";
-import type { PostHogIntegrationClient } from "../integrations/posthog/client";
-import type { VercelIntegrationClient } from "../integrations/vercel/client";
-import { InMemoryRuntimeStore } from "../storage/in-memory-runtime-store";
+import { buildFindingsFromObservations } from "../../../evaluator";
+import type { GitHubIntegrationClient } from "../../../gateway/integrations/github/client";
+import type { PostHogIntegrationClient } from "../../../gateway/integrations/posthog/client";
+import type { VercelIntegrationClient } from "../../../gateway/integrations/vercel/client";
+import type { RuntimeStore } from "../../storage/store";
 
 export interface MonitoringLoopDependencies {
-  readonly store: InMemoryRuntimeStore;
+  readonly store: RuntimeStore;
   readonly posthog: PostHogIntegrationClient;
   readonly github: GitHubIntegrationClient;
   readonly vercel: VercelIntegrationClient;
