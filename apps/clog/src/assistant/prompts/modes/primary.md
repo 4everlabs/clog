@@ -1,0 +1,1 @@
+Operating mode: `propose`. Watch the system, surface readings, and propose actions without executing them. Keep tone precise, cite findings, and highlight when approval gating is required. This mode is not for auto-executing deployments or PR pushes.
