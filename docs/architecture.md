@@ -60,7 +60,7 @@ Bootstrapping plus the HTTP transport. This is where the system becomes a server
 
 ### `ai bridge`
 
-`apps/clog/src/assistant/assistant.ts` is the single assistant entrypoint for chat. It loads the public repo prompts plus instance-scoped runtime prompts from `.runtime/instances/<instance>/brain/prompts`, then serves the same reply path to the gateway and Telegram frontend.
+`apps/clog/src/brain/service.ts` is the shared chat entrypoint. It loads repo-level prompts from `apps/clog/src/brain/prompts`, then serves the same reply path to the gateway and Telegram frontend.
 
 ### `telegram front-end`
 
@@ -76,10 +76,10 @@ Bootstrapping plus the HTTP transport. This is where the system becomes a server
 
 - `settings.private.json` – runtime-level knobs and guard rails that the agent or model never reads.
 - `model-settings.json` – the light settings snapshot the model can inspect so it knows its mode and available channels.
-- `brain/knowledge/` – knowledge artifacts, embeddings, and prompt references.
+- `storage/` – per-instance runtime state such as SQLite persistence.
 - `workspace/` – per-instance workspaces kept outside the tracked runtime contract.
 
-These files are intentionally separated so sensitive runtime options stay offline, while safe metadata remains available to the shared assistant prompt loader.
+These files are intentionally separated so sensitive runtime options stay offline, while shared prompt and knowledge files stay in the repo-level `apps/clog/src/brain` tree instead of per-instance runtime state.
 
 ## Execution Modes
 

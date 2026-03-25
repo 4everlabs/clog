@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentFinding, ConversationThread } from "@clog/types";
-import { AssistantService } from "../apps/clog/src/assistant/assistant";
+import { BrainService } from "../apps/clog/src/brain/service";
 
 const createThread = (message: string): ConversationThread => ({
   id: "thread_1",
@@ -33,10 +33,10 @@ const createFinding = (): AgentFinding => ({
   proposedActions: [],
 });
 
-describe("AssistantService", () => {
+describe("BrainService", () => {
   test("falls back cleanly when no API key is configured", async () => {
-    const assistant = new AssistantService({ apiKey: "" });
-    const reply = await assistant.reply({
+    const brain = new BrainService({ apiKey: "" });
+    const reply = await brain.reply({
       thread: createThread("hello"),
       message: "hello",
       findings: [],
@@ -47,9 +47,9 @@ describe("AssistantService", () => {
   });
 
   test("mentions the top finding in fallback mode", async () => {
-    const assistant = new AssistantService({ apiKey: "" });
+    const brain = new BrainService({ apiKey: "" });
     const finding = createFinding();
-    const reply = await assistant.reply({
+    const reply = await brain.reply({
       thread: createThread("what should we do?"),
       message: "what should we do?",
       findings: [finding],

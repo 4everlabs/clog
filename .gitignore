@@ -35,6 +35,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # runtime instances
 .runtime/instances/personal-instance/
-.runtime/instances/*/brain/storage/*.sqlite
-.runtime/instances/*/brain/storage/*.sqlite-shm
-.runtime/instances/*/brain/storage/*.sqlite-wal
+.runtime/instances/*/storage/*.sqlite
+.runtime/instances/*/storage/*.sqlite-shm
+.runtime/instances/*/storage/*.sqlite-wal

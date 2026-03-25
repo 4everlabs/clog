@@ -8,7 +8,7 @@ Backend-first scaffold for the `clog` oversight agent (short for “claw post ho
 - `apps/types`: shared contract for every frontend channel.
 - `apps/frontends/telegram`: Telegram bot frontend that forwards operator messages into the runtime.
 - `apps/frontends/web`: placeholder package for the eventual web UI.
-- `.runtime/`: runtime-centered settings, brain, and workspace structure (see below).
+- `.runtime/`: runtime-centered settings, storage, and workspace structure (see below).
 
 ## Commands
 
@@ -25,7 +25,7 @@ bun run ci   # lint + typecheck + build
 ## Runtime bootstrapping
 
 1. The environment loader in `apps/clog/src/config.ts` shapes capability flags, monitor intervals, and channel broadcasts.
-2. `apps/clog/src/assistant/assistant.ts` is the single chat brain used by the gateway and Telegram frontend. It loads repo prompts plus instance-scoped prompt files from `.runtime`.
+2. `apps/clog/src/brain/service.ts` is the shared chat brain used by the gateway and Telegram frontend. It loads repo-level prompt files from `apps/clog/src/brain`.
 3. Monitoring, findings, and proposed actions stay in `apps/clog/src/monitoring`, `apps/clog/src/storage`, and `apps/clog/src/gateway`.
 4. Frontends such as `apps/frontends/telegram` talk to the runtime surface on `apps/clog` so Telegram, GUI, and CLI can share the same domain model.
 
@@ -39,7 +39,7 @@ The `.runtime` folder is the protected contract area that the runtime expects. I
 
 - `settings.private.json` – runtime-owned configuration that the agent or model should never see (monitor cadence, channel filters, etc.).
 - `model-settings.json` – lightweight, operator-curated metadata that can be safely embedded in prompts (mode, preferred channels, talk-back instructions).
-- `brain/knowledge` – reserved for knowledge graphs, prompts, or embeddings.
+- `storage/` – per-instance SQLite state and runtime-owned persistence.
 - `workspace/` – per-instance workspace area that frontends or the runtime might mount.
 
 Create files inside these folders before connecting live services.

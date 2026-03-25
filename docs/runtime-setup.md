@@ -33,9 +33,9 @@ Copy [`docs/clog.env.example`](docs/clog.env.example) to `/etc/clog.env` and fil
 - PostHog host, project ID, and personal API key
 - optional PostHog project API key if the service should emit its own events
 - optional insight monitor HogQL queries
-- Slack and any other integration secrets you need outside the PostHog rollout
+- Telegram and any other integration secrets you need outside the PostHog rollout
 
-The repo keeps `example-instance` as a clean starter shape. That starter still includes `brain/storage` as part of the instance layout. Local development writes to `personal-instance`, which is ignored by git so your personal SQLite state does not dirty the starter instance.
+The repo keeps `example-instance` as a clean starter shape. Local development writes to `personal-instance`, which is ignored by git so your personal SQLite state does not dirty the starter instance. Instance state now lives directly under `storage/`, while shared prompts and knowledge live in `apps/clog/src/brain`.
 
 ## 4. Install the service unit
 
