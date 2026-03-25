@@ -1,5 +1,5 @@
-import { bootstrapRuntime } from "@clog/core";
 import { TelegramFrontend } from "./adapter";
+import { ClogApiClient, resolveBackendBaseUrl } from "./clog-api";
 
 const parseAllowedChatIds = (value: string | undefined): number[] => {
   return (value ?? "")
@@ -16,7 +16,7 @@ export const startTelegramFrontend = async (): Promise<void> => {
     throw new Error("TELEGRAM_BOT_TOKEN is required to start the Telegram frontend.");
   }
 
-  const runtime = bootstrapRuntime();
+  const api = new ClogApiClient({ baseUrl: resolveBackendBaseUrl() });
   const frontend = new TelegramFrontend(
     {
       botToken,
@@ -29,13 +29,10 @@ export const startTelegramFrontend = async (): Promise<void> => {
   await frontend.start(
     async (chatId, message) => {
       const title = getThreadTitle(chatId);
-      const existingThreadId =
-        runtimeThreadIds.get(chatId) ??
-        runtime.store
-          .listThreads()
-          .find((thread) => thread.channel === "telegram" && thread.title === title)?.id;
+      const existingThreadId = runtimeThreadIds.get(chatId)
+        ?? (await api.findThreadByTitle("telegram", title))?.id;
 
-      const response = await runtime.gateway.sendMessage(
+      const response = await api.sendMessage(
         existingThreadId
           ? {
               channel: "telegram",

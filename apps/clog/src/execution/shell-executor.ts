@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { resolve, isAbsolute } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 import type { ShellCommandRequest, ShellCommandResponse } from "@clog/types";
 
 const ALLOWED_COMMANDS = new Set(["ls", "cat", "rg", "grep", "head", "tail", "wc", "find"]);

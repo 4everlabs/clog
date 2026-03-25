@@ -32,7 +32,7 @@ External-system boundaries:
 - Vercel for deploy actions
 - chat adapters for outbound operator messaging
 
-### `agent`
+### `monitoring`
 
 The monitoring loop lives here.
 
@@ -54,13 +54,13 @@ Currently in-memory only. This should eventually own:
 
 The transport-agnostic typed surface. This is the layer web, Telegram, and CLI should all target.
 
-### `runtime`
+### `server`
 
 Bootstrapping plus the HTTP transport. This is where the system becomes a server, but the server remains a thin shell around the gateway.
 
 ### `ai bridge`
 
-`apps/clog/src/runtime/ai/assistant.ts` is the single assistant entrypoint for chat. It loads the public repo prompts plus instance-scoped runtime prompts from `.runtime/instances/<instance>/brain/prompts`, then serves the same reply path to the gateway, CLI, and Telegram frontend.
+`apps/clog/src/assistant/assistant.ts` is the single assistant entrypoint for chat. It loads the public repo prompts plus instance-scoped runtime prompts from `.runtime/instances/<instance>/brain/prompts`, then serves the same reply path to the gateway and Telegram frontend.
 
 ### `telegram front-end`
 
@@ -68,7 +68,7 @@ Bootstrapping plus the HTTP transport. This is where the system becomes a server
 
 ### `shell tooling`
 
-`apps/clog/src/runtime/tools/shell-executor.ts` is the safe command runner. It only allows a small command set (`ls`, `cat`, `rg`, etc.), enforces that the requested working directory lives inside the permitted roots (`process.cwd()`, the `.runtime` contract, and `.runtime/workspace`), and streams the captured stdout/stderr back through `/api/shell`. Every frontend should go through that endpoint instead of spawning arbitrary shells.
+`apps/clog/src/execution/shell-executor.ts` is the safe command runner. It only allows a small command set (`ls`, `cat`, `rg`, etc.), enforces that the requested working directory lives inside the permitted roots (`process.cwd()`, the `.runtime` contract, and `.runtime/workspace`), and streams the captured stdout/stderr back through `/api/shell`. Every frontend should go through that endpoint instead of spawning arbitrary shells.
 
 ## `.runtime` contract
 

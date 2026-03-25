@@ -1,5 +1,5 @@
 import type { FindingSeverity, RuntimeObservation } from "@clog/types";
-import type { PostHogInsightMonitorConfig } from "../../../config";
+import type { PostHogInsightMonitorConfig } from "../../config";
 
 const slugify = (value: string): string =>
   value

@@ -1,14 +1,14 @@
 import { spawnSync } from "node:child_process";
 import { dirname, isAbsolute, resolve } from "node:path";
 import type { PostHogCliCommandResponse } from "@clog/types";
-import type { PostHogRuntimeConfig } from "../../../config";
+import type { PostHogRuntimeConfig } from "../../config";
 import type {
   PostHogCliCommandResult,
   PostHogEndpointPullOptions,
   PostHogEndpointRunOptions,
   PostHogSourcemapInjectOptions,
   PostHogSourcemapUploadOptions,
-} from "./posthog-types";
+} from "./types";
 
 const WORKSPACE_ROOT = process.cwd();
 

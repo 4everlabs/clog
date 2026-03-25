@@ -11,9 +11,9 @@ import type {
   ProposedAction,
   SurfaceChannelKind,
 } from "@clog/types";
-import type { RuntimeStorageConfig } from "../../config";
+import type { RuntimeStorageConfig } from "../config";
 import { RUNTIME_STORAGE_PRAGMAS, RUNTIME_STORAGE_SCHEMA } from "./schema";
-import type { RuntimeStore, MemoryEntry } from "./store";
+import type { MemoryEntry, RuntimeStore } from "./store";
 
 const createId = (prefix: string): string => `${prefix}_${crypto.randomUUID()}`;
 

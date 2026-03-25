@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { AgentFinding } from "@clog/types";
-import { SqliteRuntimeStore } from "../apps/clog/src/runtime/storage/sqlite";
+import { SqliteRuntimeStore } from "../apps/clog/src/storage/sqlite";
 
 const cleanupPaths: string[] = [];
 

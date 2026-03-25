@@ -8,7 +8,7 @@ import type {
   ProposedAction,
   SurfaceChannelKind,
 } from "@clog/types";
-import type { RuntimeStore, MemoryEntry } from "./store";
+import type { MemoryEntry, RuntimeStore } from "./store";
 
 const createId = (prefix: string): string => `${prefix}_${crypto.randomUUID()}`;
 
@@ -145,7 +145,7 @@ export class InMemoryRuntimeStore implements RuntimeStore {
   }
 
   listMemories(): MemoryEntry[] {
-    return [...this.memories.values()].sort((a, b) => b.importance - a.importance);
+    return [...this.memories.values()].sort((left, right) => right.importance - left.importance);
   }
 
   addMemory(memory: Omit<MemoryEntry, "id" | "createdAt">): MemoryEntry {

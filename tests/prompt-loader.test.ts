@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { buildSystemPrompt, loadAiPromptBundle, resolveRuntimePromptsDir } from "../apps/clog/src/runtime/ai/prompt-loader";
+import { buildSystemPrompt, loadAiPromptBundle, resolveRuntimePromptsDir } from "../apps/clog/src/assistant/prompt-loader";
 
 const cleanupPaths: string[] = [];
 

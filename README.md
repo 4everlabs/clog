@@ -24,14 +24,14 @@ bun run ci   # lint + typecheck + build
 
 ## Runtime bootstrapping
 
-1. The environment loader in `apps/clog/src/config/env.ts` shapes capability flags, monitor intervals, and channel broadcasts.
-2. `apps/clog/src/runtime/ai/assistant.ts` is the single chat brain used by the gateway, CLI, and Telegram frontend. It loads repo prompts plus instance-scoped prompt files from `.runtime`.
-3. Monitoring, findings, and proposed actions stay in `apps/clog/src/runtime` and `gateway`.
+1. The environment loader in `apps/clog/src/config.ts` shapes capability flags, monitor intervals, and channel broadcasts.
+2. `apps/clog/src/assistant/assistant.ts` is the single chat brain used by the gateway and Telegram frontend. It loads repo prompts plus instance-scoped prompt files from `.runtime`.
+3. Monitoring, findings, and proposed actions stay in `apps/clog/src/monitoring`, `apps/clog/src/storage`, and `apps/clog/src/gateway`.
 4. Frontends such as `apps/frontends/telegram` talk to the runtime surface on `apps/clog` so Telegram, GUI, and CLI can share the same domain model.
 
 ## Shell tooling
 
-`apps/clog/src/runtime/tools/shell-executor.ts` exposes a restricted `/api/shell` endpoint. The executor enforces an allow list (`ls`, `cat`, `rg`, `grep`, `head`, `tail`, `wc`, `find`), always runs inside safe roots (`process.cwd()`, `.runtime`, `.runtime/workspace`), and captures stdout/stderr/duration so the model can grep or inspect data without escaping the sandbox.
+`apps/clog/src/execution/shell-executor.ts` exposes a restricted `/api/shell` endpoint. The executor enforces an allow list (`ls`, `cat`, `rg`, `grep`, `head`, `tail`, `wc`, `find`), always runs inside safe roots (`process.cwd()`, `.runtime`, `.runtime/workspace`), and captures stdout/stderr/duration so the model can inspect data without escaping the sandbox.
 
 ## `.runtime` structure
 

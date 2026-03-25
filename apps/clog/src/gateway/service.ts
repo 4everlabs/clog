@@ -20,13 +20,13 @@ import type {
   SurfaceThreadsResponse,
 } from "@clog/types";
 import type { AgentEnvironment } from "../config";
-import type { PostHogIntegrationClient } from "./integrations/posthog/client";
-import { AssistantService } from "../runtime/ai/assistant";
-import { PostHogApiClient } from "../runtime/ai/tools/posthog-api";
-import { PostHogCliTool } from "../runtime/ai/tools/posthog-cli";
-import type { MonitoringLoop } from "../runtime/ai/agent/monitor-loop";
-import { ShellExecutor } from "../runtime/ai/tools/shell-executor";
-import type { RuntimeStore } from "../runtime/storage/store";
+import type { PostHogIntegrationClient } from "../integrations/posthog/client";
+import { AssistantService } from "../assistant/assistant";
+import { PostHogApiClient } from "../integrations/posthog/api-client";
+import { PostHogCliTool } from "../integrations/posthog/cli-tool";
+import type { MonitoringLoop } from "../monitoring/monitor-loop";
+import { ShellExecutor } from "../execution/shell-executor";
+import type { RuntimeStore } from "../storage/store";
 import type { AgentGatewaySurface } from "./contracts";
 
 export interface AgentGatewayDependencies {
@@ -68,6 +68,10 @@ export class AgentGateway implements AgentGatewaySurface {
         updatedAt: thread.updatedAt,
       })),
     };
+  }
+
+  async runMonitorCycle() {
+    return await this.deps.monitorLoop.tick();
   }
 
   async listFindings(): Promise<SurfaceFindingsResponse> {

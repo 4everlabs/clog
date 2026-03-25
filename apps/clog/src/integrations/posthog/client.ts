@@ -1,13 +1,13 @@
 import type { IntegrationCapabilitySnapshot, IntegrationHealthView, RuntimeObservation } from "@clog/types";
-import type { PostHogRuntimeConfig } from "../../../config";
-import { PostHogApiClient } from "../../../runtime/ai/tools/posthog-api";
+import type { PostHogRuntimeConfig } from "../../config";
+import { PostHogApiClient } from "./api-client";
 import {
   mapInsightRegressionObservation,
   mapPostHogErrorSpikeObservation,
   mapPostHogMissingConfigObservation,
   mapPostHogRequestFailureObservation,
-} from "../../../runtime/ai/tools/posthog-mappers";
-import type { PostHogErrorWindowRow, PostHogInsightWindowRow } from "../../../runtime/ai/tools/posthog-types";
+} from "./mappers";
+import type { PostHogErrorWindowRow, PostHogInsightWindowRow } from "./types";
 
 export interface PostHogIntegrationClientDependencies {
   readonly api: PostHogApiClient;

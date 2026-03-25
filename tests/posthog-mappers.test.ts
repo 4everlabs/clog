@@ -3,7 +3,7 @@ import {
   mapInsightRegressionObservation,
   mapPostHogErrorSpikeObservation,
   mapPostHogMissingConfigObservation,
-} from "../apps/clog/src/runtime/ai/tools/posthog-mappers";
+} from "../apps/clog/src/integrations/posthog/mappers";
 
 describe("posthog mappers", () => {
   test("builds an error spike observation when thresholds are crossed", () => {

@@ -176,14 +176,14 @@ export const loadAgentEnvironment = (env: NodeJS.ProcessEnv = process.env): Agen
   const channels = readChannels(env.POSTHOG_CLAW_CHANNELS);
   const canCreatePullRequest = readBoolean(env.POSTHOG_CLAW_GITHUB_PR, true);
   const canPushBranch = readBoolean(env.POSTHOG_CLAW_GITHUB_PUSH, true);
-  const requestedPort = readInteger(env.PORT, 0);
+  const requestedPort = readInteger(env.PORT, 3000);
   const posthog = createPostHogConfig(env);
   const storage = createRuntimeStorageConfig(env);
   const hasPostHogAccess = hasPostHogManagementAccess(posthog);
 
   return {
     appName: env.POSTHOG_CLAW_APP_NAME?.trim() || "PostHog Claw",
-    port: Number.isFinite(requestedPort) ? requestedPort : 0,
+    port: Number.isFinite(requestedPort) ? requestedPort : 3000,
     executionMode: readExecutionMode(env.POSTHOG_CLAW_EXECUTION_MODE),
     monitorIntervalMs: Math.max(5_000, readInteger(env.POSTHOG_CLAW_MONITOR_INTERVAL_MS, 60_000)),
     channels,

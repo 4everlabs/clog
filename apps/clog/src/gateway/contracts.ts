@@ -17,9 +17,11 @@ import type {
   ShellCommandRequest,
   SurfaceShellCommandResponse,
 } from "@clog/types";
+import type { MonitoringTickResult } from "../monitoring/monitor-loop";
 
 export interface AgentGatewaySurface {
   bootstrap(): Promise<SurfaceBootstrapResponse>;
+  runMonitorCycle(): Promise<MonitoringTickResult>;
   listFindings(): Promise<SurfaceFindingsResponse>;
   listThreads(): Promise<SurfaceThreadsResponse>;
   sendMessage(input: SurfaceSendMessageRequest): Promise<SurfaceSendMessageResponse>;

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentFinding, ConversationThread } from "@clog/types";
-import { AssistantService } from "../apps/clog/src/runtime/ai/assistant";
+import { AssistantService } from "../apps/clog/src/assistant/assistant";
 
 const createThread = (message: string): ConversationThread => ({
   id: "thread_1",

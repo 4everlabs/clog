@@ -1,12 +1,12 @@
 import { PostHog } from "posthog-node";
 import type { PostHogInsightQueryResult } from "@clog/types";
-import type { PostHogRuntimeConfig } from "../../../config";
+import type { PostHogRuntimeConfig } from "../../config";
 import type {
   PostHogFeatureFlag,
   PostHogHealthcheckResult,
   PostHogQueryResponse,
   PostHogQueryRow,
-} from "./posthog-types";
+} from "./types";
 
 interface PostHogPaginatedResponse<T> {
   readonly results?: readonly T[];

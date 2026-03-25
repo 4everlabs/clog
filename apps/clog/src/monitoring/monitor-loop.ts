@@ -1,4 +1,4 @@
-import type { AgentFinding, IntegrationHealthView, RuntimeObservation } from "@clog/types";
+import type { AgentFinding, IntegrationHealthView, ProposedAction, RuntimeObservation } from "@clog/types";
 import type { GitHubIntegrationClient } from "../integrations/github/client";
 import type { PostHogIntegrationClient } from "../integrations/posthog/client";
 import type { VercelIntegrationClient } from "../integrations/vercel/client";
@@ -6,7 +6,7 @@ import type { RuntimeStore } from "../storage/store";
 
 const buildFindingsFromObservations = (observations: readonly RuntimeObservation[]): AgentFinding[] => {
   return observations.map((observation) => {
-    const proposedActions = [
+    const proposedActions: ProposedAction[] = [
       {
         id: `action_notify_${observation.id}`,
         kind: "notify" as const,

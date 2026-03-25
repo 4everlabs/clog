@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { PostHogCliTool } from "../apps/clog/src/runtime/ai/tools/posthog-cli";
+import { PostHogCliTool } from "../apps/clog/src/integrations/posthog/cli-tool";
 
 const createConfig = () => ({
   host: "https://us.posthog.com",
