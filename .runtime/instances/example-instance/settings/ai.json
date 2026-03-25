@@ -2,7 +2,27 @@
   "mode": "propose",
   "notifyChannels": ["slack"],
   "llm": {
-    "model": "gpt-5.4",
-    "temperature": 0.2
+    "provider": "openrouter",
+    "model": "stepfun/flash-3.5",
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "temperature": 0.3,
+    "maxTokens": 4096
+  },
+  "heartbeat": {
+    "enabled": true,
+    "intervalMs": 60000
+  },
+  "guardrails": {
+    "requireApprovalForDeploys": true,
+    "requireApprovalForPrs": true,
+    "requireApprovalForConfigChanges": true,
+    "allowedShellCommands": ["ls", "cat", "rg", "grep", "head", "tail", "wc"],
+    "readonlyMode": false
+  },
+  "errorThresholds": {
+    "lookbackMinutes": 30,
+    "spikeThreshold": 10,
+    "spikeMultiplier": 2,
+    "criticalThreshold": 25
   }
 }

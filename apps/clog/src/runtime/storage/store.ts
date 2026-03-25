@@ -9,6 +9,15 @@ import type {
   SurfaceChannelKind,
 } from "@clog/types";
 
+export interface MemoryEntry {
+  id: string;
+  content: string;
+  type: "observation" | "finding" | "conversation" | "insight";
+  importance: number;
+  createdAt: number;
+  metadata?: Record<string, unknown>;
+}
+
 export interface RuntimeStore {
   getStatus(): AgentStatus;
   setStatus(status: AgentStatus): void;
@@ -25,4 +34,6 @@ export interface RuntimeStore {
   getActionResult(actionId: string): ActionExecutionResult | null;
   seedOperatorThread(channel: SurfaceChannelKind, title?: string): ConversationThread;
   listActions(): ProposedAction[];
+  listMemories(): MemoryEntry[];
+  addMemory(memory: Omit<MemoryEntry, "id" | "createdAt">): MemoryEntry;
 }

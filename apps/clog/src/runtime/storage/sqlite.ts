@@ -13,7 +13,7 @@ import type {
 } from "@clog/types";
 import type { RuntimeStorageConfig } from "../../config";
 import { RUNTIME_STORAGE_PRAGMAS, RUNTIME_STORAGE_SCHEMA } from "./schema";
-import type { RuntimeStore } from "./store";
+import type { RuntimeStore, MemoryEntry } from "./store";
 
 const createId = (prefix: string): string => `${prefix}_${crypto.randomUUID()}`;
 
@@ -212,5 +212,30 @@ export class SqliteRuntimeStore implements RuntimeStore {
     };
     this.upsertFindings([updated]);
     return updated;
+  }
+
+  listMemories(): MemoryEntry[] {
+    const rows = this.db
+      .query<{ payload: string }, []>("SELECT payload FROM runtime_memories ORDER BY importance DESC, created_at DESC")
+      .all();
+    return rows.map((row) => parseJson<MemoryEntry>(row.payload, "memory"));
+  }
+
+  addMemory(memory: Omit<MemoryEntry, "id" | "createdAt">): MemoryEntry {
+    const entry: MemoryEntry = {
+      ...memory,
+      id: `mem_${crypto.randomUUID()}`,
+      createdAt: Date.now(),
+    };
+    this.persistMemory(entry);
+    return entry;
+  }
+
+  private persistMemory(memory: MemoryEntry): void {
+    this.db
+      .query(
+        "INSERT OR REPLACE INTO runtime_memories (id, content, type, importance, created_at, metadata) VALUES (?, ?, ?, ?, ?, ?)",
+      )
+      .run(memory.id, memory.content, memory.type, memory.importance, memory.createdAt, JSON.stringify(memory.metadata ?? {}));
   }
 }

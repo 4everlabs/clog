@@ -1,6 +1,8 @@
 import type { AgentRuntimeSummary, SurfaceChannelKind } from "@clog/types";
 import { MonitoringLoop } from "./ai/agent/monitor-loop";
 import { RemediationPlanner } from "./ai/agent/planner";
+import { AgentLoop } from "./ai/agent/agentloop";
+import { ContextAssembler } from "./ai/agent/context-assembler";
 import { loadAgentEnvironment, type AgentEnvironment } from "../config";
 import { AgentGateway } from "../gateway/service";
 import { NullChatAdapter } from "../gateway/integrations/chat/adapter";
@@ -12,6 +14,8 @@ import { PostHogCliTool } from "./ai/tools/posthog-cli";
 import { VercelAiRuntime } from "./ai/tools/vercel";
 import { SqliteRuntimeStore } from "./storage/sqlite";
 import type { RuntimeStore } from "./storage/store";
+import { createToolRegistry } from "./ai/tools";
+import { ToolRegistry } from "./ai/tools/registry";
 
 export interface RuntimeBootstrap {
   readonly env: AgentEnvironment;
@@ -25,6 +29,8 @@ export interface RuntimeBootstrap {
   readonly aiRuntime: VercelAiRuntime;
   readonly posthogApi: PostHogApiClient;
   readonly posthogCli: PostHogCliTool;
+  readonly toolRegistry: ToolRegistry;
+  readonly agentLoop: AgentLoop;
 }
 
 export const bootstrapRuntime = (): RuntimeBootstrap => {
@@ -67,6 +73,21 @@ export const bootstrapRuntime = (): RuntimeBootstrap => {
 
   store.setStatus("idle");
 
+  // Create tool registry and agent loop
+  const toolRegistry = createToolRegistry({
+    posthogApi,
+    vercel,
+    store,
+    workspaceRoot: ".runtime/workspace",
+  });
+
+  const contextAssembler = new ContextAssembler({
+    store,
+    workspaceRoot: ".runtime/workspace",
+  });
+
+  const agentLoop = new AgentLoop(toolRegistry, contextAssembler);
+
   return {
     env,
     bootedAt,
@@ -86,5 +107,7 @@ export const bootstrapRuntime = (): RuntimeBootstrap => {
     aiRuntime,
     posthogApi,
     posthogCli,
+    toolRegistry,
+    agentLoop,
   };
 };

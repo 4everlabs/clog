@@ -8,7 +8,7 @@ import type {
   ProposedAction,
   SurfaceChannelKind,
 } from "@clog/types";
-import type { RuntimeStore } from "./store";
+import type { RuntimeStore, MemoryEntry } from "./store";
 
 const createId = (prefix: string): string => `${prefix}_${crypto.randomUUID()}`;
 
@@ -20,6 +20,7 @@ export class InMemoryRuntimeStore implements RuntimeStore {
   private findings = new Map<string, AgentFinding>();
   private threads = new Map<string, ConversationThread>();
   private actionResults = new Map<string, ActionExecutionResult>();
+  private memories = new Map<string, MemoryEntry>();
 
   getStatus(): AgentStatus {
     return this.status;
@@ -141,5 +142,19 @@ export class InMemoryRuntimeStore implements RuntimeStore {
 
   listActions(): ProposedAction[] {
     return this.listFindings().flatMap((finding) => finding.proposedActions);
+  }
+
+  listMemories(): MemoryEntry[] {
+    return [...this.memories.values()].sort((a, b) => b.importance - a.importance);
+  }
+
+  addMemory(memory: Omit<MemoryEntry, "id" | "createdAt">): MemoryEntry {
+    const entry: MemoryEntry = {
+      ...memory,
+      id: `mem_${crypto.randomUUID()}`,
+      createdAt: Date.now(),
+    };
+    this.memories.set(entry.id, entry);
+    return entry;
   }
 }

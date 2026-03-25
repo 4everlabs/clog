@@ -1,5 +1,7 @@
 import { bootstrapRuntime } from "./runtime/bootstrap";
 import { startRuntimeServer, type RuntimeServerInfo } from "./runtime/server";
+import { startCli } from "./runtime/cli";
+import { createCodeExecutor } from "./runtime/ai/tools/code-executor";
 
 export { bootstrapRuntime } from "./runtime/bootstrap";
 export { AgentSurfaceTransport, createRuntimeSurfaceHandler } from "./runtime/runtime-surface";
@@ -13,6 +15,19 @@ export const startDefaultRuntimeServer = async (): Promise<RuntimeServerInfo> =>
   return server;
 };
 
+export const startRuntimeWithCli = async (): Promise<void> => {
+  const runtime = bootstrapRuntime();
+  
+  console.log(`[clog] Starting in CLI mode...`);
+  await startCli(runtime);
+};
+
 if (import.meta.main) {
-  await startDefaultRuntimeServer();
+  const args = process.argv.slice(2);
+  
+  if (args.includes("--cli") || args.includes("-c")) {
+    await startRuntimeWithCli();
+  } else {
+    await startDefaultRuntimeServer();
+  }
 }

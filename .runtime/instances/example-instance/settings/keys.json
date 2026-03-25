@@ -1,6 +1,6 @@
 {
   "monitorIntervalMs": 60000,
-  "channels": ["slack", "web"],
-  "aiModel": "gpt-5.4",
-  "safetyProfile": "safe"
+  "channels": ["slack", "web", "cli"],
+  "aiModel": "claude-sonnet-4-20250514",
+  "safetyProfile": "strict"
 }

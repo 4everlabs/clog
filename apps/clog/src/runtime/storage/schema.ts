@@ -29,4 +29,17 @@ CREATE TABLE IF NOT EXISTS runtime_action_results (
   action_id TEXT PRIMARY KEY,
   payload TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS runtime_memories (
+  id TEXT PRIMARY KEY,
+  content TEXT NOT NULL,
+  type TEXT NOT NULL,
+  importance INTEGER DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  metadata TEXT DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_memories_type ON runtime_memories(type);
+CREATE INDEX IF NOT EXISTS idx_memories_importance ON runtime_memories(importance DESC);
+CREATE INDEX IF NOT EXISTS idx_memories_created ON runtime_memories(created_at DESC);
 `;
