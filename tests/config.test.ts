@@ -27,7 +27,7 @@ describe("loadAgentEnvironment", () => {
     expect(env.posthog.personalApiKey).toBe("phx_test");
     expect(env.posthog.cliTimeoutMs).toBe(45_000);
     expect(env.storage.instanceId).toBe("personal-instance");
-    expect(env.storage.databasePath.endsWith(".runtime/instances/personal-instance/brain/storage/runtime.sqlite")).toBe(true);
+    expect(env.storage.databasePath.endsWith(".runtime/instances/personal-instance/storage/runtime.sqlite")).toBe(true);
     expect(env.posthog.insightMonitors).toHaveLength(1);
     expect(env.posthog.insightMonitors[0]).toMatchObject({
       name: "Revenue monitor",
@@ -53,10 +53,10 @@ describe("loadAgentEnvironment", () => {
   test("allows overriding the runtime database path", () => {
     const env = loadAgentEnvironment({
       POSTHOG_CLAW_INSTANCE_ID: "operator-1",
-      POSTHOG_CLAW_RUNTIME_DB_PATH: ".runtime/instances/operator-1/brain/storage/custom.sqlite",
+      POSTHOG_CLAW_RUNTIME_DB_PATH: ".runtime/instances/operator-1/storage/custom.sqlite",
     });
 
     expect(env.storage.instanceId).toBe("operator-1");
-    expect(env.storage.databasePath.endsWith("operator-1/brain/storage/custom.sqlite")).toBe(true);
+    expect(env.storage.databasePath.endsWith("operator-1/storage/custom.sqlite")).toBe(true);
   });
 });

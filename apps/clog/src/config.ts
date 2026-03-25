@@ -91,8 +91,7 @@ export interface PostHogRuntimeConfig {
 export interface RuntimeStorageConfig {
   readonly instanceId: string;
   readonly instanceRoot: string;
-  readonly brainDir: string;
-  readonly brainStorageDir: string;
+  readonly storageDir: string;
   readonly databasePath: string;
 }
 
@@ -145,18 +144,16 @@ const hasPostHogManagementAccess = (config: PostHogRuntimeConfig): boolean =>
 const createRuntimeStorageConfig = (env: NodeJS.ProcessEnv): RuntimeStorageConfig => {
   const instanceId = readOptionalString(env.POSTHOG_CLAW_INSTANCE_ID) ?? "personal-instance";
   const instanceRoot = resolveWorkspacePath(env.POSTHOG_CLAW_INSTANCE_ROOT, `.runtime/instances/${instanceId}`);
-  const brainDir = resolve(instanceRoot, "brain");
-  const brainStorageDir = resolveWorkspacePath(env.POSTHOG_CLAW_BRAIN_STORAGE_DIR, join(brainDir, "storage"));
+  const storageDir = resolveWorkspacePath(env.POSTHOG_CLAW_STORAGE_DIR, join(instanceRoot, "storage"));
   const databasePath = resolveWorkspacePath(
     env.POSTHOG_CLAW_RUNTIME_DB_PATH,
-    join(brainStorageDir, "runtime.sqlite"),
+    join(storageDir, "runtime.sqlite"),
   );
 
   return {
     instanceId,
     instanceRoot,
-    brainDir,
-    brainStorageDir,
+    storageDir,
     databasePath,
   };
 };

@@ -23,9 +23,8 @@ const createStore = () => {
   return new SqliteRuntimeStore({
     instanceId: "test-instance",
     instanceRoot: root,
-    brainDir: join(root, "brain"),
-    brainStorageDir: join(root, "brain", "storage"),
-    databasePath: join(root, "brain", "storage", "runtime.sqlite"),
+    storageDir: join(root, "storage"),
+    databasePath: join(root, "storage", "runtime.sqlite"),
   });
 };
 

@@ -1,6 +1,6 @@
 import type { AgentRuntimeSummary } from "@clog/types";
 import { loadAgentEnvironment, type AgentEnvironment } from "./config";
-import { AssistantService } from "./assistant/assistant";
+import { BrainService } from "./brain/service";
 import { AgentGateway } from "./gateway/service";
 import { GitHubIntegrationClient } from "./integrations/github/client";
 import { PostHogIntegrationClient } from "./integrations/posthog/client";
@@ -15,7 +15,7 @@ export interface RuntimeBootstrap {
   readonly env: AgentEnvironment;
   readonly bootedAt: number;
   readonly store: RuntimeStore;
-  readonly assistant: AssistantService;
+  readonly brain: BrainService;
   readonly monitorLoop: MonitoringLoop;
   readonly gateway: AgentGateway;
   readonly runtimeSummary: AgentRuntimeSummary;
@@ -28,7 +28,7 @@ export const bootstrapRuntime = (): RuntimeBootstrap => {
   const bootedAt = Date.now();
   const store = new SqliteRuntimeStore(env.storage);
   store.setStatus("booting");
-  const assistant = new AssistantService();
+  const brain = new BrainService();
   const posthogApi = new PostHogApiClient(env.posthog);
   const posthogCli = new PostHogCliTool(env.posthog);
   const posthog = new PostHogIntegrationClient({
@@ -47,7 +47,7 @@ export const bootstrapRuntime = (): RuntimeBootstrap => {
   const gateway = new AgentGateway({
     env,
     bootedAt,
-    assistant,
+    brain,
     monitorLoop,
     posthog,
     posthogApi,
@@ -65,7 +65,7 @@ export const bootstrapRuntime = (): RuntimeBootstrap => {
     env,
     bootedAt,
     store,
-    assistant,
+    brain,
     monitorLoop,
     gateway,
     runtimeSummary: {

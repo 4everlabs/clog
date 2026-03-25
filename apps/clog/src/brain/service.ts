@@ -6,26 +6,26 @@ interface LlmMessage {
   content: string;
 }
 
-export interface AssistantConfig {
+export interface BrainServiceConfig {
   readonly temperature?: number;
   readonly modelName?: string;
   readonly baseUrl?: string;
   readonly apiKey?: string;
 }
 
-export interface AssistantReplyInput {
+export interface BrainReplyInput {
   readonly thread: ConversationThread;
   readonly message: string;
   readonly findings: readonly AgentFinding[];
 }
 
-export class AssistantService {
+export class BrainService {
   private readonly temperature: number;
   private readonly modelName: string;
   private readonly baseUrl: string;
   private readonly apiKey: string;
 
-  constructor(config: AssistantConfig = {}) {
+  constructor(config: BrainServiceConfig = {}) {
     const openrouterKey = process.env.OPENROUTER_API_KEY;
     const openaiKey = process.env.OPENAI_API_KEY;
 
@@ -35,7 +35,7 @@ export class AssistantService {
     this.baseUrl = config.baseUrl ?? (openrouterKey ? "https://openrouter.ai/api/v1" : "https://api.openai.com/v1");
   }
 
-  async reply(input: AssistantReplyInput): Promise<string> {
+  async reply(input: BrainReplyInput): Promise<string> {
     if (!this.apiKey) {
       return this.buildFallbackReply(input.message, input.findings);
     }
@@ -45,7 +45,7 @@ export class AssistantService {
       const response = await this.callLlm(messages);
       return response || this.buildFallbackReply(input.message, input.findings);
     } catch (error) {
-      console.error("[assistant] Falling back to local reply:", error);
+      console.error("[brain] Falling back to local reply:", error);
       return this.buildFallbackReply(input.message, input.findings);
     }
   }
@@ -58,6 +58,7 @@ export class AssistantService {
       promptBundle.primaryModePrompt,
       `Execution mode: ${process.env.POSTHOG_CLAW_EXECUTION_MODE ?? "propose"}`,
       this.buildFindingsSummary(findings),
+      promptBundle.wakeupPrompt ? `Shared wakeup guidance:\n${promptBundle.wakeupPrompt}` : "",
     ]
       .filter(Boolean)
       .join("\n");

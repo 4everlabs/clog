@@ -21,7 +21,7 @@ import type {
 } from "@clog/types";
 import type { AgentEnvironment } from "../config";
 import type { PostHogIntegrationClient } from "../integrations/posthog/client";
-import { AssistantService } from "../assistant/assistant";
+import { BrainService } from "../brain/service";
 import { PostHogApiClient } from "../integrations/posthog/api-client";
 import { PostHogCliTool } from "../integrations/posthog/cli-tool";
 import type { MonitoringLoop } from "../monitoring/monitor-loop";
@@ -32,7 +32,7 @@ import type { AgentGatewaySurface } from "./contracts";
 export interface AgentGatewayDependencies {
   readonly env: AgentEnvironment;
   readonly bootedAt: number;
-  readonly assistant: AssistantService;
+  readonly brain: BrainService;
   readonly monitorLoop: MonitoringLoop;
   readonly posthog: PostHogIntegrationClient;
   readonly posthogApi: PostHogApiClient;
@@ -99,7 +99,7 @@ export class AgentGateway implements AgentGatewaySurface {
     const threadWithUserMessage = this.deps.store.appendMessages(thread.id, [userMessage]);
 
     const findings = this.deps.store.listFindings();
-    const assistantReply = await this.deps.assistant.reply({
+    const assistantReply = await this.deps.brain.reply({
       thread: threadWithUserMessage,
       message: input.message,
       findings,
