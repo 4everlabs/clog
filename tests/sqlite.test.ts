@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { AgentFinding } from "@clog/types";
-import { SqliteRuntimeStore } from "./sqlite";
+import { SqliteRuntimeStore } from "../apps/clog/src/runtime/storage/sqlite";
 
 const cleanupPaths: string[] = [];
 
@@ -48,8 +48,8 @@ describe("SqliteRuntimeStore", () => {
     const store = createStore();
     store.setStatus("idle");
     store.upsertFindings([sampleFinding]);
-    const thread = store.seedOperatorThread("slack");
-    const userMessage = store.createMessage("user", "slack", "hello");
+    const thread = store.seedOperatorThread("telegram");
+    const userMessage = store.createMessage("user", "telegram", "hello");
     store.appendMessages(thread.id, [userMessage]);
     store.close();
 

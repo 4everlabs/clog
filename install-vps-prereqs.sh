@@ -3,7 +3,6 @@ set -euo pipefail
 
 export DEBIAN_FRONTEND="${DEBIAN_FRONTEND:-noninteractive}"
 INSTALL_GH_CLI="${INSTALL_GH_CLI:-1}"
-INSTALL_SLACK_CLI="${INSTALL_SLACK_CLI:-0}"
 
 sudo apt-get update
 sudo apt-get install -y \
@@ -51,10 +50,6 @@ if [ "$INSTALL_GH_CLI" = "1" ] && ! command -v gh >/dev/null 2>&1; then
     | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
   sudo apt-get update
   sudo apt-get install -y gh
-fi
-
-if [ "$INSTALL_SLACK_CLI" = "1" ] && ! command -v slack >/dev/null 2>&1; then
-  curl -fsSL https://downloads.slack-edge.com/slack-cli/install.sh | bash
 fi
 
 echo "Finished installing prerequisites."

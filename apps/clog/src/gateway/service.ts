@@ -21,7 +21,7 @@ import type {
 } from "@clog/types";
 import type { AgentEnvironment } from "../config";
 import type { PostHogIntegrationClient } from "./integrations/posthog/client";
-import { RemediationPlanner } from "../runtime/ai/agent/planner";
+import { AssistantService } from "../runtime/ai/assistant";
 import { PostHogApiClient } from "../runtime/ai/tools/posthog-api";
 import { PostHogCliTool } from "../runtime/ai/tools/posthog-cli";
 import type { MonitoringLoop } from "../runtime/ai/agent/monitor-loop";
@@ -32,7 +32,7 @@ import type { AgentGatewaySurface } from "./contracts";
 export interface AgentGatewayDependencies {
   readonly env: AgentEnvironment;
   readonly bootedAt: number;
-  readonly planner: RemediationPlanner;
+  readonly assistant: AssistantService;
   readonly monitorLoop: MonitoringLoop;
   readonly posthog: PostHogIntegrationClient;
   readonly posthogApi: PostHogApiClient;
@@ -92,17 +92,22 @@ export class AgentGateway implements AgentGatewaySurface {
     }
 
     const userMessage = this.deps.store.createMessage("user", input.channel, input.message);
-    this.deps.store.appendMessages(thread.id, [userMessage]);
+    const threadWithUserMessage = this.deps.store.appendMessages(thread.id, [userMessage]);
 
     const findings = this.deps.store.listFindings();
-    const plan = this.deps.planner.planForMessage(input.message, findings);
-    const assistantMessage = this.deps.store.createMessage("assistant", input.channel, plan.summary);
+    const assistantReply = await this.deps.assistant.reply({
+      thread: threadWithUserMessage,
+      message: input.message,
+      findings,
+    });
+    const assistantMessage = this.deps.store.createMessage("assistant", input.channel, assistantReply);
     const updatedThread = this.deps.store.appendMessages(thread.id, [assistantMessage]);
+    const recommendedActions = findings.filter((finding) => finding.state === "open")[0]?.proposedActions ?? [];
 
     return {
       thread: updatedThread,
       assistantMessage,
-      recommendedActions: plan.actions,
+      recommendedActions,
     };
   }
 
@@ -131,10 +136,6 @@ export class AgentGateway implements AgentGatewaySurface {
     };
 
     this.deps.store.rememberActionResult(result);
-
-    if (finding && action.kind === "notify") {
-      this.deps.planner.planForFinding(finding);
-    }
 
     return { result };
   }

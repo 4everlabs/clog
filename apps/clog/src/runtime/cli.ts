@@ -1,22 +1,18 @@
 #!/usr/bin/env bun
 
 import { createInterface } from "readline";
-import type { AgentLoop } from "./ai/agent/agentloop";
 import type { RuntimeBootstrap } from "./bootstrap";
 
 export interface CliOptions {
   runtime: RuntimeBootstrap;
-  agentLoop?: AgentLoop;
 }
 
 export class Cli {
   private readonly runtime: RuntimeBootstrap;
-  private readonly agentLoop?: AgentLoop;
   private running = false;
 
   constructor(opts: CliOptions) {
     this.runtime = opts.runtime;
-    this.agentLoop = opts.agentLoop;
   }
 
   async start(): Promise<void> {
@@ -78,16 +74,7 @@ export class Cli {
             return;
           }
 
-          if (this.agentLoop) {
-            const thread = this.runtime.store.listThreads()[0];
-            if (thread) {
-              await this.runAgent(input, thread.id);
-            } else {
-              console.log("No thread available.");
-            }
-          } else {
-            console.log("Agent loop not initialized. Use /monitor for monitoring mode.");
-          }
+          await this.runChat(input);
           
           ask();
         });
@@ -169,30 +156,27 @@ Available Commands:
     }
   }
 
-  private async runAgent(task: string, threadId: string): Promise<void> {
-    console.log(`\n🤖 Processing: "${task}"`);
+  private async runChat(message: string): Promise<void> {
+    console.log(`\n🤖 Processing: "${message}"`);
     
     try {
-      const result = await this.agentLoop!.run({ task, threadId });
-      
-      console.log(`\n✓ Completed in ${result.iterations} iteration(s)`);
-      console.log(`\n💬 Response:\n${result.finalResponse}`);
-      
-      if (result.toolExecutions.length > 0) {
-        console.log(`\n🔧 Tool Executions:`);
-        for (const exec of result.toolExecutions) {
-          const status = exec.success ? "✓" : "✗";
-          console.log(`  ${status} ${exec.toolName} (${exec.durationMs}ms)`);
-        }
-      }
+      const thread = this.runtime.store.listThreads().find((entry) => entry.channel === "cli")
+        ?? this.runtime.store.seedOperatorThread("cli");
+      const response = await this.runtime.gateway.sendMessage({
+        channel: "cli",
+        threadId: thread.id,
+        message,
+      });
+
+      console.log(`\n💬 Response:\n${response.assistantMessage.content}`);
     } catch (error) {
       console.error(`\n❌ Error: ${error instanceof Error ? error.message : "Unknown error"}`);
     }
   }
 }
 
-export const createCli = (runtime: RuntimeBootstrap, agentLoop?: AgentLoop): Cli => {
-  return new Cli({ runtime, agentLoop });
+export const createCli = (runtime: RuntimeBootstrap): Cli => {
+  return new Cli({ runtime });
 };
 
 export const startCli = async (runtime: RuntimeBootstrap): Promise<void> => {

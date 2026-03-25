@@ -1,9 +1,68 @@
 import type { AgentFinding, IntegrationHealthView, RuntimeObservation } from "@clog/types";
-import { buildFindingsFromObservations } from "../../../evaluator";
 import type { GitHubIntegrationClient } from "../../../gateway/integrations/github/client";
 import type { PostHogIntegrationClient } from "../../../gateway/integrations/posthog/client";
 import type { VercelIntegrationClient } from "../../../gateway/integrations/vercel/client";
 import type { RuntimeStore } from "../../storage/store";
+
+const buildFindingsFromObservations = (observations: readonly RuntimeObservation[]): AgentFinding[] => {
+  return observations.map((observation) => {
+    const proposedActions = [
+      {
+        id: `action_notify_${observation.id}`,
+        kind: "notify" as const,
+        title: "Notify operator",
+        summary: "Send a structured summary into the active chat channel.",
+        approvalRequired: false,
+        target: {
+          integration: observation.source.kind === "runtime" ? "chat" : observation.source.kind,
+          reference: observation.source.referenceId ?? observation.id,
+        },
+      },
+    ];
+
+    if (observation.kind === "repo-risk" || observation.kind === "error-rate-spike" || observation.kind === "insight-regression") {
+      proposedActions.push({
+        id: `action_pr_${observation.id}`,
+        kind: "open-pr",
+        title: "Prepare pull request",
+        summary: "Create a fix branch, commit the patch, and open a PR for approval.",
+        approvalRequired: true,
+        target: {
+          integration: "github",
+          reference: observation.id,
+        },
+      });
+    }
+
+    if (observation.kind === "deploy-risk") {
+      proposedActions.push({
+        id: `action_deploy_${observation.id}`,
+        kind: "deploy",
+        title: "Trigger deployment",
+        summary: "Run the deployment pathway once the operator approves the remediation plan.",
+        approvalRequired: true,
+        target: {
+          integration: "vercel",
+          reference: observation.id,
+        },
+      });
+    }
+
+    return {
+      id: `finding_${observation.id}`,
+      title: observation.summary,
+      severity: observation.severity,
+      state: "open" as const,
+      summary: observation.summary,
+      details: observation.details,
+      firstSeenAt: observation.detectedAt,
+      lastSeenAt: observation.detectedAt,
+      sources: [observation.source],
+      observations: [observation],
+      proposedActions,
+    };
+  });
+};
 
 export interface MonitoringLoopDependencies {
   readonly store: RuntimeStore;

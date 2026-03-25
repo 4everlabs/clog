@@ -7,7 +7,7 @@
   "workspaces": [
     "apps/clog",
     "apps/types",
-    "packages/vercel-ai"
+    "apps/frontends/*"
   ],
   "scripts": {
     "dev": "bun run index.ts",
@@ -24,11 +24,5 @@
     "@types/bun": "^1.3.11",
     "oxlint": "^1.57.0",
     "typescript": "^6.0.2"
-  },
-  "dependencies": {
-    "@chat-adapter/slack": "^4.22.0",
-    "@chat-adapter/state-memory": "^4.22.0",
-    "@chat-adapter/telegram": "^4.22.0",
-    "chat": "^4.22.0"
   }
 }

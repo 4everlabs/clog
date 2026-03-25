@@ -1,6 +1,6 @@
 {
   "mode": "propose",
-  "notifyChannels": ["slack"],
+  "notifyChannels": ["telegram"],
   "llm": {
     "provider": "openrouter",
     "model": "stepfun/flash-3.5",

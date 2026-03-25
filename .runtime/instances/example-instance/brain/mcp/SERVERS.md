@@ -32,11 +32,6 @@ npx -y @modelcontextprotocol/server-github
 npx -y @modelcontextprotocol/server-postgres postgres://user:pass@localhost/db
 ```
 
-### Slack
-```bash
-npx -y @modelcontextprotocol/server-slack
-```
-
 ## Adding a Server
 
 1. Create a JSON file in this folder

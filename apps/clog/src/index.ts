@@ -1,7 +1,6 @@
 import { bootstrapRuntime } from "./runtime/bootstrap";
 import { startRuntimeServer, type RuntimeServerInfo } from "./runtime/server";
 import { startCli } from "./runtime/cli";
-import { createCodeExecutor } from "./runtime/ai/tools/code-executor";
 
 export { bootstrapRuntime } from "./runtime/bootstrap";
 export { AgentSurfaceTransport, createRuntimeSurfaceHandler } from "./runtime/runtime-surface";

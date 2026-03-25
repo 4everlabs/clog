@@ -23,6 +23,7 @@
   },
   "include": [
     "index.ts",
-    "apps/**/*.ts"
+    "apps/**/*.ts",
+    "tests/**/*.ts"
   ]
 }

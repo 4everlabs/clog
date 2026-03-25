@@ -6,8 +6,8 @@ Backend-first scaffold for the `clog` oversight agent (short for “claw post ho
 
 - `apps/clog`: runtime, monitoring loop, gateway, and AI bridge.
 - `apps/types`: shared contract for every frontend channel.
-- `apps/frontends/slack`: first adapter using Vercel's Chat SDK for Slack.
-- `packages/vercel-ai`: workspace placeholder for `@vercel/ai` v6 while offline.
+- `apps/frontends/telegram`: Telegram bot frontend that forwards operator messages into the runtime.
+- `apps/frontends/web`: placeholder package for the eventual web UI.
 - `.runtime/`: runtime-centered settings, brain, and workspace structure (see below).
 
 ## Commands
@@ -25,9 +25,9 @@ bun run ci   # lint + typecheck + build
 ## Runtime bootstrapping
 
 1. The environment loader in `apps/clog/src/config/env.ts` shapes capability flags, monitor intervals, and channel broadcasts.
-2. `apps/clog/src/runtime/ai/vercel.ts` creates a Vercel AI `Chat` helper (currently wired to the workspace stub). `bootstrap.ts` exposes it via `runtime.aiRuntime`.
-3. Monitoring, findings, and proposed actions stay in `apps/clog/src/storage` and `gateway`.
-4. Frontends such as `apps/frontends/slack` talk to `/api/*` on `apps/clog` so Slack, GUI, and CLI can share the same surface.
+2. `apps/clog/src/runtime/ai/assistant.ts` is the single chat brain used by the gateway, CLI, and Telegram frontend. It loads repo prompts plus instance-scoped prompt files from `.runtime`.
+3. Monitoring, findings, and proposed actions stay in `apps/clog/src/runtime` and `gateway`.
+4. Frontends such as `apps/frontends/telegram` talk to the runtime surface on `apps/clog` so Telegram, GUI, and CLI can share the same domain model.
 
 ## Shell tooling
 

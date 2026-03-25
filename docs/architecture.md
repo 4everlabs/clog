@@ -15,7 +15,7 @@ This scaffold is intentionally runtime-first:
 - `frontends/*`
   - adapters, not authorities
 
-That keeps the web UI, Slack bot, and CLI interchangeable. Each client talks to the same gateway and renders the same domain objects.
+That keeps the web UI, Telegram bot, and CLI interchangeable. Each client talks to the same gateway and renders the same domain objects.
 
 ## Runtime Layers
 
@@ -34,12 +34,10 @@ External-system boundaries:
 
 ### `agent`
 
-The monitoring loop and planner live here.
+The monitoring loop lives here.
 
 - `monitor-loop.ts`
   - gathers observations and turns them into findings
-- `planner.ts`
-  - turns findings and chat messages into recommended actions
 
 ### `storage`
 
@@ -54,7 +52,7 @@ Currently in-memory only. This should eventually own:
 
 ### `gateway`
 
-The transport-agnostic typed surface. This is the layer web, Slack, and CLI should all target.
+The transport-agnostic typed surface. This is the layer web, Telegram, and CLI should all target.
 
 ### `runtime`
 
@@ -62,11 +60,11 @@ Bootstrapping plus the HTTP transport. This is where the system becomes a server
 
 ### `ai bridge`
 
-`apps/clog/src/runtime/ai/vercel.ts` instantiates a Vercel AI `Chat` helper (currently backed by the local workspace version of `@vercel/ai`). The helper reads prompts from `apps/clog/src/ai/prompts` (`clog-system.md` and `primary-mode.md`) and surfaces them to the runtime so the planner is always operating with the correct system instructions. It is wired into `bootstrap.ts` as `aiRuntime`, so planners and operators can ask the same chat surface for concise summaries or prompts once the real Vercel AI credentials are provided.
+`apps/clog/src/runtime/ai/assistant.ts` is the single assistant entrypoint for chat. It loads the public repo prompts plus instance-scoped runtime prompts from `.runtime/instances/<instance>/brain/prompts`, then serves the same reply path to the gateway, CLI, and Telegram frontend.
 
-### `slack front-end`
+### `telegram front-end`
 
-`apps/frontends/slack/src/slack-ui.ts` is the first adapter that connects the runtime gateway to Slack via Vercel's Chat SDK. It uses the official `chat` and `@chat-adapter/slack` packages so GUI or CLI adapters can re-use the same runtime surface (`/api/*`) without additional wiring.
+`apps/frontends/telegram/src/index.ts` is the first dedicated frontend workspace. It hosts the Telegram bot adapter and forwards operator messages into `@clog/core`, keeping Telegram-specific logic out of the core runtime package.
 
 ### `shell tooling`
 
@@ -81,7 +79,7 @@ Bootstrapping plus the HTTP transport. This is where the system becomes a server
 - `brain/knowledge/` – knowledge artifacts, embeddings, and prompt references.
 - `workspace/` – per-instance workspaces kept outside the tracked runtime contract.
 
-These files are intentionally separated so sensitive runtime options stay offline, while safe metadata remains available to prompts via `VercelAiRuntime`.
+These files are intentionally separated so sensitive runtime options stay offline, while safe metadata remains available to the shared assistant prompt loader.
 
 ## Execution Modes
 

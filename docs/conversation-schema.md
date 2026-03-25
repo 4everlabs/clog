@@ -8,7 +8,6 @@
 Examples:
 ```
 .conversations/telegram/123456.jsonl
-.conversations/slack/C07ABCDEF.jsonl
 .conversations/cli/local.jsonl
 .conversations/web/session-abc123.jsonl
 ```

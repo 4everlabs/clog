@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { loadAgentEnvironment } from "./config";
+import { loadAgentEnvironment } from "../apps/clog/src/config";
 
 describe("loadAgentEnvironment", () => {
   test("parses PostHog runtime config and capabilities", () => {
     const env = loadAgentEnvironment({
       PORT: "3001",
-      POSTHOG_CLAW_CHANNELS: "slack,web",
+      POSTHOG_CLAW_CHANNELS: "telegram,web",
       POSTHOG_CLAW_POSTHOG_HOST: "https://eu.posthog.com/",
       POSTHOG_CLAW_POSTHOG_PROJECT_ID: "12345",
       POSTHOG_CLAW_POSTHOG_PERSONAL_API_KEY: "phx_test",
@@ -21,7 +21,7 @@ describe("loadAgentEnvironment", () => {
     });
 
     expect(env.port).toBe(3001);
-    expect(env.channels).toEqual(["slack", "web"]);
+    expect(env.channels).toEqual(["telegram", "web"]);
     expect(env.posthog.host).toBe("https://eu.posthog.com");
     expect(env.posthog.projectId).toBe("12345");
     expect(env.posthog.personalApiKey).toBe("phx_test");

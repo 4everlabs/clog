@@ -49,16 +49,16 @@ const resolveWorkspacePath = (value: string | undefined, fallback: string): stri
 };
 
 const readChannels = (value: string | undefined): SurfaceChannelKind[] => {
-  const requested = (value ?? "web,slack,cli")
+  const requested = (value ?? "web,telegram,cli")
     .split(",")
     .map((entry) => entry.trim())
     .filter(Boolean);
 
   const channels = requested.filter((entry): entry is SurfaceChannelKind => (
-    entry === "web" || entry === "slack" || entry === "cli" || entry === "system"
+    entry === "web" || entry === "telegram" || entry === "cli" || entry === "system"
   ));
 
-  return channels.length > 0 ? channels : ["web", "slack", "cli"];
+  return channels.length > 0 ? channels : ["web", "telegram", "cli"];
 };
 
 export interface PostHogInsightMonitorConfig {

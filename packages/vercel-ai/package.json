@@ -1,6 +1,0 @@
-{
-  "name": "@vercel/ai",
-  "version": "6.0.0",
-  "type": "module",
-  "main": "index.js"
-}
