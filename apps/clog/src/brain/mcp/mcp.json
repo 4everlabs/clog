@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "posthog": {
+      "url": "https://mcp.posthog.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${POSTHOG_API_KEY}",
+        "x-posthog-project-id": "${POSTHOG_PROJECT_ID}"
+      }
+    }
+  }
+}

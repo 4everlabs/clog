@@ -23,6 +23,8 @@ const createStore = () => {
   return new SqliteRuntimeStore({
     instanceId: "test-instance",
     instanceRoot: root,
+    readOnlyDir: join(root, "read-only"),
+    workspaceDir: join(root, "workspace"),
     storageDir: join(root, "storage"),
     databasePath: join(root, "storage", "runtime.sqlite"),
   });

@@ -60,11 +60,11 @@ Bootstrapping plus the HTTP transport. This is where the system becomes a server
 
 ### `ai bridge`
 
-`apps/clog/src/brain/service.ts` is the shared chat entrypoint. It loads repo-level prompts from `apps/clog/src/brain/prompts`, then serves the same reply path to the gateway and Telegram frontend.
+`apps/clog/src/brain/service.ts` is the shared chat entrypoint. It loads app-owned prompts from `apps/clog/src/brain/prompts`, plus the per-instance wakeup config from `.runtime/instances/<instance>/wakeup.json`, then serves the same reply path to the gateway and Telegram transport bridge.
 
-### `telegram front-end`
+### `telegram transport`
 
-`apps/frontends/telegram/src/index.ts` is the first dedicated frontend workspace. It hosts the Telegram bot adapter and forwards operator messages into `@clog/core`, keeping Telegram-specific logic out of the core runtime package.
+`apps/clog/src/telegram.ts` is the runtime-side Telegram bridge. It owns thread mapping and forwards Telegram messages into the transport-agnostic gateway, while `apps/frontends/telegram/src/adapter.ts` stays as the thin Bot API adapter.
 
 ### `shell tooling`
 
@@ -72,14 +72,15 @@ Bootstrapping plus the HTTP transport. This is where the system becomes a server
 
 ## `.runtime` contract
 
-`.runtime` now stores the runtime contract and guarded state slices:
+`.runtime` now stores only the per-instance runtime contract:
 
-- `settings.private.json` – runtime-level knobs and guard rails that the agent or model never reads.
-- `model-settings.json` – the light settings snapshot the model can inspect so it knows its mode and available channels.
+- `read-only/settings.json` – runtime-facing settings kept out of model access.
+- `read-only/tools.json` – tool visibility and enablement for the model/runtime surface.
+- `wakeup.json` – per-instance wakeup message and frequency in one editable file.
 - `storage/` – per-instance runtime state such as SQLite persistence.
 - `workspace/` – per-instance workspaces kept outside the tracked runtime contract.
 
-These files are intentionally separated so sensitive runtime options stay offline, while shared prompt and knowledge files stay in the repo-level `apps/clog/src/brain` tree instead of per-instance runtime state.
+App-owned prompts, knowledge, skills, and MCP references stay in the repo-level `apps/clog/src/brain` tree. `.runtime` is for per-instance state and guidance, with `workspace/` as the writable area, `storage/` as read-only operational state, and `read-only/` reserved for runtime-owned files the model should not browse directly.
 
 ## Execution Modes
 

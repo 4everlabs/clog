@@ -107,7 +107,7 @@ export interface AgentFinding {
 
 export interface ConversationMessage {
   readonly id: string;
-  readonly role: "system" | "user" | "assistant";
+  readonly role: "system" | "user" | "agent";
   readonly channel: SurfaceChannelKind;
   readonly content: string;
   readonly createdAt: number;
@@ -157,7 +157,7 @@ export interface SurfaceSendMessageRequest {
 
 export interface SurfaceSendMessageResponse {
   readonly thread: ConversationThread;
-  readonly assistantMessage: ConversationMessage;
+  readonly replyMessage: ConversationMessage;
   readonly recommendedActions: readonly ProposedAction[];
 }
 
@@ -193,6 +193,20 @@ export interface PostHogInsightQueryResult {
   readonly name: string;
   readonly columns: readonly string[];
   readonly results: readonly Record<string, unknown>[];
+}
+
+export interface PostHogOrganizationSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly slug: string;
+  readonly membershipLevel: number | null;
+}
+
+export interface PostHogProjectSummary {
+  readonly id: number;
+  readonly organizationId: string | null;
+  readonly name: string;
+  readonly projectToken: string | null;
 }
 
 export interface SurfacePostHogInsightResponse {

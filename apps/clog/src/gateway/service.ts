@@ -26,7 +26,7 @@ import { PostHogApiClient } from "../integrations/posthog/api-client";
 import { PostHogCliTool } from "../integrations/posthog/cli-tool";
 import type { MonitoringLoop } from "../monitoring/monitor-loop";
 import { ShellExecutor } from "../execution/shell-executor";
-import type { RuntimeStore } from "../storage/store";
+import type { RuntimeStore } from "../storage/chat";
 import type { AgentGatewaySurface } from "./contracts";
 
 export interface AgentGatewayDependencies {
@@ -99,18 +99,18 @@ export class AgentGateway implements AgentGatewaySurface {
     const threadWithUserMessage = this.deps.store.appendMessages(thread.id, [userMessage]);
 
     const findings = this.deps.store.listFindings();
-    const assistantReply = await this.deps.brain.reply({
+    const replyText = await this.deps.brain.reply({
       thread: threadWithUserMessage,
       message: input.message,
       findings,
     });
-    const assistantMessage = this.deps.store.createMessage("assistant", input.channel, assistantReply);
-    const updatedThread = this.deps.store.appendMessages(thread.id, [assistantMessage]);
+    const replyMessage = this.deps.store.createMessage("agent", input.channel, replyText);
+    const updatedThread = this.deps.store.appendMessages(thread.id, [replyMessage]);
     const recommendedActions = findings.filter((finding) => finding.state === "open")[0]?.proposedActions ?? [];
 
     return {
       thread: updatedThread,
-      assistantMessage,
+      replyMessage,
       recommendedActions,
     };
   }

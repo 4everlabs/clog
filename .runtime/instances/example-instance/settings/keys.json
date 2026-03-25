@@ -1,6 +1,0 @@
-{
-  "monitorIntervalMs": 60000,
-  "channels": ["telegram", "web", "cli"],
-  "aiModel": "claude-sonnet-4-20250514",
-  "safetyProfile": "strict"
-}

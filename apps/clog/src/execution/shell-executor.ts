@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { isAbsolute, resolve } from "node:path";
+import { isAbsolute, resolve, sep } from "node:path";
 import type { ShellCommandRequest, ShellCommandResponse } from "@clog/types";
 
 const ALLOWED_COMMANDS = new Set(["ls", "cat", "rg", "grep", "head", "tail", "wc", "find"]);
@@ -15,6 +15,8 @@ const normalizeCwd = (cwd: string | undefined): string => {
 
 const isSafeCommand = (command: string): boolean => ALLOWED_COMMANDS.has(command);
 
+const isWithinRoot = (cwd: string, root: string): boolean => cwd === root || cwd.startsWith(`${root}${sep}`);
+
 export class ShellExecutor {
   static execute(input: ShellCommandRequest, safeRoots: readonly string[]): ShellCommandResponse {
     const rawCommand = input.command.trim();
@@ -28,7 +30,7 @@ export class ShellExecutor {
 
     const cwd = normalizeCwd(input.cwd);
     const safeLookup = safeRoots.map((root) => resolve(root));
-    const safe = safeLookup.some((root) => cwd.startsWith(root));
+    const safe = safeLookup.some((root) => isWithinRoot(cwd, root));
     if (!safe) {
       throw new Error(`Working directory ${cwd} is outside of allowed roots`);
     }

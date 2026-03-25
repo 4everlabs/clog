@@ -1,1 +1,1 @@
-Place per-instance workspace files here (shell history, generated artifacts, temporary payloads). The runtime bootstraps each operator instance inside `.runtime/workspace/<instance-id>` so guard these directories or shadow them in production.
+THE MODEL CAN FULLY WRITE FILES WITHIN ANYTING IN WORKSPACE

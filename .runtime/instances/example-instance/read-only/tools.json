@@ -1,0 +1,24 @@
+{
+  "posthog": {
+    "readInsights": true,
+    "readErrors": true,
+    "readLogs": false,
+    "readFlags": false,
+    "readExperiments": false,
+    "manageEndpoints": false
+  },
+  "github": {
+    "readRepository": false,
+    "createPullRequests": false,
+    "pushBranches": false
+  },
+  "vercel": {
+    "triggerDeploys": false
+  },
+  "chat": {
+    "notifyOperator": true
+  },
+  "shell": {
+    "execute": false
+  }
+}

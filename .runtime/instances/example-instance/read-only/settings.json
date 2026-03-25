@@ -1,0 +1,26 @@
+{
+  "mode": "propose",
+  "notifyChannels": ["cli"],
+  "channels": ["cli"],
+  "monitor": {
+    "intervalMs": 60000
+  },
+  "llm": {
+    "model": "stepfun/flash-3.5",
+    "temperature": 0.3,
+    "maximumTokens": 10000
+  },
+  "chat": {
+    "notify": true
+  },
+  "shell": {
+    "enabled": false
+  },
+  "errorThresholds": {
+    "lookbackMinutes": 30,
+    "spikeThreshold": 10,
+    "spikeMultiplier": 2,
+    "criticalThreshold": 25
+  },
+  "safetyProfile": "strict"
+}

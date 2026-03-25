@@ -8,7 +8,7 @@ import type {
   ProposedAction,
   SurfaceChannelKind,
 } from "@clog/types";
-import type { MemoryEntry, RuntimeStore } from "./store";
+import type { MemoryEntry, RuntimeStore } from "./chat";
 
 const createId = (prefix: string): string => `${prefix}_${crypto.randomUUID()}`;
 

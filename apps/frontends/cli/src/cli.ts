@@ -171,7 +171,7 @@ Available Commands:
       );
       this.currentThreadId = response.thread.id;
 
-      console.log(`\n💬 Response:\n${response.assistantMessage.content}`);
+      console.log(`\n💬 Response:\n${response.replyMessage.content}`);
     } catch (error) {
       console.error(`\n❌ Error: ${error instanceof Error ? error.message : "Unknown error"}`);
     }

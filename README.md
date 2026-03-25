@@ -14,6 +14,8 @@ Backend-first scaffold for the `clog` oversight agent (short for “claw post ho
 
 ```bash
 bun install
+bun run runtime
+bun run cli
 bun run lint
 bun run typecheck
 bun run build
@@ -25,7 +27,7 @@ bun run ci   # lint + typecheck + build
 ## Runtime bootstrapping
 
 1. The environment loader in `apps/clog/src/config.ts` shapes capability flags, monitor intervals, and channel broadcasts.
-2. `apps/clog/src/brain/service.ts` is the shared chat brain used by the gateway and Telegram frontend. It loads repo-level prompt files from `apps/clog/src/brain`.
+2. `apps/clog/src/brain/service.ts` is the shared chat brain used by the gateway and Telegram frontend. It loads app-owned prompts from `apps/clog/src/brain`, plus the per-instance wakeup config from `.runtime/instances/<instance>/wakeup.json`.
 3. Monitoring, findings, and proposed actions stay in `apps/clog/src/monitoring`, `apps/clog/src/storage`, and `apps/clog/src/gateway`.
 4. Frontends such as `apps/frontends/telegram` talk to the runtime surface on `apps/clog` so Telegram, GUI, and CLI can share the same domain model.
 
@@ -35,12 +37,15 @@ bun run ci   # lint + typecheck + build
 
 ## `.runtime` structure
 
-The `.runtime` folder is the protected contract area that the runtime expects. It contains:
+The `.runtime` folder is the protected contract area that the runtime expects. Each instance contains:
 
-- `settings.private.json` – runtime-owned configuration that the agent or model should never see (monitor cadence, channel filters, etc.).
-- `model-settings.json` – lightweight, operator-curated metadata that can be safely embedded in prompts (mode, preferred channels, talk-back instructions).
+- `read-only/settings.json` – runtime-facing settings kept out of model access.
+- `read-only/tools.json` – tool visibility and enablement for the model/runtime surface.
+- `wakeup.json` – per-instance wakeup message and frequency in one editable file.
 - `storage/` – per-instance SQLite state and runtime-owned persistence.
 - `workspace/` – per-instance workspace area that frontends or the runtime might mount.
+
+Secrets and real API keys still live in `.env` for now, not in the tracked instance settings files.
 
 Create files inside these folders before connecting live services.
 

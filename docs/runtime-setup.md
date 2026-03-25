@@ -16,7 +16,6 @@ The script installs:
 - Bun
 - `posthog-cli` via a Bun-powered wrapper
 - `gh` by default
-- optional Slack CLI if `INSTALL_SLACK_CLI=1`
 
 ## 2. Clone and install the app
 
@@ -28,14 +27,14 @@ bun install --frozen-lockfile
 
 ## 3. Configure the runtime
 
-Copy [`docs/clog.env.example`](docs/clog.env.example) to `/etc/clog.env` and fill in the real values:
+Copy [`.env.example`](../.env.example) to `/etc/clog.env` or local `.env` and fill in the real values:
 
 - PostHog host, project ID, and personal API key
 - optional PostHog project API key if the service should emit its own events
 - optional insight monitor HogQL queries
 - Telegram and any other integration secrets you need outside the PostHog rollout
 
-The repo keeps `example-instance` as a clean starter shape. Local development writes to `personal-instance`, which is ignored by git so your personal SQLite state does not dirty the starter instance. Instance state now lives directly under `storage/`, while shared prompts and knowledge live in `apps/clog/src/brain`.
+The repo keeps `example-instance` as a clean starter shape. Local development writes to `personal-instance`, which is ignored by git so your personal SQLite state does not dirty the starter instance. App-owned prompts and knowledge live in `apps/clog/src/brain`, while each instance keeps `read-only/settings.json`, `read-only/tools.json`, `wakeup.json`, `storage/`, and `workspace/`. Runtime bootstrap now fills in missing starter files from `example-instance` so you do not have to copy new files by hand. Secrets still stay in `.env` for now rather than in tracked instance JSON files.
 
 ## 4. Install the service unit
 
@@ -51,6 +50,10 @@ sudo systemctl status clog
 ## 5. Smoke check the runtime
 
 ```bash
+bun run runtime
+# in another terminal
+bun run cli
+
 curl http://127.0.0.1:3000/healthz
 curl http://127.0.0.1:3000/api/bootstrap
 curl http://127.0.0.1:3000/api/posthog/errors

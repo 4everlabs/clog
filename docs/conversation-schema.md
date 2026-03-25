@@ -40,7 +40,7 @@ Examples:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `id` | string | yes | Unique message ID (ulid or uuid) |
-| `role` | string | yes | `user`, `assistant`, `system`, `tool` |
+| `role` | string | yes | `user`, `agent`, `system`, `tool` |
 | `content` | string | yes | Message text |
 | `timestamp` | number | yes | Unix ms timestamp (for ordering) |
 | `tool_calls` | array | no | Tool invocations in this message |
@@ -50,7 +50,7 @@ Examples:
 
 - `system` - System prompts (first message)
 - `user` - Human messages
-- `assistant` - AI responses
+- `agent` - AI responses
 - `tool` - Tool results (returned to model)
 
 ## Example Conversation
@@ -58,9 +58,9 @@ Examples:
 ```jsonl
 {"id":"msg_01","role":"system","content":"You are Clog...","timestamp":1709500000000}
 {"id":"msg_02","role":"user","content":"show me errors","timestamp":1709500001000}
-{"id":"msg_03","role":"assistant","content":"Let me check...","timestamp":1709500002000,"tool_calls":[{"name":"posthog_list_errors","args":{},"result":"..."}]}
+{"id":"msg_03","role":"agent","content":"Let me check...","timestamp":1709500002000,"tool_calls":[{"name":"posthog_list_errors","args":{},"result":"..."}]}
 {"id":"msg_04","role":"tool","content":"[errors array]","timestamp":1709500002500,"metadata":{"tool_call_id":"msg_03"}}
-{"id":"msg_05","role":"assistant","content":"Found 12 errors in the last hour.","timestamp":1709500003000}
+{"id":"msg_05","role":"agent","content":"Found 12 errors in the last hour.","timestamp":1709500003000}
 ```
 
 ## Ordering

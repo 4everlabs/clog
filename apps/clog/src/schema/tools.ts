@@ -1,0 +1,268 @@
+import { z } from "zod";
+import type { PostHogOrganizationSummary, PostHogProjectSummary } from "@clog/types";
+
+const JsonRecordSchema: z.ZodType<Record<string, unknown>> = z.record(z.string(), z.unknown());
+
+export const RuntimeToolsConfigSchema = z.object({
+  posthog: z.object({
+    readInsights: z.boolean().optional(),
+    readErrors: z.boolean().optional(),
+    readLogs: z.boolean().optional(),
+    readFlags: z.boolean().optional(),
+    readExperiments: z.boolean().optional(),
+    manageEndpoints: z.boolean().optional(),
+  }).strict().optional(),
+  github: z.object({
+    readRepository: z.boolean().optional(),
+    createPullRequests: z.boolean().optional(),
+    pushBranches: z.boolean().optional(),
+  }).strict().optional(),
+  vercel: z.object({
+    triggerDeploys: z.boolean().optional(),
+  }).strict().optional(),
+  chat: z.object({
+    notifyOperator: z.boolean().optional(),
+  }).strict().optional(),
+  shell: z.object({
+    execute: z.boolean().optional(),
+  }).strict().optional(),
+}).strict();
+
+export type RuntimeToolsConfig = z.infer<typeof RuntimeToolsConfigSchema>;
+
+export const NormalizedRuntimeToolsConfigSchema = z.object({
+  posthog: z.object({
+    readInsights: z.boolean(),
+    readErrors: z.boolean(),
+    readLogs: z.boolean(),
+    readFlags: z.boolean(),
+    readExperiments: z.boolean(),
+    manageEndpoints: z.boolean(),
+  }).strict(),
+  github: z.object({
+    readRepository: z.boolean(),
+    createPullRequests: z.boolean(),
+    pushBranches: z.boolean(),
+  }).strict(),
+  vercel: z.object({
+    triggerDeploys: z.boolean(),
+  }).strict(),
+  chat: z.object({
+    notifyOperator: z.boolean(),
+  }).strict(),
+  shell: z.object({
+    execute: z.boolean(),
+  }).strict(),
+}).strict();
+
+export type NormalizedRuntimeToolsConfig = z.infer<typeof NormalizedRuntimeToolsConfigSchema>;
+
+export const ToolFamilySchema = z.enum(["posthog", "github", "vercel", "shell"]);
+export type ToolFamily = z.infer<typeof ToolFamilySchema>;
+
+export const AgentToolNameSchema = z.enum([
+  "posthog_get_organizations",
+  "posthog_get_projects",
+  "posthog_run_query",
+  "posthog_list_errors",
+  "posthog_query_insight",
+  "posthog_diff_endpoints",
+  "posthog_run_endpoint",
+  "shell_execute_command",
+  "github_read_repository",
+  "github_create_pull_request",
+  "vercel_trigger_deploy",
+]);
+
+export type AgentToolName = z.infer<typeof AgentToolNameSchema>;
+
+export const ToolSummarySchema = z.object({
+  name: AgentToolNameSchema,
+  title: z.string().min(1),
+  description: z.string().min(1),
+  integration: ToolFamilySchema,
+  approvalRequired: z.boolean(),
+  implemented: z.boolean(),
+}).strict();
+
+export type ToolSummary = z.infer<typeof ToolSummarySchema>;
+
+export const ObservationSourceSchema = z.object({
+  kind: z.enum(["posthog", "github", "vercel", "chat", "runtime"]),
+  label: z.string(),
+  referenceId: z.string().optional(),
+  url: z.string().optional(),
+}).strict();
+
+export const KeyValueEntrySchema = z.object({
+  key: z.string().min(1),
+  value: z.string(),
+}).strict();
+
+export const RuntimeObservationSchema = z.object({
+  id: z.string(),
+  kind: z.enum([
+    "runtime-health",
+    "posthog-anomaly",
+    "error-rate-spike",
+    "insight-regression",
+    "repo-risk",
+    "deploy-risk",
+    "manual-note",
+  ]),
+  source: ObservationSourceSchema,
+  summary: z.string(),
+  details: z.string(),
+  severity: z.enum(["info", "warning", "critical"]),
+  detectedAt: z.number(),
+  metadata: JsonRecordSchema.optional(),
+}).strict();
+
+export const PostHogInsightQueryInputSchema = z.object({
+  name: z.string().min(1),
+  query: z.string().min(1),
+}).strict();
+
+export const PostHogInsightQueryResultSchema = z.object({
+  name: z.string(),
+  columns: z.array(z.string()),
+  results: z.array(JsonRecordSchema),
+}).strict();
+
+const PostHogOrganizationSummarySchema: z.ZodType<PostHogOrganizationSummary> = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  slug: z.string().min(1),
+  membershipLevel: z.number().int().nullable(),
+}).strict();
+
+const PostHogProjectSummarySchema: z.ZodType<PostHogProjectSummary> = z.object({
+  id: z.number().int().nonnegative(),
+  organizationId: z.string().min(1).nullable(),
+  name: z.string().min(1),
+  projectToken: z.string().min(1).nullable(),
+}).strict();
+
+export const PostHogGetOrganizationsInputSchema = z.object({}).strict();
+
+export const PostHogGetOrganizationsResultSchema = z.object({
+  organizations: z.array(PostHogOrganizationSummarySchema),
+}).strict();
+
+export const PostHogGetProjectsInputSchema = z.object({
+  organizationId: z.string().min(1).optional(),
+}).strict();
+
+export const PostHogGetProjectsResultSchema = z.object({
+  organizationId: z.string().min(1),
+  projects: z.array(PostHogProjectSummarySchema),
+}).strict();
+
+export const PostHogRunQueryInputSchema = z.object({
+  name: z.string().min(1),
+  query: z.string().min(1),
+  refresh: z.enum([
+    "blocking",
+    "async",
+    "force_blocking",
+    "force_async",
+    "force_cache",
+    "lazy_async",
+    "async_except_on_cache_miss",
+  ]).optional(),
+}).strict();
+
+export const PostHogListErrorsInputSchema = z.object({}).strict();
+
+export const PostHogListErrorsResultSchema = z.object({
+  observations: z.array(RuntimeObservationSchema),
+}).strict();
+
+export const PostHogEndpointDiffInputSchema = z.object({
+  path: z.string().min(1),
+  cwd: z.string().optional(),
+}).strict();
+
+export const PostHogEndpointRunInputSchema = z.object({
+  endpointName: z.string().min(1).optional(),
+  filePath: z.string().min(1).optional(),
+  cwd: z.string().optional(),
+  variables: z.array(KeyValueEntrySchema).optional(),
+  json: z.boolean().optional(),
+}).strict().refine(
+  (value) => Boolean(value.endpointName || value.filePath),
+  "Either endpointName or filePath is required",
+);
+
+export const CliCommandResultSchema = z.object({
+  ok: z.boolean(),
+  command: z.string(),
+  args: z.array(z.string()),
+  stdout: z.string(),
+  stderr: z.string(),
+  exitCode: z.number(),
+  durationMs: z.number(),
+  workingDirectory: z.string(),
+  parsedJson: z.unknown().optional(),
+}).strict();
+
+export const ShellExecuteInputSchema = z.object({
+  command: z.string().min(1),
+  args: z.array(z.string()).optional(),
+  cwd: z.string().optional(),
+  env: z.array(KeyValueEntrySchema).optional(),
+}).strict();
+
+export const ShellExecuteResultSchema = z.object({
+  ok: z.boolean(),
+  command: z.string(),
+  args: z.array(z.string()),
+  stdout: z.string(),
+  stderr: z.string(),
+  exitCode: z.number(),
+  durationMs: z.number(),
+  workingDirectory: z.string(),
+}).strict();
+
+export const GitHubReadRepositoryInputSchema = z.object({
+  question: z.string().min(1),
+}).strict();
+
+export const GitHubReadRepositoryResultSchema = z.object({
+  ok: z.boolean(),
+  summary: z.string(),
+}).strict();
+
+export const GitHubCreatePullRequestInputSchema = z.object({
+  title: z.string().min(1),
+  summary: z.string().min(1),
+}).strict();
+
+export const GitHubCreatePullRequestResultSchema = z.object({
+  ok: z.boolean(),
+  summary: z.string(),
+}).strict();
+
+export const VercelTriggerDeployInputSchema = z.object({
+  target: z.string().min(1).optional(),
+}).strict();
+
+export const VercelTriggerDeployResultSchema = z.object({
+  ok: z.boolean(),
+  summary: z.string(),
+}).strict();
+
+export const ToolExecutionErrorSchema = z.object({
+  code: z.string().min(1),
+  message: z.string().min(1),
+}).strict();
+
+export const ToolExecutionResultEnvelopeSchema = z.object({
+  toolName: AgentToolNameSchema,
+  ok: z.boolean(),
+  content: z.string(),
+  data: z.unknown().optional(),
+  error: ToolExecutionErrorSchema.optional(),
+}).strict();
+
+export type ToolExecutionResultEnvelope = z.infer<typeof ToolExecutionResultEnvelopeSchema>;

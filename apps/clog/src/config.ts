@@ -1,5 +1,9 @@
+import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { AgentExecutionMode, IntegrationCapabilitySnapshot, SurfaceChannelKind } from "@clog/types";
+import type { ToolSummary } from "./schema/tools";
+import { RuntimeToolsConfigSchema, type RuntimeToolsConfig } from "./schema/tools";
+import { summarizeEnabledTools } from "./tools/registry";
 
 const readBoolean = (value: string | undefined, fallback: boolean): boolean => {
   if (!value) {
@@ -43,13 +47,25 @@ const normalizeHost = (value: string | undefined, fallback: string): string => {
   return host.replace(/\/+$/u, "");
 };
 
+const readOptionalJson = <T>(path: string): T | null => {
+  try {
+    return JSON.parse(readFileSync(path, "utf-8")) as T;
+  } catch {
+    return null;
+  }
+};
+
 const resolveWorkspacePath = (value: string | undefined, fallback: string): string => {
   const target = readOptionalString(value) ?? fallback;
   return resolve(process.cwd(), target);
 };
 
+export const getRuntimeProcessEnv = (): NodeJS.ProcessEnv => {
+  return typeof Bun !== "undefined" ? Bun.env : process.env;
+};
+
 const readChannels = (value: string | undefined): SurfaceChannelKind[] => {
-  const requested = (value ?? "web,telegram,cli")
+  const requested = (value ?? "cli")
     .split(",")
     .map((entry) => entry.trim())
     .filter(Boolean);
@@ -58,7 +74,14 @@ const readChannels = (value: string | undefined): SurfaceChannelKind[] => {
     entry === "web" || entry === "telegram" || entry === "cli" || entry === "system"
   ));
 
-  return channels.length > 0 ? channels : ["web", "telegram", "cli"];
+  return channels.length > 0 ? channels : ["cli"];
+};
+
+const appendChannel = (
+  channels: readonly SurfaceChannelKind[],
+  channel: SurfaceChannelKind,
+): SurfaceChannelKind[] => {
+  return channels.includes(channel) ? [...channels] : [...channels, channel];
 };
 
 export interface PostHogInsightMonitorConfig {
@@ -91,8 +114,22 @@ export interface PostHogRuntimeConfig {
 export interface RuntimeStorageConfig {
   readonly instanceId: string;
   readonly instanceRoot: string;
+  readonly readOnlyDir: string;
+  readonly workspaceDir: string;
   readonly storageDir: string;
   readonly databasePath: string;
+}
+
+export interface AiRuntimeConfig {
+  readonly provider: "openrouter" | "openai" | null;
+  readonly apiKey: string | null;
+  readonly model: string;
+  readonly baseUrl: string;
+}
+
+export interface TelegramRuntimeConfig {
+  readonly botToken: string | null;
+  readonly allowedChatIds: readonly number[];
 }
 
 const readInsightMonitor = (
@@ -119,9 +156,12 @@ const createPostHogConfig = (env: NodeJS.ProcessEnv): PostHogRuntimeConfig => {
 
   return {
     host: normalizeHost(env.POSTHOG_CLAW_POSTHOG_HOST, "https://us.posthog.com"),
-    projectId: readOptionalString(env.POSTHOG_CLAW_POSTHOG_PROJECT_ID),
-    personalApiKey: readOptionalString(env.POSTHOG_CLAW_POSTHOG_PERSONAL_API_KEY),
-    projectApiKey: readOptionalString(env.POSTHOG_CLAW_POSTHOG_PROJECT_API_KEY),
+    projectId: readOptionalString(env.POSTHOG_CLAW_POSTHOG_PROJECT_ID)
+      ?? readOptionalString(env.POSTHOG_PROJECT_ID),
+    personalApiKey: readOptionalString(env.POSTHOG_CLAW_POSTHOG_PERSONAL_API_KEY)
+      ?? readOptionalString(env.POSTHOG_API_KEY),
+    projectApiKey: readOptionalString(env.POSTHOG_CLAW_POSTHOG_PROJECT_API_KEY)
+      ?? readOptionalString(env.POSTHOG_PROJECT_TOKEN),
     featureFlagsSecureApiKey: readOptionalString(env.POSTHOG_CLAW_POSTHOG_FEATURE_FLAGS_SECURE_KEY),
     endpointsDir: resolveWorkspacePath(env.POSTHOG_CLAW_POSTHOG_ENDPOINTS_DIR, "posthog/endpoints"),
     cliBin: readOptionalString(env.POSTHOG_CLAW_POSTHOG_CLI_BIN) ?? "posthog-cli",
@@ -141,9 +181,24 @@ const createPostHogConfig = (env: NodeJS.ProcessEnv): PostHogRuntimeConfig => {
 const hasPostHogManagementAccess = (config: PostHogRuntimeConfig): boolean =>
   Boolean(config.projectId && config.personalApiKey);
 
+const createAiConfig = (env: NodeJS.ProcessEnv): AiRuntimeConfig => {
+  const openRouterApiKey = readOptionalString(env.OPENROUTER_API_KEY);
+  const openAiApiKey = readOptionalString(env.OPENAI_API_KEY);
+  const usingOpenRouter = Boolean(openRouterApiKey);
+
+  return {
+    provider: openRouterApiKey ? "openrouter" : (openAiApiKey ? "openai" : null),
+    apiKey: openRouterApiKey ?? openAiApiKey,
+    model: readOptionalString(env.OPENROUTER_MODEL) ?? (usingOpenRouter ? "stepfun/step-3.5-flash" : "gpt-4o-mini"),
+    baseUrl: usingOpenRouter ? "https://openrouter.ai/api/v1" : "https://api.openai.com/v1",
+  };
+};
+
 const createRuntimeStorageConfig = (env: NodeJS.ProcessEnv): RuntimeStorageConfig => {
   const instanceId = readOptionalString(env.POSTHOG_CLAW_INSTANCE_ID) ?? "personal-instance";
   const instanceRoot = resolveWorkspacePath(env.POSTHOG_CLAW_INSTANCE_ROOT, `.runtime/instances/${instanceId}`);
+  const readOnlyDir = join(instanceRoot, "read-only");
+  const workspaceDir = join(instanceRoot, "workspace");
   const storageDir = resolveWorkspacePath(env.POSTHOG_CLAW_STORAGE_DIR, join(instanceRoot, "storage"));
   const databasePath = resolveWorkspacePath(
     env.POSTHOG_CLAW_RUNTIME_DB_PATH,
@@ -153,9 +208,43 @@ const createRuntimeStorageConfig = (env: NodeJS.ProcessEnv): RuntimeStorageConfi
   return {
     instanceId,
     instanceRoot,
+    readOnlyDir,
+    workspaceDir,
     storageDir,
     databasePath,
   };
+};
+
+const readToolFlag = (value: boolean | undefined, fallback: boolean): boolean =>
+  typeof value === "boolean" ? value : fallback;
+
+const readAllowedChatIds = (value: string | undefined): number[] => {
+  return (value ?? "")
+    .split(",")
+    .map((entry) => Number.parseInt(entry.trim(), 10))
+    .filter((entry) => Number.isFinite(entry));
+};
+
+const createTelegramConfig = (env: NodeJS.ProcessEnv): TelegramRuntimeConfig => {
+  return {
+    botToken: readOptionalString(env.TELEGRAM_BOT_TOKEN),
+    allowedChatIds: readAllowedChatIds(env.TELEGRAM_ALLOWED_CHATS),
+  };
+};
+
+const readRuntimeToolsConfig = (storage: RuntimeStorageConfig): RuntimeToolsConfig | null => {
+  const path = join(storage.readOnlyDir, "tools.json");
+  const value = readOptionalJson<unknown>(path);
+  if (!value) {
+    return null;
+  }
+
+  const parsed = RuntimeToolsConfigSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error(`Invalid runtime tools config at ${path}: ${parsed.error.message}`);
+  }
+
+  return parsed.data;
 };
 
 export interface AgentEnvironment {
@@ -165,18 +254,75 @@ export interface AgentEnvironment {
   readonly monitorIntervalMs: number;
   readonly channels: readonly SurfaceChannelKind[];
   readonly posthog: PostHogRuntimeConfig;
+  readonly ai: AiRuntimeConfig;
+  readonly telegram: TelegramRuntimeConfig;
   readonly storage: RuntimeStorageConfig;
   readonly capabilities: IntegrationCapabilitySnapshot;
+  readonly availableTools: readonly ToolSummary[];
 }
 
-export const loadAgentEnvironment = (env: NodeJS.ProcessEnv = process.env): AgentEnvironment => {
-  const channels = readChannels(env.POSTHOG_CLAW_CHANNELS);
-  const canCreatePullRequest = readBoolean(env.POSTHOG_CLAW_GITHUB_PR, true);
-  const canPushBranch = readBoolean(env.POSTHOG_CLAW_GITHUB_PUSH, true);
+export const loadAgentEnvironment = (env: NodeJS.ProcessEnv = getRuntimeProcessEnv()): AgentEnvironment => {
+  const requestedChannels = readChannels(env.POSTHOG_CLAW_CHANNELS);
+  const canCreatePullRequest = readBoolean(env.POSTHOG_CLAW_GITHUB_PR, false);
+  const canPushBranch = readBoolean(env.POSTHOG_CLAW_GITHUB_PUSH, false);
   const requestedPort = readInteger(env.PORT, 3000);
   const posthog = createPostHogConfig(env);
+  const ai = createAiConfig(env);
+  const telegram = createTelegramConfig(env);
+  const channels = telegram.botToken ? appendChannel(requestedChannels, "telegram") : requestedChannels;
   const storage = createRuntimeStorageConfig(env);
+  const runtimeTools = readRuntimeToolsConfig(storage);
   const hasPostHogAccess = hasPostHogManagementAccess(posthog);
+  const capabilities: IntegrationCapabilitySnapshot = {
+    posthog: {
+      canReadInsights: hasPostHogAccess && readToolFlag(
+        runtimeTools?.posthog?.readInsights,
+        readBoolean(env.POSTHOG_CLAW_POSTHOG_READ_INSIGHTS, true),
+      ),
+      canReadErrors: hasPostHogAccess && readToolFlag(
+        runtimeTools?.posthog?.readErrors,
+        readBoolean(env.POSTHOG_CLAW_POSTHOG_READ_ERRORS, true),
+      ),
+      canReadLogs: hasPostHogAccess && readToolFlag(
+        runtimeTools?.posthog?.readLogs,
+        readBoolean(env.POSTHOG_CLAW_POSTHOG_READ_LOGS, false),
+      ),
+      canReadFlags: hasPostHogAccess && readToolFlag(
+        runtimeTools?.posthog?.readFlags,
+        readBoolean(env.POSTHOG_CLAW_POSTHOG_READ_FLAGS, false),
+      ),
+      canReadExperiments: hasPostHogAccess && readToolFlag(
+        runtimeTools?.posthog?.readExperiments,
+        readBoolean(env.POSTHOG_CLAW_POSTHOG_READ_EXPERIMENTS, false),
+      ),
+      canManageEndpoints: hasPostHogAccess && readToolFlag(
+        runtimeTools?.posthog?.manageEndpoints,
+        readBoolean(env.POSTHOG_CLAW_POSTHOG_MANAGE_ENDPOINTS, false),
+      ),
+      canUploadSourcemaps: hasPostHogAccess && readBoolean(env.POSTHOG_CLAW_POSTHOG_UPLOAD_SOURCEMAPS, false),
+    },
+    github: {
+      canReadRepository: readToolFlag(runtimeTools?.github?.readRepository, readBoolean(env.POSTHOG_CLAW_GITHUB_READ, false)),
+      canCreatePullRequest: readToolFlag(runtimeTools?.github?.createPullRequests, canCreatePullRequest),
+      canPushBranch: readToolFlag(runtimeTools?.github?.pushBranches, canPushBranch),
+    },
+    vercel: {
+      canTriggerDeploy: readToolFlag(runtimeTools?.vercel?.triggerDeploys, readBoolean(env.POSTHOG_CLAW_VERCEL_DEPLOY, false)),
+    },
+    chat: {
+      canSendOperatorMessages: readToolFlag(runtimeTools?.chat?.notifyOperator, readBoolean(env.POSTHOG_CLAW_CHAT_NOTIFY, true)),
+      supportedChannels: channels,
+    },
+    shell: {
+      canExecute: readToolFlag(runtimeTools?.shell?.execute, readBoolean(env.POSTHOG_CLAW_SHELL_EXECUTE, false)),
+      safeCommands: ["ls", "cat", "rg", "grep", "head", "tail", "wc", "find"],
+      safeRoots: [
+        storage.workspaceDir,
+        storage.storageDir,
+      ],
+    },
+  };
+  const availableTools = summarizeEnabledTools(capabilities);
 
   return {
     appName: env.POSTHOG_CLAW_APP_NAME?.trim() || "PostHog Claw",
@@ -185,38 +331,10 @@ export const loadAgentEnvironment = (env: NodeJS.ProcessEnv = process.env): Agen
     monitorIntervalMs: Math.max(5_000, readInteger(env.POSTHOG_CLAW_MONITOR_INTERVAL_MS, 60_000)),
     channels,
     posthog,
+    ai,
+    telegram,
     storage,
-    capabilities: {
-      posthog: {
-        canReadInsights: hasPostHogAccess && readBoolean(env.POSTHOG_CLAW_POSTHOG_READ_INSIGHTS, true),
-        canReadErrors: hasPostHogAccess && readBoolean(env.POSTHOG_CLAW_POSTHOG_READ_ERRORS, true),
-        canReadLogs: hasPostHogAccess && readBoolean(env.POSTHOG_CLAW_POSTHOG_READ_LOGS, false),
-        canReadFlags: hasPostHogAccess && readBoolean(env.POSTHOG_CLAW_POSTHOG_READ_FLAGS, false),
-        canReadExperiments: hasPostHogAccess && readBoolean(env.POSTHOG_CLAW_POSTHOG_READ_EXPERIMENTS, false),
-        canManageEndpoints: hasPostHogAccess && readBoolean(env.POSTHOG_CLAW_POSTHOG_MANAGE_ENDPOINTS, false),
-        canUploadSourcemaps: hasPostHogAccess && readBoolean(env.POSTHOG_CLAW_POSTHOG_UPLOAD_SOURCEMAPS, false),
-      },
-      github: {
-        canReadRepository: readBoolean(env.POSTHOG_CLAW_GITHUB_READ, true),
-        canCreatePullRequest,
-        canPushBranch,
-      },
-      vercel: {
-        canTriggerDeploy: readBoolean(env.POSTHOG_CLAW_VERCEL_DEPLOY, true),
-      },
-      chat: {
-        canSendOperatorMessages: readBoolean(env.POSTHOG_CLAW_CHAT_NOTIFY, true),
-        supportedChannels: channels,
-      },
-      shell: {
-        canExecute: readBoolean(env.POSTHOG_CLAW_SHELL_EXECUTE, true),
-        safeCommands: ["ls", "cat", "rg", "grep", "head", "tail", "wc", "find"],
-        safeRoots: [
-          process.cwd(),
-          join(process.cwd(), ".runtime"),
-          join(process.cwd(), ".runtime", "workspace"),
-        ],
-      },
-    },
+    capabilities,
+    availableTools,
   };
 };
