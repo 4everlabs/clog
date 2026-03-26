@@ -10,6 +10,22 @@ import type {
 } from "@clog/types";
 import type { MemoryEntry, RuntimeStore } from "./chat";
 
+export interface PersistedRuntimeState {
+  readonly status: AgentStatus;
+  readonly findings: readonly AgentFinding[];
+  readonly threads: readonly ConversationThread[];
+  readonly memories: readonly MemoryEntry[];
+  readonly actionResults: readonly ActionExecutionResult[];
+}
+
+export const createEmptyRuntimeState = (): PersistedRuntimeState => ({
+  status: "booting",
+  findings: [],
+  threads: [],
+  memories: [],
+  actionResults: [],
+});
+
 const createId = (prefix: string): string => `${prefix}_${crypto.randomUUID()}`;
 
 const sortThreads = (threads: readonly ConversationThread[]): ConversationThread[] =>
@@ -117,6 +133,10 @@ export class InMemoryRuntimeStore implements RuntimeStore {
     };
   }
 
+  listActionResults(): ActionExecutionResult[] {
+    return [...this.actionResults.values()];
+  }
+
   rememberActionResult(result: ActionExecutionResult): void {
     this.actionResults.set(result.actionId, result);
   }
@@ -156,5 +176,27 @@ export class InMemoryRuntimeStore implements RuntimeStore {
     };
     this.memories.set(entry.id, entry);
     return entry;
+  }
+
+  exportState(): PersistedRuntimeState {
+    return {
+      status: this.status,
+      findings: this.listFindings(),
+      threads: this.listThreads(),
+      memories: this.listMemories(),
+      actionResults: this.listActionResults(),
+    };
+  }
+
+  importState(input: PersistedRuntimeState): void {
+    const state = {
+      ...createEmptyRuntimeState(),
+      ...input,
+    };
+    this.status = state.status;
+    this.findings = new Map(state.findings.map((finding) => [finding.id, finding]));
+    this.threads = new Map(state.threads.map((thread) => [thread.id, thread]));
+    this.actionResults = new Map(state.actionResults.map((result) => [result.actionId, result]));
+    this.memories = new Map(state.memories.map((memory) => [memory.id, memory]));
   }
 }

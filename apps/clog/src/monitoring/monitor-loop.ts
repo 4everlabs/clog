@@ -10,6 +10,7 @@ export interface MonitoringLoopDependencies {
   readonly posthog: MonitoringIntegration;
   readonly github: MonitoringIntegration;
   readonly vercel: MonitoringIntegration;
+  readonly notion: MonitoringIntegration;
 }
 
 export interface MonitoringTickResult {
@@ -27,6 +28,7 @@ export class MonitoringLoop {
       this.deps.posthog.getHealth(),
       this.deps.github.getHealth(),
       this.deps.vercel.getHealth(),
+      this.deps.notion.getHealth(),
     ]);
     this.deps.store.setStatus("idle");
 

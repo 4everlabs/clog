@@ -4,13 +4,17 @@ import type { ZodTypeAny } from "zod";
 import { ProviderFunctionToolSchema, type ProviderFunctionTool } from "../schema/provider";
 import { ToolSummarySchema, type AgentToolName, type ToolSummary } from "../schema/tools";
 import { githubTools } from "./definitions/github";
+import { notionTools } from "./definitions/notion";
 import { posthogTools } from "./definitions/posthog";
+import { runtimeTools } from "./definitions/runtime";
 import { shellTools } from "./definitions/shell";
 import { vercelTools } from "./definitions/vercel";
 import type { AnyRegisteredTool } from "./types";
 
 const registeredTools: readonly AnyRegisteredTool[] = [
   ...posthogTools,
+  ...notionTools,
+  ...runtimeTools,
   ...shellTools,
   ...githubTools,
   ...vercelTools,

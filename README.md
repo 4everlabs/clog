@@ -45,7 +45,7 @@ The `.runtime` folder is the protected contract area that the runtime expects. E
 - `read-only/settings.json` – runtime-facing settings kept out of model access.
 - `read-only/tools.json` – tool visibility and enablement for the model/runtime surface.
 - `wakeup.json` – per-instance wakeup message and frequency in one editable file.
-- `storage/` – per-instance SQLite state and runtime-owned persistence.
+- `storage/` – per-instance structured JSON state and runtime-owned persistence.
 - `workspace/` – the model-targeted writable workspace area.
 
 Secrets and real API keys still live in `.env` for now, not in the tracked instance settings files.

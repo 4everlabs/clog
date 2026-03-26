@@ -1,10 +1,12 @@
-/* eslint-disable no-console */
-
 import type { PostHogInsightQueryResult, PostHogOrganizationSummary, PostHogProjectSummary } from "@clog/types";
 import type { PostHogRuntimeConfig } from "../../config";
 import { PostHogMcpClient } from "./mcp-client";
 
 type FetchFn = (input: URL | RequestInfo, init?: RequestInit) => Promise<Response>;
+
+const writeStderrLine = (value: string): void => {
+  process.stderr.write(`${value}\n`);
+};
 
 export class PostHogApiClient {
   private readonly mcpClient: PostHogMcpClient;
@@ -69,7 +71,7 @@ export class PostHogApiClient {
 
   async runQuery(name: string, query: string, refresh?: string): Promise<PostHogInsightQueryResult> {
     if (refresh) {
-      console.warn(`[posthog-mcp] ignoring unsupported refresh mode "${refresh}" for query-run`);
+      writeStderrLine(`[posthog-mcp] ignoring unsupported refresh mode "${refresh}" for query-run`);
     }
 
     return await this.mcpClient.runQuery(name, query);

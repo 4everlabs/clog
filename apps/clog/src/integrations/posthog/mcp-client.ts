@@ -1,5 +1,3 @@
-/* eslint-disable no-console */
-
 import type {
   PostHogInsightQueryResult,
   PostHogOrganizationSummary,
@@ -10,6 +8,10 @@ import type { PostHogRuntimeConfig } from "../../config";
 const MCP_PROTOCOL_VERSION = "2025-06-18";
 
 type FetchFn = (input: URL | RequestInfo, init?: RequestInit) => Promise<Response>;
+
+const writeStdoutLine = (value: string): void => {
+  process.stdout.write(`${value}\n`);
+};
 
 interface JsonRpcErrorPayload {
   readonly code: number;
@@ -302,7 +304,7 @@ export class PostHogMcpClient {
   }
 
   private async callTool(name: string, args: Record<string, unknown>): Promise<McpToolCallResult> {
-    console.log(`[posthog-mcp] calling ${name}`);
+    writeStdoutLine(`[posthog-mcp] calling ${name}`);
     const result = await this.request<McpToolCallResult>("tools/call", {
       name,
       arguments: args,
@@ -413,11 +415,11 @@ export class PostHogMcpClient {
       protocolVersion: message.result.protocolVersion || MCP_PROTOCOL_VERSION,
     };
 
-    console.log("[posthog-mcp] initialized", JSON.stringify({
+    writeStdoutLine(`[posthog-mcp] initialized ${JSON.stringify({
       endpoint: this.endpoint,
       protocolVersion: this.session.protocolVersion,
       sessionId: this.session.sessionId,
-    }));
+    })}`);
 
     const initializedResponse = await this.fetchFn(this.endpoint, {
       method: "POST",

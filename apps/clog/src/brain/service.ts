@@ -1,5 +1,3 @@
-/* eslint-disable no-console */
-
 import { generateText, stepCountIs, tool, type ModelMessage, type ToolSet } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { AgentExecutionMode, AgentFinding, ConversationMessage, ConversationThread } from "@clog/types";
@@ -35,12 +33,22 @@ export interface BrainReplyInput {
   readonly findings: readonly AgentFinding[];
 }
 
+type BrainFallbackReason = "missing_api_key" | "model_unavailable";
+
 interface BrainModelPayload {
   readonly systemPrompt: string;
   readonly messages: readonly ModelMessage[];
 }
 
 type FetchFn = (input: URL | RequestInfo, init?: RequestInit) => Promise<Response>;
+
+const writeStdoutLine = (value: string): void => {
+  process.stdout.write(`${value}\n`);
+};
+
+const writeStderrLine = (value: string): void => {
+  process.stderr.write(`${value}\n`);
+};
 
 export class BrainService {
   private readonly temperature: number;
@@ -54,8 +62,9 @@ export class BrainService {
   private readonly providerTools: readonly ProviderFunctionTool[];
   private readonly toolExecutor: ToolExecutor | null;
   private readonly fetchFn: FetchFn;
-  private readonly maxToolRounds = 5;
-  private readonly maxConversationContextTokens = 2_000;
+  private readonly maxToolRounds = 10;
+  private readonly maxOutputTokens = 12_000;
+  private readonly maxConversationContextTokens = 1_000;
 
   constructor(config: BrainServiceConfig = {}) {
     const aiConfig = config.aiConfig;
@@ -74,17 +83,17 @@ export class BrainService {
 
   async reply(input: BrainReplyInput): Promise<string> {
     if (!this.apiKey) {
-      return this.buildFallbackReply(input.message, input.findings);
+      return this.buildFallbackReply(input.findings, "missing_api_key");
     }
 
     try {
       const payload = this.buildModelPayload(input.thread, input.findings);
       this.logModelDispatch(payload);
-      const response = await this.callLlm(payload.systemPrompt, payload.messages);
-      return response || this.buildFallbackReply(input.message, input.findings);
+      return await this.requestLiveReply(payload);
     } catch (error) {
-      console.error("[brain] Falling back to local reply:", error);
-      return this.buildFallbackReply(input.message, input.findings);
+      const message = error instanceof Error ? error.stack ?? error.message : String(error);
+      writeStderrLine(`[brain] Falling back to local reply: ${message}`);
+      return this.buildFallbackReply(input.findings, "model_unavailable");
     }
   }
 
@@ -92,6 +101,7 @@ export class BrainService {
     const promptBundle = loadAiPromptBundle();
     const systemPrompt = buildSystemPrompt(promptBundle, {
       tools: this.availableTools,
+      includeKnowledgePrompt: false,
       executionMode: this.executionMode,
       findingsSummary: this.buildFindingsSummary(findings),
       wakeupPrompt: promptBundle.wakeupPrompt,
@@ -104,13 +114,28 @@ export class BrainService {
   }
 
   private logModelDispatch(payload: BrainModelPayload): void {
-    console.log("[brain] dispatching model payload", JSON.stringify({
+    writeStdoutLine(`[brain] dispatching model payload ${JSON.stringify({
       provider: this.aiConfig?.provider ?? "direct",
       model: this.modelName,
       toolNames: this.registeredTools.map((registeredTool) => registeredTool.name),
-      systemPrompt: payload.systemPrompt,
-      messages: payload.messages,
-    }, null, 2));
+      systemPromptChars: payload.systemPrompt.length,
+      systemPromptEstimatedTokens: this.estimateMessageTokens(payload.systemPrompt),
+      messageCount: payload.messages.length,
+      messageRoles: payload.messages.map((message) => message.role),
+      messageEstimatedTokens: payload.messages.reduce((total, message) => {
+        const content = typeof message.content === "string"
+          ? message.content
+          : JSON.stringify(message.content);
+        return total + this.estimateMessageTokens(content);
+      }, 0),
+      latestMessageChars: payload.messages.length > 0
+        ? (
+            typeof payload.messages[payload.messages.length - 1]!.content === "string"
+              ? payload.messages[payload.messages.length - 1]!.content.length
+              : JSON.stringify(payload.messages[payload.messages.length - 1]!.content).length
+          )
+        : 0,
+    }, null, 2)}`);
   }
 
   private buildFindingsSummary(findings: readonly AgentFinding[]): string {
@@ -164,6 +189,15 @@ export class BrainService {
     return await this.callProviderApi(this.toProviderMessages(systemPrompt, messages));
   }
 
+  private async requestLiveReply(payload: BrainModelPayload): Promise<string> {
+    const response = (await this.callLlm(payload.systemPrompt, payload.messages)).trim();
+    if (response) {
+      return response;
+    }
+
+    throw new Error("Model returned an empty response");
+  }
+
   private buildAiSdkTools(): ToolSet | undefined {
     if (!this.toolExecutor || this.registeredTools.length === 0) {
       return undefined;
@@ -204,7 +238,7 @@ export class BrainService {
       system: systemPrompt,
       messages: [...messages],
       temperature: this.temperature,
-      maxOutputTokens: 1200,
+      maxOutputTokens: this.maxOutputTokens,
       tools,
       stopWhen: tools ? stepCountIs(this.maxToolRounds) : undefined,
     });
@@ -276,7 +310,7 @@ export class BrainService {
     const payload = buildProviderChatCompletionRequest({
       model: this.modelName,
       temperature: this.temperature,
-      maxTokens: 1200,
+      maxTokens: this.maxOutputTokens,
       messages: [...messages],
       tools: this.providerTools.length > 0 ? [...this.providerTools] : undefined,
     });
@@ -295,14 +329,20 @@ export class BrainService {
     return parseProviderAssistantMessage(await response.json());
   }
 
-  private buildFallbackReply(message: string, findings: readonly AgentFinding[]): string {
+  private buildFallbackReply(
+    findings: readonly AgentFinding[],
+    reason: BrainFallbackReason,
+  ): string {
     const openFindings = findings.filter((finding) => finding.state === "open");
     const highestPriority = openFindings[0];
+    const lead = reason === "missing_api_key"
+      ? "I don't have a live AI provider configured right now."
+      : "I couldn't get a live model answer just now.";
 
     if (!highestPriority) {
-      return `I heard: "${message}". There are no active findings right now, so the clean next step is to inspect runtime health or run another monitoring cycle.`;
+      return `${lead} There are no active findings right now. Ask me to inspect runtime health or run another monitoring cycle if you want a fresh check.`;
     }
 
-    return `I heard: "${message}". The highest-priority open finding is "${highestPriority.title}". The safest next step is to review that finding and decide whether to investigate, notify, or prepare a follow-up action.`;
+    return `${lead} The highest-priority open finding is "${highestPriority.title}". The safest next step is to review that finding and decide whether to investigate, notify, or prepare a follow-up action.`;
   }
 }

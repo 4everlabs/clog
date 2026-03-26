@@ -50,6 +50,7 @@ export interface AiPromptBundle {
 export interface SystemPromptOptions {
   readonly tools?: readonly ToolSummary[];
   readonly includeModePrompt?: boolean;
+  readonly includeKnowledgePrompt?: boolean;
   readonly executionMode?: string | null;
   readonly findingsSummary?: string | null;
   readonly wakeupPrompt?: string | null;
@@ -177,7 +178,9 @@ export const buildSystemPrompt = (bundle: AiPromptBundle, options: SystemPromptO
   return [
     bundle.systemPrompt,
     bundle.projectPrompt?.trim() ? `Project context:\n${bundle.projectPrompt}` : "",
-    bundle.knowledgePrompt?.trim() ? `Knowledge summaries:\n${bundle.knowledgePrompt}` : "",
+    options.includeKnowledgePrompt === false || !bundle.knowledgePrompt?.trim()
+      ? ""
+      : `Knowledge summaries:\n${bundle.knowledgePrompt}`,
     options.includeModePrompt === false ? "" : bundle.primaryModePrompt,
     buildToolPrompt(options.tools ?? []),
     options.executionMode ? `Execution mode: ${options.executionMode}` : "",

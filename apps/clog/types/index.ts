@@ -2,7 +2,7 @@ export type AgentExecutionMode = "observe" | "propose" | "execute";
 
 export type AgentStatus = "booting" | "idle" | "monitoring" | "degraded";
 
-export type IntegrationKind = "posthog" | "github" | "vercel" | "chat";
+export type IntegrationKind = "posthog" | "github" | "vercel" | "chat" | "notion";
 
 export type IntegrationStatus = "ready" | "degraded" | "missing-config";
 
@@ -46,6 +46,9 @@ export interface IntegrationCapabilitySnapshot {
   readonly chat: {
     readonly canSendOperatorMessages: boolean;
     readonly supportedChannels: readonly SurfaceChannelKind[];
+  };
+  readonly notion: {
+    readonly canReadTodo: boolean;
   };
   readonly shell: {
     readonly canExecute: boolean;
@@ -241,6 +244,36 @@ export interface SurfacePostHogMcpToolCallResponse {
   readonly toolName: string;
   readonly text: string;
   readonly structuredContent?: unknown;
+}
+
+export interface NotionTodoStatusCount {
+  readonly progress: string;
+  readonly count: number;
+}
+
+export interface NotionTodoItem {
+  readonly id: string;
+  readonly name: string;
+  readonly progress: string | null;
+  readonly dueDate: string | null;
+  readonly assignees: readonly string[];
+  readonly taskTypes: readonly string[];
+  readonly url: string;
+}
+
+export interface NotionTodoSummary {
+  readonly title: string;
+  readonly dataSourceId: string;
+  readonly generatedAt: number;
+  readonly total: number;
+  readonly openCount: number;
+  readonly statusCounts: readonly NotionTodoStatusCount[];
+}
+
+export interface SurfaceNotionTodoResponse {
+  readonly summary: NotionTodoSummary;
+  readonly items: readonly NotionTodoItem[];
+  readonly printout: string;
 }
 
 export interface PostHogEndpointDiffRequest {

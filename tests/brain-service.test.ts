@@ -67,7 +67,7 @@ describe("BrainService", () => {
       findings: [],
     });
 
-    expect(reply).toContain('I heard: "hello"');
+    expect(reply).toContain("I don't have a live AI provider configured right now.");
     expect(reply).toContain("no active findings");
   });
 
@@ -133,6 +133,43 @@ describe("BrainService", () => {
     expect(systemPrompt.indexOf("Enabled tools for this turn:")).toBeGreaterThan(
       systemPrompt.indexOf("Operating mode: `primary`."),
     );
+    expect(systemPrompt).not.toContain("Knowledge summaries:");
+  });
+
+  test("falls back immediately when the provider returns an empty response", async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    const brain = new BrainService({
+      apiKey: "test-key",
+      modelName: "test-model",
+      baseUrl: "https://api.openai.com/v1",
+      fetchFn: async (_input, init) => {
+        requests.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+        return new Response(JSON.stringify({
+          choices: [
+            {
+              message: {
+                role: "assistant",
+                content: "   ",
+              },
+            },
+          ],
+        }), {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+          },
+        });
+      },
+    });
+
+    const reply = await brain.reply({
+      thread: createThread("what pages are slow?"),
+      message: "what pages are slow?",
+      findings: [],
+    });
+
+    expect(reply).toContain("I couldn't get a live model answer just now.");
+    expect(requests).toHaveLength(1);
   });
 
   test("walks backward through history and drops only the overflow", async () => {
@@ -162,8 +199,8 @@ describe("BrainService", () => {
     });
 
     const thread = createThreadWithMessages([
-      `oldest-${"a".repeat(5_500)}`,
-      `middle-${"b".repeat(5_500)}`,
+      `oldest-${"a".repeat(2_600)}`,
+      `middle-${"b".repeat(2_600)}`,
       "latest short message",
     ]);
 
@@ -179,5 +216,59 @@ describe("BrainService", () => {
     expect(serializedMessages).not.toContain("oldest-");
     expect(serializedMessages).toContain("middle-");
     expect(serializedMessages).toContain("latest short message");
+  });
+
+  test("logs a compact dispatch summary instead of the full prompt payload", async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    const stdoutWrites: string[] = [];
+    const originalWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      stdoutWrites.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf-8"));
+      return true;
+    }) as typeof process.stdout.write;
+
+    try {
+      const brain = new BrainService({
+        apiKey: "test-key",
+        modelName: "test-model",
+        baseUrl: "https://api.openai.com/v1",
+        executionMode: "propose",
+        availableTools: [createToolSummary()],
+        fetchFn: async (_input, init) => {
+          requests.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+          return new Response(JSON.stringify({
+            choices: [
+              {
+                message: {
+                  role: "assistant",
+                  content: "checked",
+                },
+              },
+            ],
+          }), {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+            },
+          });
+        },
+      });
+
+      await brain.reply({
+        thread: createThread("this message should not be fully logged"),
+        message: "this message should not be fully logged",
+        findings: [createFinding()],
+      });
+    } finally {
+      process.stdout.write = originalWrite;
+    }
+
+    expect(requests).toHaveLength(1);
+    const output = stdoutWrites.join("");
+    expect(output).toContain("[brain] dispatching model payload");
+    expect(output).toContain("\"messageCount\": 1");
+    expect(output).toContain("\"systemPromptChars\":");
+    expect(output).not.toContain("## Hard Rules");
+    expect(output).not.toContain("this message should not be fully logged");
   });
 });

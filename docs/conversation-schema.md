@@ -1,84 +1,44 @@
-# Conversation JSONL Schema
+# Conversation Storage Schema
 
 ## File Location
 
-```text
-.conversations/{channel}/{thread_id}.jsonl
-```
-
-Examples:
+Each conversation lives in its own folder under `storage/conversations/`.
 
 ```text
-.conversations/telegram/123456.jsonl
-.conversations/cli/local.jsonl
-.conversations/web/session-abc123.jsonl
+storage/conversations/conversation-2026-03-26T01-32-20-418Z-thread_abc123/
+  notes.jsonl
+  chat.jsonl
 ```
 
-## Message Format (JSONL - one JSON object per line)
+Notes:
 
-```json
-{
-  "id": "msg_abc123def456",
-  "role": "user",
-  "content": "what errors happened today?",
-  "timestamp": 1709500000000,
-  "tool_calls": [
-    {
-      "name": "posthog_run_query",
-      "args": {"name": "Recent errors", "query": "SELECT event, count() FROM events LIMIT 10"},
-      "result": "..."
-    }
-  ],
-  "metadata": {
-    "chat_id": 123456,
-    "channel": "telegram",
-    "reply_to": "msg_xyz789"
-  }
-}
-```
+- Folder names are timestamp-first so they are easy to scan in the filesystem.
+- The thread ID is kept in the folder name to make collisions unlikely.
+- `notes.jsonl` is always created for every conversation.
+- `chat.jsonl` is always created and stores the serialized messages for that conversation.
 
-## Fields
+## `notes.jsonl`
 
-| Field | Type | Required | Description |
-| ----- | ---- | -------- | ----------- |
-| `id` | string | yes | Unique message ID (ulid or uuid) |
-| `role` | string | yes | `user`, `agent`, `system`, `tool` |
-| `content` | string | yes | Message text |
-| `timestamp` | number | yes | Unix ms timestamp (for ordering) |
-| `tool_calls` | array | no | Tool invocations in this message |
-| `metadata` | object | no | Channel-specific data |
-
-## Roles
-
-- `system` - System prompts (first message)
-- `user` - Human messages
-- `agent` - AI responses
-- `tool` - Tool results (returned to model)
-
-## Example Conversation
+The first line is a header record that identifies the conversation. Later note entries can be appended as additional JSONL lines.
 
 ```jsonl
-{"id":"msg_01","role":"system","content":"You are Clog...","timestamp":1709500000000}
-{"id":"msg_02","role":"user","content":"show me errors","timestamp":1709500001000}
-{"id":"msg_03","role":"agent","content":"Let me check...","timestamp":1709500002000,"tool_calls":[{"name":"posthog_run_query","args":{"name":"Recent errors","query":"SELECT event, count() FROM events LIMIT 10"},"result":"..."}]}
-{"id":"msg_04","role":"tool","content":"[{\"event\":\"$exception\",\"count\":12}]","timestamp":1709500002500,"metadata":{"tool_call_id":"msg_03"}}
-{"id":"msg_05","role":"agent","content":"The query shows 12 recent exception events.","timestamp":1709500003000}
+{"type":"conversation-header","schemaVersion":1,"fileKind":"notes","conversationId":"conversation-2026-03-26T01-32-20-418Z-thread_abc123","threadId":"thread_abc123","channel":"cli","title":"Operator Conversation","createdAt":1774402340418,"updatedAt":1774402340418}
 ```
 
-## Ordering
+Recommended future note entries:
 
-Messages are ordered by `timestamp` ascending (oldest first) - same order you'd send to the LLM.
-
-## Thread Metadata (separate file)
-
-```json
-// .conversations/telegram/123456.meta.json
-{
-  "thread_id": "123456",
-  "channel": "telegram",
-  "created_at": 1709450000000,
-  "updated_at": 1709500003000,
-  "title": "Error investigation",
-  "participants": ["user_123", "clog"]
-}
+```jsonl
+{"type":"note","createdAt":1774402350000,"author":"model","content":"The user wants a lightweight per-conversation notes file."}
 ```
+
+## `chat.jsonl`
+
+`chat.jsonl` starts with the same style of header record followed by one message record per line.
+
+```jsonl
+{"type":"conversation-header","schemaVersion":1,"fileKind":"chat","conversationId":"conversation-2026-03-26T01-32-20-418Z-thread_abc123","threadId":"thread_abc123","channel":"cli","title":"Operator Conversation","createdAt":1774402340418,"updatedAt":1774402400000}
+{"type":"message","conversationId":"conversation-2026-03-26T01-32-20-418Z-thread_abc123","threadId":"thread_abc123","messageId":"msg_01","role":"system","channel":"cli","content":"PostHog Claw is online.","createdAt":1774402340418}
+{"type":"message","conversationId":"conversation-2026-03-26T01-32-20-418Z-thread_abc123","threadId":"thread_abc123","messageId":"msg_02","role":"user","channel":"cli","content":"what errors happened today?","createdAt":1774402350000}
+```
+
+Legacy `storage/runtime.sqlite` files are not used anymore and are removed during runtime setup.

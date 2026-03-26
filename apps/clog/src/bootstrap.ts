@@ -3,6 +3,8 @@ import { loadAgentEnvironment, type AgentEnvironment } from "./config";
 import { BrainService } from "./brain/service";
 import { AgentGateway } from "./gateway/service";
 import { GitHubIntegrationClient } from "./integrations/github/client";
+import { NotionApiClient } from "./integrations/notion/api-client";
+import { NotionIntegrationClient } from "./integrations/notion/client";
 import { PostHogIntegrationClient } from "./integrations/posthog/client";
 import { PostHogApiClient } from "./integrations/posthog/api-client";
 import { PostHogCliTool } from "./integrations/posthog/cli-tool";
@@ -10,8 +12,9 @@ import { PostHogWorkspaceReporter } from "./integrations/posthog/workspace-repor
 import { VercelIntegrationClient } from "./integrations/vercel/client";
 import { MonitoringLoop } from "./monitoring/monitor-loop";
 import { syncRuntimeInstanceTemplate } from "../../../tests/runtime-instance-template";
-import { SqliteRuntimeStore } from "./storage/sqlite";
+import { FileRuntimeStore } from "./storage/file-runtime-store";
 import type { RuntimeStore } from "./storage/chat";
+import { RuntimeReadService } from "./runtime/read-service";
 import { ToolExecutor } from "./execution/tool-executor";
 import { ShellExecutor } from "./execution/shell-executor";
 import { buildProviderTools, resolveEnabledTools } from "./tools/registry";
@@ -33,16 +36,22 @@ export const bootstrapRuntime = (): RuntimeBootstrap => {
   syncRuntimeInstanceTemplate();
   const env = loadAgentEnvironment();
   const bootedAt = Date.now();
-  const store = new SqliteRuntimeStore(env.storage);
+  const store = new FileRuntimeStore(env.storage);
   store.setStatus("booting");
   const posthogApi = new PostHogApiClient(env.posthog);
+  const notionApi = new NotionApiClient(env.notion);
   const posthogCli = new PostHogCliTool(env.posthog);
   const posthogWorkspaceReporter = new PostHogWorkspaceReporter(env.storage.workspaceDir);
+  const runtimeReadService = new RuntimeReadService({
+    storage: env.storage,
+    store,
+  });
   const posthog = new PostHogIntegrationClient({
     api: posthogApi,
     config: env.posthog,
     capabilities: env.capabilities.posthog,
   });
+  const notion = new NotionIntegrationClient(env.notion);
   const recordAsync = async <T>(operation: string, execute: () => Promise<T>): Promise<T> => {
     const result = await execute();
     posthogWorkspaceReporter.record(operation, result);
@@ -93,6 +102,10 @@ export const bootstrapRuntime = (): RuntimeBootstrap => {
     capabilities: env.capabilities,
     services: {
       posthog: posthogServices,
+      notion: {
+        getTodoList: async (input) => await notionApi.getTodoList(input),
+      },
+      runtime: runtimeReadService,
       shell: {
         safeRoots: env.capabilities.shell.safeRoots,
         execute: (input) => ShellExecutor.execute(input, env.capabilities.shell.safeRoots),
@@ -117,6 +130,7 @@ export const bootstrapRuntime = (): RuntimeBootstrap => {
     posthog,
     github,
     vercel,
+    notion,
   });
   const gateway = new AgentGateway({
     env,
@@ -125,6 +139,9 @@ export const bootstrapRuntime = (): RuntimeBootstrap => {
     monitorLoop,
     posthog,
     posthogServices,
+    notionServices: {
+      getTodoList: async (input) => await notionApi.getTodoList(input),
+    },
     store,
   });
 
@@ -147,7 +164,9 @@ export const bootstrapRuntime = (): RuntimeBootstrap => {
       executionMode: env.executionMode,
       monitorIntervalMs: env.monitorIntervalMs,
       bootedAt,
-      activeIntegrations: ["posthog", "github", "vercel", "chat"],
+      activeIntegrations: env.capabilities.notion.canReadTodo
+        ? ["posthog", "github", "vercel", "chat", "notion"]
+        : ["posthog", "github", "vercel", "chat"],
     },
     posthogApi,
     posthogCli,

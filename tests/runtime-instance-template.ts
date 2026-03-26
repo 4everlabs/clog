@@ -99,6 +99,7 @@ const removeLegacyPaths = (instanceRoot: string): void => {
   rmSync(join(instanceRoot, "settings", "ai.json"), { force: true });
   rmSync(join(instanceRoot, "settings", "keys.json"), { force: true });
   rmSync(join(instanceRoot, "settings", "wakeup.md"), { force: true });
+  rmSync(join(instanceRoot, "storage", "runtime.sqlite"), { force: true });
   moveLegacyFile(join(instanceRoot, "settings", "settings.json"), join(instanceRoot, "read-only", "settings.json"));
   moveLegacyFile(join(instanceRoot, "settings", "tools.json"), join(instanceRoot, "read-only", "tools.json"));
   moveLegacyFile(join(instanceRoot, "settings", "wakeup.json"), join(instanceRoot, "wakeup.json"));

@@ -1,4 +1,5 @@
 import type {
+  SurfaceNotionTodoResponse,
   PostHogEndpointDiffRequest,
   PostHogEndpointRunRequest,
   PostHogInsightQueryRequest,
@@ -30,7 +31,7 @@ export const resolveBackendBaseUrl = (env: NodeJS.ProcessEnv = process.env): str
     return normalizeBaseUrl(explicit);
   }
 
-  const port = env.PORT?.trim() || "3000";
+  const port = env.PORT?.trim() || "6900";
   return `http://127.0.0.1:${port}`;
 };
 
@@ -122,6 +123,25 @@ export class ClogApiClient {
       method: "POST",
       body: JSON.stringify(input),
     });
+  }
+
+  async getNotionTodoList(input: {
+    readonly includeDone?: boolean;
+    readonly limit?: number;
+    readonly progress?: readonly string[];
+  } = {}): Promise<SurfaceNotionTodoResponse> {
+    const searchParams = new URLSearchParams();
+    if (input.includeDone) {
+      searchParams.set("includeDone", "true");
+    }
+    if (typeof input.limit === "number") {
+      searchParams.set("limit", String(input.limit));
+    }
+    for (const progress of input.progress ?? []) {
+      searchParams.append("progress", progress);
+    }
+    const search = searchParams.size > 0 ? `?${searchParams.toString()}` : "";
+    return await this.request<SurfaceNotionTodoResponse>(`/api/notion/todo${search}`);
   }
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {

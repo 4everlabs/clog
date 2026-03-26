@@ -36,6 +36,7 @@ describe("loadAgentEnvironment", () => {
       POSTHOG_CLAW_POSTHOG_PRIMARY_INSIGHT_MIN_PREVIOUS_VALUE: "20",
       OPENROUTER_API_KEY: "sk-or-test",
       OPENROUTER_MODEL: "openrouter/test-model",
+      NOTION_SECRET: "ntn_test",
       TELEGRAM_BOT_TOKEN: "123456:telegram-test-token",
       TELEGRAM_ALLOWED_CHATS: "1001, 1002",
     });
@@ -47,8 +48,9 @@ describe("loadAgentEnvironment", () => {
     expect(env.posthog.personalApiKey).toBe("phx_test");
     expect(env.posthog.projectApiKey).toBe("phc_test");
     expect(env.posthog.cliTimeoutMs).toBe(45_000);
+    expect(env.posthog.requestTimeoutMs).toBe(100_000);
     expect(env.storage.instanceId).toBe("config-test-1");
-    expect(env.storage.databasePath.endsWith(".runtime/instances/config-test-1/storage/runtime.sqlite")).toBe(true);
+    expect(env.storage.stateDir.endsWith(".runtime/instances/config-test-1/storage/state")).toBe(true);
     expect(env.posthog.endpointsDir.startsWith(env.storage.workspaceDir)).toBe(true);
     expect(env.posthog.insightMonitors).toHaveLength(1);
     expect(env.posthog.insightMonitors[0]).toMatchObject({
@@ -67,10 +69,15 @@ describe("loadAgentEnvironment", () => {
       userName: null,
       allowedChatIds: [1001, 1002],
     });
+    expect(env.notion).toMatchObject({
+      token: "ntn_test",
+      todoSearchTitle: "Pre Beta To Do",
+    });
     expect(env.capabilities.posthog.canReadInsights).toBe(true);
     expect(env.capabilities.posthog.canReadFlags).toBe(true);
     expect(env.capabilities.posthog.canManageEndpoints).toBe(true);
     expect(env.capabilities.posthog.canUploadSourcemaps).toBe(true);
+    expect(env.capabilities.notion.canReadTodo).toBe(true);
     expect(env.availableTools.map((tool) => tool.name)).toEqual([
       "posthog_get_organizations",
       "posthog_get_projects",
@@ -81,6 +88,10 @@ describe("loadAgentEnvironment", () => {
       "posthog_list_endpoints",
       "posthog_diff_endpoints",
       "posthog_run_endpoint",
+      "notion_get_todo_list",
+      "runtime_get_state_snapshot",
+      "runtime_get_recent_logs",
+      "runtime_read_knowledge",
     ]);
   });
 
@@ -99,7 +110,11 @@ describe("loadAgentEnvironment", () => {
     expect(env.capabilities.github.canPushBranch).toBe(false);
     expect(env.capabilities.vercel.canTriggerDeploy).toBe(false);
     expect(env.capabilities.shell.canExecute).toBe(false);
-    expect(env.availableTools).toEqual([]);
+    expect(env.availableTools.map((tool) => tool.name)).toEqual([
+      "runtime_get_state_snapshot",
+      "runtime_get_recent_logs",
+      "runtime_read_knowledge",
+    ]);
   });
 
   test("defaults to StepFun and auto-enables Telegram when both tokens are present", () => {
@@ -117,14 +132,14 @@ describe("loadAgentEnvironment", () => {
     expect(env.telegram.userName).toBe("clog4everbot");
   });
 
-  test("allows overriding the runtime database path", () => {
+  test("allows overriding the runtime state directory", () => {
     const env = loadAgentEnvironment({
       POSTHOG_CLAW_INSTANCE_ID: "operator-1",
-      POSTHOG_CLAW_RUNTIME_DB_PATH: ".runtime/instances/operator-1/storage/custom.sqlite",
+      POSTHOG_CLAW_RUNTIME_STATE_DIR: "custom-runtime-state",
     });
 
     expect(env.storage.instanceId).toBe("operator-1");
-    expect(env.storage.databasePath.endsWith("operator-1/storage/custom.sqlite")).toBe(true);
+    expect(env.storage.stateDir.endsWith("custom-runtime-state")).toBe(true);
   });
 
   test("rejects PostHog endpoint directories outside the runtime workspace", () => {
@@ -179,6 +194,9 @@ describe("loadAgentEnvironment", () => {
       shell: {
         execute: false,
       },
+      notion: {
+        readTodo: false,
+      },
     }));
 
     const previousCwd = process.cwd();
@@ -192,6 +210,8 @@ describe("loadAgentEnvironment", () => {
         POSTHOG_CLAW_GITHUB_READ: "true",
         POSTHOG_CLAW_GITHUB_PR: "true",
         POSTHOG_CLAW_GITHUB_PUSH: "true",
+        NOTION_SECRET: "ntn_test",
+        POSTHOG_CLAW_NOTION_READ_TODO: "true",
         POSTHOG_CLAW_VERCEL_DEPLOY: "true",
         POSTHOG_CLAW_SHELL_EXECUTE: "true",
       });
@@ -203,6 +223,7 @@ describe("loadAgentEnvironment", () => {
       expect(env.capabilities.github.canCreatePullRequest).toBe(false);
       expect(env.capabilities.github.canPushBranch).toBe(false);
       expect(env.capabilities.vercel.canTriggerDeploy).toBe(false);
+      expect(env.capabilities.notion.canReadTodo).toBe(false);
       expect(env.capabilities.shell.canExecute).toBe(false);
       expect(env.availableTools.map((tool) => tool.name)).toEqual([
         "posthog_get_organizations",
@@ -211,6 +232,9 @@ describe("loadAgentEnvironment", () => {
         "posthog_list_mcp_tools",
         "posthog_call_mcp_tool",
         "posthog_run_query",
+        "runtime_get_state_snapshot",
+        "runtime_get_recent_logs",
+        "runtime_read_knowledge",
       ]);
       expect(env.capabilities.shell.safeRoots).toEqual([
         env.storage.workspaceDir,

@@ -26,6 +26,9 @@ const createCapabilities = (): IntegrationCapabilitySnapshot => ({
     canSendOperatorMessages: true,
     supportedChannels: ["cli"],
   },
+  notion: {
+    canReadTodo: false,
+  },
   shell: {
     canExecute: false,
     safeCommands: ["ls"],
@@ -62,6 +65,28 @@ const createFinding = (): AgentFinding => ({
   sources: [{ kind: "posthog", label: "PostHog" }],
   observations: [],
   proposedActions: [],
+});
+
+const createRuntimeServices = () => ({
+  getStateSnapshot: () => ({
+    generatedAt: 1,
+    status: "idle",
+    openFindingsCount: 1,
+    openFindings: [],
+    recentThreads: [],
+    recentMemories: [],
+    recentActionResults: [],
+  }),
+  getRecentLogs: () => ({
+    generatedAt: 1,
+    files: [],
+  }),
+  readKnowledge: () => ({
+    availablePaths: ["knowledge/example.md"],
+    selectedPath: null,
+    content: null,
+    truncated: false,
+  }),
 });
 
 describe("BrainService tool loop", () => {
@@ -114,6 +139,8 @@ describe("BrainService tool loop", () => {
             throw new Error("not used");
           },
         },
+        notion: null,
+        runtime: createRuntimeServices(),
         shell: null,
         github: null,
         vercel: null,
@@ -191,6 +218,9 @@ describe("BrainService tool loop", () => {
       "posthog_list_mcp_tools",
       "posthog_call_mcp_tool",
       "posthog_run_query",
+      "runtime_get_state_snapshot",
+      "runtime_get_recent_logs",
+      "runtime_read_knowledge",
     ]);
     expect(JSON.stringify(requests[1]?.messages)).toContain("posthog_run_query");
     expect(JSON.stringify(requests[1]?.messages)).toContain("Revenue monitor");

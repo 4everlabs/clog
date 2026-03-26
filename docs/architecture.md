@@ -42,7 +42,7 @@ The monitoring loop lives here.
 
 ### `storage`
 
-Runtime state lives in SQLite-backed storage today. This layer owns:
+Runtime state lives in structured JSON files today. This layer owns:
 
 - findings history
 - thread/message persistence
@@ -82,7 +82,7 @@ The transport-agnostic typed surface. This is the layer web, Telegram, and CLI s
 - `read-only/settings.json` – runtime-facing settings kept out of model access.
 - `read-only/tools.json` – tool visibility and enablement for the model/runtime surface.
 - `wakeup.json` – per-instance wakeup message and frequency in one editable file.
-- `storage/` – per-instance runtime state such as SQLite persistence.
+- `storage/` – per-instance runtime state such as `storage/state/*.json`.
 - `workspace/` – per-instance workspaces kept outside the tracked runtime contract.
 
 App-owned prompts, knowledge, skills, and MCP references stay in the repo-level `apps/clog/src/brain` tree. `.runtime` is for per-instance state and guidance, with `workspace/` as the only model-targeted writable area, `storage/` as runtime-owned persistence, and `read-only/` reserved for runtime-owned files the model should not browse directly.

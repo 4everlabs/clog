@@ -30,6 +30,7 @@ export interface RuntimeStore {
   createThread(channel: SurfaceChannelKind, title: string): ConversationThread;
   appendMessages(threadId: string, messages: readonly ConversationMessage[]): ConversationThread;
   createMessage(role: ConversationMessage["role"], channel: SurfaceChannelKind, content: string): ConversationMessage;
+  listActionResults(): ActionExecutionResult[];
   rememberActionResult(result: ActionExecutionResult): void;
   getActionResult(actionId: string): ActionExecutionResult | null;
   seedOperatorThread(channel: SurfaceChannelKind, title?: string): ConversationThread;

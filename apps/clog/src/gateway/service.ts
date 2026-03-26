@@ -2,6 +2,7 @@ import type {
   ActionExecutionRequest,
   ActionExecutionResult,
   AgentRuntimeSummary,
+  SurfaceNotionTodoResponse,
   PostHogEndpointDiffRequest,
   PostHogEndpointRunRequest,
   PostHogInsightQueryRequest,
@@ -25,6 +26,7 @@ import type {
   SurfaceThreadsResponse,
 } from "@clog/types";
 import type { AgentEnvironment } from "../config";
+import type { NotionToolServices } from "../tools/types";
 import type { PostHogIntegrationClient } from "../integrations/posthog/client";
 import { BrainService } from "../brain/service";
 import type { MonitoringLoop } from "../monitoring/monitor-loop";
@@ -51,11 +53,20 @@ export interface AgentGatewayDependencies {
     | "diffEndpoints"
     | "runEndpoint"
   >;
+  readonly notionServices: Pick<NotionToolServices, "getTodoList">;
   readonly store: RuntimeStore;
 }
 
 export class AgentGateway implements AgentGatewaySurface {
+  private serialQueue: Promise<void> = Promise.resolve();
+
   constructor(private readonly deps: AgentGatewayDependencies) {}
+
+  runExclusive<T>(operation: () => Promise<T>): Promise<T> {
+    const run = this.serialQueue.then(operation, operation);
+    this.serialQueue = run.then(() => undefined, () => undefined);
+    return run;
+  }
 
   async bootstrap(): Promise<SurfaceBootstrapResponse> {
     const tick = await this.deps.monitorLoop.tick();
@@ -85,7 +96,7 @@ export class AgentGateway implements AgentGatewaySurface {
   }
 
   async runMonitorCycle() {
-    return await this.deps.monitorLoop.tick();
+    return await this.runExclusive(async () => await this.deps.monitorLoop.tick());
   }
 
   async listFindings(): Promise<SurfaceFindingsResponse> {
@@ -101,32 +112,34 @@ export class AgentGateway implements AgentGatewaySurface {
   }
 
   async sendMessage(input: SurfaceSendMessageRequest): Promise<SurfaceSendMessageResponse> {
-    const thread = input.threadId
-      ? this.deps.store.getThread(input.threadId)
-      : this.deps.store.createThread(input.channel, input.title?.trim() || "Operator Conversation");
+    return await this.runExclusive(async () => {
+      const thread = input.threadId
+        ? this.deps.store.getThread(input.threadId)
+        : this.deps.store.createThread(input.channel, input.title?.trim() || "Operator Conversation");
 
-    if (!thread) {
-      throw new Error(`Thread not found: ${input.threadId}`);
-    }
+      if (!thread) {
+        throw new Error(`Thread not found: ${input.threadId}`);
+      }
 
-    const userMessage = this.deps.store.createMessage("user", input.channel, input.message);
-    const threadWithUserMessage = this.deps.store.appendMessages(thread.id, [userMessage]);
+      const userMessage = this.deps.store.createMessage("user", input.channel, input.message);
+      const threadWithUserMessage = this.deps.store.appendMessages(thread.id, [userMessage]);
 
-    const findings = this.deps.store.listFindings();
-    const replyText = await this.deps.brain.reply({
-      thread: threadWithUserMessage,
-      message: input.message,
-      findings,
+      const findings = this.deps.store.listFindings();
+      const replyText = await this.deps.brain.reply({
+        thread: threadWithUserMessage,
+        message: input.message,
+        findings,
+      });
+      const replyMessage = this.deps.store.createMessage("agent", input.channel, replyText);
+      const updatedThread = this.deps.store.appendMessages(thread.id, [replyMessage]);
+      const recommendedActions = findings.filter((finding) => finding.state === "open")[0]?.proposedActions ?? [];
+
+      return {
+        thread: updatedThread,
+        replyMessage,
+        recommendedActions,
+      };
     });
-    const replyMessage = this.deps.store.createMessage("agent", input.channel, replyText);
-    const updatedThread = this.deps.store.appendMessages(thread.id, [replyMessage]);
-    const recommendedActions = findings.filter((finding) => finding.state === "open")[0]?.proposedActions ?? [];
-
-    return {
-      thread: updatedThread,
-      replyMessage,
-      recommendedActions,
-    };
   }
 
   async acknowledgeFinding(input: SurfaceAcknowledgeFindingRequest): Promise<SurfaceFindingsResponse> {
@@ -261,5 +274,17 @@ export class AgentGateway implements AgentGatewaySurface {
     return {
       result: this.deps.posthogServices.runEndpoint(input),
     };
+  }
+
+  async getNotionTodoList(input: {
+    readonly includeDone?: boolean;
+    readonly limit?: number;
+    readonly progress?: readonly string[];
+  }): Promise<SurfaceNotionTodoResponse> {
+    if (!this.deps.env.capabilities.notion.canReadTodo) {
+      throw new Error("Notion todo access is disabled in the current configuration");
+    }
+
+    return await this.deps.notionServices.getTodoList(input);
   }
 }

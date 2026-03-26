@@ -138,7 +138,7 @@ export interface RuntimeStorageConfig {
   readonly readOnlyDir: string;
   readonly workspaceDir: string;
   readonly storageDir: string;
-  readonly databasePath: string;
+  readonly stateDir: string;
 }
 
 export interface AiRuntimeConfig {
@@ -152,6 +152,14 @@ export interface TelegramRuntimeConfig {
   readonly botToken: string | null;
   readonly userName: string | null;
   readonly allowedChatIds: readonly number[];
+}
+
+export interface NotionRuntimeConfig {
+  readonly token: string | null;
+  readonly requestTimeoutMs: number;
+  readonly todoPageUrl: string | null;
+  readonly todoDataSourceId: string | null;
+  readonly todoSearchTitle: string;
 }
 
 const readSettingsMonitorIntervalMs = (storage: RuntimeStorageConfig): number | null => {
@@ -211,7 +219,7 @@ const createPostHogConfig = (env: NodeJS.ProcessEnv, storage: RuntimeStorageConf
     ),
     cliBin: readOptionalString(env.POSTHOG_CLAW_POSTHOG_CLI_BIN) ?? "posthog-cli",
     cliTimeoutMs: Math.max(1_000, readInteger(env.POSTHOG_CLAW_POSTHOG_CLI_TIMEOUT_MS, 30_000)),
-    requestTimeoutMs: Math.max(1_000, readInteger(env.POSTHOG_CLAW_POSTHOG_REQUEST_TIMEOUT_MS, 10_000)),
+    requestTimeoutMs: Math.max(1_000, readInteger(env.POSTHOG_CLAW_POSTHOG_REQUEST_TIMEOUT_MS, 100_000)),
     enableLogs: readBoolean(env.POSTHOG_CLAW_POSTHOG_ENABLE_LOGS, false),
     enableFlags: readBoolean(env.POSTHOG_CLAW_POSTHOG_ENABLE_FLAGS, false),
     enableExperiments: readBoolean(env.POSTHOG_CLAW_POSTHOG_ENABLE_EXPERIMENTS, false),
@@ -245,9 +253,11 @@ const createRuntimeStorageConfig = (env: NodeJS.ProcessEnv): RuntimeStorageConfi
   const readOnlyDir = join(instanceRoot, "read-only");
   const workspaceDir = join(instanceRoot, "workspace");
   const storageDir = resolveWorkspacePath(env.POSTHOG_CLAW_STORAGE_DIR, join(instanceRoot, "storage"));
-  const databasePath = resolveWorkspacePath(
-    env.POSTHOG_CLAW_RUNTIME_DB_PATH,
-    join(storageDir, "runtime.sqlite"),
+  const stateDir = resolvePathWithinRoot(
+    env.POSTHOG_CLAW_RUNTIME_STATE_DIR,
+    "state",
+    storageDir,
+    "POSTHOG_CLAW_RUNTIME_STATE_DIR",
   );
 
   return {
@@ -256,7 +266,7 @@ const createRuntimeStorageConfig = (env: NodeJS.ProcessEnv): RuntimeStorageConfi
     readOnlyDir,
     workspaceDir,
     storageDir,
-    databasePath,
+    stateDir,
   };
 };
 
@@ -276,6 +286,16 @@ const createTelegramConfig = (env: NodeJS.ProcessEnv): TelegramRuntimeConfig => 
     botToken: readOptionalString(env.TELEGRAM_BOT_TOKEN),
     userName,
     allowedChatIds: readAllowedChatIds(env.TELEGRAM_ALLOWED_CHATS),
+  };
+};
+
+const createNotionConfig = (env: NodeJS.ProcessEnv): NotionRuntimeConfig => {
+  return {
+    token: readOptionalString(env.POSTHOG_CLAW_NOTION_TOKEN) ?? readOptionalString(env.NOTION_SECRET),
+    requestTimeoutMs: Math.max(1_000, readInteger(env.POSTHOG_CLAW_NOTION_REQUEST_TIMEOUT_MS, 30_000)),
+    todoPageUrl: readOptionalString(env.POSTHOG_CLAW_NOTION_TODO_URL),
+    todoDataSourceId: readOptionalString(env.POSTHOG_CLAW_NOTION_TODO_DATA_SOURCE_ID),
+    todoSearchTitle: readOptionalString(env.POSTHOG_CLAW_NOTION_TODO_TITLE) ?? "Pre Beta To Do",
   };
 };
 
@@ -303,6 +323,7 @@ export interface AgentEnvironment {
   readonly posthog: PostHogRuntimeConfig;
   readonly ai: AiRuntimeConfig;
   readonly telegram: TelegramRuntimeConfig;
+  readonly notion: NotionRuntimeConfig;
   readonly storage: RuntimeStorageConfig;
   readonly capabilities: IntegrationCapabilitySnapshot;
   readonly availableTools: readonly ToolSummary[];
@@ -312,11 +333,12 @@ export const loadAgentEnvironment = (env: NodeJS.ProcessEnv = getRuntimeProcessE
   const requestedChannels = readChannels(env.POSTHOG_CLAW_CHANNELS);
   const canCreatePullRequest = readBoolean(env.POSTHOG_CLAW_GITHUB_PR, false);
   const canPushBranch = readBoolean(env.POSTHOG_CLAW_GITHUB_PUSH, false);
-  const requestedPort = readInteger(env.PORT, 3000);
+  const requestedPort = readInteger(env.PORT, 6900);
   const storage = createRuntimeStorageConfig(env);
   const posthog = createPostHogConfig(env, storage);
   const ai = createAiConfig(env);
   const telegram = createTelegramConfig(env);
+  const notion = createNotionConfig(env);
   const channels = telegram.botToken ? appendChannel(requestedChannels, "telegram") : requestedChannels;
   const monitorIntervalMs = readSettingsMonitorIntervalMs(storage) ?? 60_000;
   const runtimeTools = readRuntimeToolsConfig(storage);
@@ -361,6 +383,12 @@ export const loadAgentEnvironment = (env: NodeJS.ProcessEnv = getRuntimeProcessE
       canSendOperatorMessages: readToolFlag(runtimeTools?.chat?.notifyOperator, readBoolean(env.POSTHOG_CLAW_CHAT_NOTIFY, true)),
       supportedChannels: channels,
     },
+    notion: {
+      canReadTodo: Boolean(notion.token) && readToolFlag(
+        runtimeTools?.notion?.readTodo,
+        readBoolean(env.POSTHOG_CLAW_NOTION_READ_TODO, true),
+      ),
+    },
     shell: {
       canExecute: readToolFlag(runtimeTools?.shell?.execute, readBoolean(env.POSTHOG_CLAW_SHELL_EXECUTE, false)),
       safeCommands: ["ls", "cat", "rg", "grep", "head", "tail", "wc", "find"],
@@ -374,13 +402,14 @@ export const loadAgentEnvironment = (env: NodeJS.ProcessEnv = getRuntimeProcessE
 
   return {
     appName: env.POSTHOG_CLAW_APP_NAME?.trim() || "PostHog Claw",
-    port: Number.isFinite(requestedPort) ? requestedPort : 3000,
+    port: Number.isFinite(requestedPort) ? requestedPort : 6900,
     executionMode: readExecutionMode(env.POSTHOG_CLAW_EXECUTION_MODE),
     monitorIntervalMs,
     channels,
     posthog,
     ai,
     telegram,
+    notion,
     storage,
     capabilities,
     availableTools,

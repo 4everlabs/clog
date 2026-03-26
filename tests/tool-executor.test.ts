@@ -24,6 +24,9 @@ const createCapabilities = (): IntegrationCapabilitySnapshot => ({
     canSendOperatorMessages: true,
     supportedChannels: ["cli"],
   },
+  notion: {
+    canReadTodo: true,
+  },
   shell: {
     canExecute: true,
     safeCommands: ["ls", "rg"],
@@ -41,12 +44,62 @@ const sampleObservation: RuntimeObservation = {
   detectedAt: 1,
 };
 
+const createRuntimeServices = () => ({
+  getStateSnapshot: () => ({
+    generatedAt: 1,
+    status: "idle",
+    openFindingsCount: 1,
+    openFindings: [{
+      id: "finding_1",
+      title: "Checkout issue",
+      severity: "warning",
+      summary: "Checkout is unstable",
+      lastSeenAt: 1,
+    }],
+    recentThreads: [],
+    recentMemories: [],
+    recentActionResults: [],
+  }),
+  getRecentLogs: () => ({
+    generatedAt: 1,
+    files: [{
+      fileName: "latest.log",
+      relativePath: "logs/latest.log",
+      totalLines: 10,
+      returnedLines: 5,
+      truncated: true,
+      content: "recent log line",
+    }],
+  }),
+  readKnowledge: () => ({
+    availablePaths: ["knowledge/example.md"],
+    selectedPath: "knowledge/example.md",
+    content: "Knowledge content",
+    truncated: false,
+  }),
+});
+
 describe("ToolExecutor", () => {
   test("executes a typed shell tool and validates the output", async () => {
     const executor = new ToolExecutor({
       capabilities: createCapabilities(),
       services: {
         posthog: null,
+        notion: {
+          getTodoList: async () => ({
+            summary: {
+              title: "Pre Beta To Do",
+              dataSourceId: "todo_1",
+              generatedAt: 1,
+              total: 3,
+              openCount: 2,
+              statusCounts: [{ progress: "In progress", count: 2 }],
+            },
+            items: [],
+            printout: "Pre Beta To Do",
+          }),
+        },
+        runtime: createRuntimeServices(),
         shell: {
           safeRoots: ["/workspace"],
           execute: (input) => ({
@@ -89,6 +142,8 @@ describe("ToolExecutor", () => {
       capabilities,
       services: {
         posthog: null,
+        notion: null,
+        runtime: createRuntimeServices(),
         shell: null,
         github: null,
         vercel: null,
@@ -171,6 +226,21 @@ describe("ToolExecutor", () => {
             workingDirectory: "/workspace",
           }),
         },
+        notion: {
+          getTodoList: async () => ({
+            summary: {
+              title: "Pre Beta To Do",
+              dataSourceId: "todo_1",
+              generatedAt: 1,
+              total: 3,
+              openCount: 2,
+              statusCounts: [{ progress: "In progress", count: 2 }],
+            },
+            items: [],
+            printout: "Pre Beta To Do",
+          }),
+        },
+        runtime: createRuntimeServices(),
         shell: null,
         github: null,
         vercel: null,
@@ -254,6 +324,29 @@ describe("ToolExecutor", () => {
             workingDirectory: "/workspace",
           }),
         },
+        notion: {
+          getTodoList: async () => ({
+            summary: {
+              title: "Pre Beta To Do",
+              dataSourceId: "todo_1",
+              generatedAt: 1,
+              total: 1,
+              openCount: 1,
+              statusCounts: [{ progress: "Not started", count: 1 }],
+            },
+            items: [{
+              id: "task_1",
+              name: "Finish onboarding",
+              progress: "Not started",
+              dueDate: null,
+              assignees: [],
+              taskTypes: [],
+              url: "https://www.notion.so/task_1",
+            }],
+            printout: "Finish onboarding",
+          }),
+        },
+        runtime: createRuntimeServices(),
         shell: null,
         github: null,
         vercel: null,
@@ -264,6 +357,105 @@ describe("ToolExecutor", () => {
 
     expect(result.ok).toBe(true);
     expect(result.content).toContain("Spike detected");
+  });
+
+  test("executes the Notion todo tool and returns a printout", async () => {
+    const executor = new ToolExecutor({
+      capabilities: createCapabilities(),
+      services: {
+        posthog: null,
+        notion: {
+          getTodoList: async () => ({
+            summary: {
+              title: "Pre Beta To Do",
+              dataSourceId: "todo_1",
+              generatedAt: 1,
+              total: 2,
+              openCount: 1,
+              statusCounts: [{ progress: "In progress", count: 1 }],
+            },
+            items: [{
+              id: "task_1",
+              name: "Finish onboarding",
+              progress: "In progress",
+              dueDate: null,
+              assignees: [],
+              taskTypes: [],
+              url: "https://www.notion.so/task_1",
+            }],
+            printout: "Finish onboarding",
+          }),
+        },
+        shell: null,
+        github: null,
+        vercel: null,
+      },
+    });
+
+    const result = await executor.execute("notion_get_todo_list", {});
+
+    expect(result.ok).toBe(true);
+    expect(result.content).toContain("Finish onboarding");
+  });
+
+  test("executes the runtime state snapshot tool", async () => {
+    const executor = new ToolExecutor({
+      capabilities: createCapabilities(),
+      services: {
+        posthog: null,
+        notion: null,
+        runtime: createRuntimeServices(),
+        shell: null,
+        github: null,
+        vercel: null,
+      },
+    });
+
+    const result = await executor.execute("runtime_get_state_snapshot", {});
+
+    expect(result.ok).toBe(true);
+    expect(result.content).toContain("Checkout issue");
+  });
+
+  test("executes the runtime recent logs tool", async () => {
+    const executor = new ToolExecutor({
+      capabilities: createCapabilities(),
+      services: {
+        posthog: null,
+        notion: null,
+        runtime: createRuntimeServices(),
+        shell: null,
+        github: null,
+        vercel: null,
+      },
+    });
+
+    const result = await executor.execute("runtime_get_recent_logs", {});
+
+    expect(result.ok).toBe(true);
+    expect(result.content).toContain("latest.log");
+    expect(result.content).toContain("recent log line");
+  });
+
+  test("executes the runtime knowledge reader tool", async () => {
+    const executor = new ToolExecutor({
+      capabilities: createCapabilities(),
+      services: {
+        posthog: null,
+        notion: null,
+        runtime: createRuntimeServices(),
+        shell: null,
+        github: null,
+        vercel: null,
+      },
+    });
+
+    const result = await executor.execute("runtime_read_knowledge", {
+      path: "knowledge/example.md",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.content).toContain("Knowledge content");
   });
 
   test("executes the generic PostHog MCP catalog tool", async () => {
@@ -327,6 +519,21 @@ describe("ToolExecutor", () => {
             workingDirectory: "/workspace",
           }),
         },
+        notion: {
+          getTodoList: async () => ({
+            summary: {
+              title: "Pre Beta To Do",
+              dataSourceId: "todo_1",
+              generatedAt: 1,
+              total: 2,
+              openCount: 1,
+              statusCounts: [{ progress: "In progress", count: 1 }],
+            },
+            items: [],
+            printout: "ok",
+          }),
+        },
+        runtime: createRuntimeServices(),
         shell: null,
         github: null,
         vercel: null,
@@ -403,6 +610,21 @@ describe("ToolExecutor", () => {
             workingDirectory: "/workspace",
           }),
         },
+        notion: {
+          getTodoList: async () => ({
+            summary: {
+              title: "Pre Beta To Do",
+              dataSourceId: "todo_1",
+              generatedAt: 1,
+              total: 2,
+              openCount: 1,
+              statusCounts: [{ progress: "In progress", count: 1 }],
+            },
+            items: [],
+            printout: "ok",
+          }),
+        },
+        runtime: createRuntimeServices(),
         shell: null,
         github: null,
         vercel: null,
@@ -481,6 +703,21 @@ describe("ToolExecutor", () => {
             workingDirectory: "/workspace",
           }),
         },
+        notion: {
+          getTodoList: async () => ({
+            summary: {
+              title: "Pre Beta To Do",
+              dataSourceId: "todo_1",
+              generatedAt: 1,
+              total: 2,
+              openCount: 1,
+              statusCounts: [{ progress: "In progress", count: 1 }],
+            },
+            items: [],
+            printout: "ok",
+          }),
+        },
+        runtime: createRuntimeServices(),
         shell: null,
         github: null,
         vercel: null,

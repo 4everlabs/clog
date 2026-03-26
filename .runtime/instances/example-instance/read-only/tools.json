@@ -18,6 +18,9 @@
   "chat": {
     "notifyOperator": true
   },
+  "notion": {
+    "readTodo": true
+  },
   "shell": {
     "execute": false
   }

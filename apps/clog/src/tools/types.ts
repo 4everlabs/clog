@@ -1,5 +1,6 @@
 import type {
   IntegrationCapabilitySnapshot,
+  SurfaceNotionTodoResponse,
   PostHogCliCommandResponse,
   PostHogEndpointRunRequest,
   PostHogInsightQueryResult,
@@ -50,8 +51,53 @@ export interface ShellToolServices {
   execute(input: ShellCommandRequest): ShellCommandResponse;
 }
 
+export interface NotionToolServices {
+  getTodoList(input: {
+    readonly includeDone?: boolean;
+    readonly limit?: number;
+    readonly progress?: readonly string[];
+  }): Promise<SurfaceNotionTodoResponse>;
+}
+
+export interface RuntimeToolServices {
+  getStateSnapshot(input?: {
+    readonly threadLimit?: number;
+    readonly messageLimitPerThread?: number;
+    readonly findingLimit?: number;
+    readonly memoryLimit?: number;
+    readonly actionResultLimit?: number;
+  }): {
+    readonly generatedAt: number;
+    readonly status: string;
+    readonly openFindingsCount: number;
+    readonly openFindings: readonly unknown[];
+    readonly recentThreads: readonly unknown[];
+    readonly recentMemories: readonly unknown[];
+    readonly recentActionResults: readonly unknown[];
+  };
+  getRecentLogs(input?: {
+    readonly fileLimit?: number;
+    readonly lineLimit?: number;
+    readonly pathContains?: string;
+  }): {
+    readonly generatedAt: number;
+    readonly files: readonly unknown[];
+  };
+  readKnowledge(input?: {
+    readonly path?: string;
+    readonly maxChars?: number;
+  }): {
+    readonly availablePaths: readonly string[];
+    readonly selectedPath: string | null;
+    readonly content: string | null;
+    readonly truncated: boolean;
+  };
+}
+
 export interface ToolExecutionServices {
   readonly posthog: PostHogToolServices | null;
+  readonly notion: NotionToolServices | null;
+  readonly runtime: RuntimeToolServices | null;
   readonly shell: ShellToolServices | null;
   readonly github: null;
   readonly vercel: null;

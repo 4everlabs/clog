@@ -1,9 +1,27 @@
-/* eslint-disable no-console */
-
-import { Chat, type Message, type Thread } from "chat";
+import { Chat, markdownToPlainText, type Message, type Thread } from "chat";
 import { createTelegramAdapter } from "@chat-adapter/telegram";
 import { createMemoryState } from "@chat-adapter/state-memory";
 import type { RuntimeBootstrap } from "@clog/core";
+import {
+  convertMarkdownToTelegramMarkdownV2,
+  telegramMarkdownV2ParseMode,
+} from "./markdown-v2";
+
+const writeStdoutLine = (value: string): void => {
+  process.stdout.write(`${value}\n`);
+};
+
+const TELEGRAM_API_BASE_URL = "https://api.telegram.org";
+
+type TelegramThreadTarget = {
+  chatId: string;
+  messageThreadId?: number;
+};
+
+type TelegramSendMessageResponse = {
+  ok: boolean;
+  description?: string;
+};
 
 const getThreadTitle = (threadId: string): string => `Telegram Thread ${threadId}`;
 
@@ -27,6 +45,81 @@ const normalizeTelegramReplyText = (value: string): string => {
     .trim();
 
   return normalized.length > 0 ? normalized : "I do not have a useful reply yet.";
+};
+
+const decodeTelegramThreadId = (threadId: string): TelegramThreadTarget => {
+  const parts = threadId.split(":");
+  if (parts[0] !== "telegram" || parts.length < 2 || parts.length > 3) {
+    throw new Error(`Invalid Telegram thread ID: ${threadId}`);
+  }
+
+  const chatId = parts[1];
+  if (!chatId) {
+    throw new Error(`Invalid Telegram thread ID: ${threadId}`);
+  }
+
+  const messageThreadIdRaw = parts[2];
+  if (!messageThreadIdRaw) {
+    return { chatId };
+  }
+
+  const messageThreadId = Number.parseInt(messageThreadIdRaw, 10);
+  if (!Number.isInteger(messageThreadId)) {
+    throw new Error(`Invalid Telegram message thread ID: ${threadId}`);
+  }
+
+  return {
+    chatId,
+    messageThreadId,
+  };
+};
+
+const sendTelegramMessage = async (
+  botToken: string,
+  threadId: string,
+  text: string,
+  parseMode?: string,
+): Promise<void> => {
+  const target = decodeTelegramThreadId(threadId);
+  const response = await fetch(`${TELEGRAM_API_BASE_URL}/bot${botToken}/sendMessage`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      chat_id: target.chatId,
+      message_thread_id: target.messageThreadId,
+      text,
+      parse_mode: parseMode,
+    }),
+  });
+
+  const payload = await response.json() as TelegramSendMessageResponse;
+  if (!response.ok || !payload.ok) {
+    const description = payload.description ?? response.statusText;
+    throw new Error(`Telegram sendMessage failed: ${description}`);
+  }
+};
+
+const sendTelegramReply = async (
+  botToken: string,
+  threadId: string,
+  markdown: string,
+): Promise<void> => {
+  const telegramMarkdown = convertMarkdownToTelegramMarkdownV2(markdown);
+
+  try {
+    await sendTelegramMessage(botToken, threadId, telegramMarkdown, telegramMarkdownV2ParseMode);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes("parse entities")) {
+      throw error;
+    }
+
+    const plainText = normalizeTelegramReplyText(markdownToPlainText(markdown));
+    await sendTelegramMessage(botToken, threadId, plainText);
+    writeStdoutLine("[telegram] MarkdownV2 parse failed, fell back to plain text");
+  }
 };
 
 const forwardMessageToRuntime = async (
@@ -59,6 +152,7 @@ const forwardMessageToRuntime = async (
 
 const postRuntimeReply = async (
   runtime: RuntimeBootstrap,
+  botToken: string,
   runtimeThreadIds: Map<string, string>,
   allowedChatIds: readonly number[],
   thread: Thread,
@@ -68,11 +162,30 @@ const postRuntimeReply = async (
     return;
   }
 
-  console.log(`[telegram] received message on ${thread.id}: ${message.text}`);
+  writeStdoutLine(`[telegram] received message on ${thread.id}: ${message.text}`);
   const reply = await forwardMessageToRuntime(runtime, runtimeThreadIds, thread, message);
   const plainTextReply = normalizeTelegramReplyText(reply);
-  await thread.post(plainTextReply);
-  console.log(`[telegram] posted reply on ${thread.id}: ${plainTextReply.slice(0, 240)}`);
+  await sendTelegramReply(botToken, thread.id, plainTextReply);
+  writeStdoutLine(`[telegram] posted reply on ${thread.id}: ${plainTextReply.slice(0, 240)}`);
+};
+
+const queueThreadReply = (
+  threadQueues: Map<string, Promise<void>>,
+  threadId: string,
+  operation: () => Promise<void>,
+): Promise<void> => {
+  const previous = threadQueues.get(threadId) ?? Promise.resolve();
+  const run = previous
+    .catch(() => undefined)
+    .then(operation);
+
+  threadQueues.set(threadId, run);
+
+  return run.finally(() => {
+    if (threadQueues.get(threadId) === run) {
+      threadQueues.delete(threadId);
+    }
+  });
 };
 
 export const startTelegramSurface = async (runtime: RuntimeBootstrap): Promise<void> => {
@@ -95,23 +208,30 @@ export const startTelegramSurface = async (runtime: RuntimeBootstrap): Promise<v
   });
 
   const runtimeThreadIds = new Map<string, string>();
+  const threadQueues = new Map<string, Promise<void>>();
   const allowedChatIds = [...runtime.env.telegram.allowedChatIds];
 
   bot.onNewMention(async (thread, message) => {
-    await thread.subscribe();
-    await postRuntimeReply(runtime, runtimeThreadIds, allowedChatIds, thread, message);
+    await queueThreadReply(threadQueues, thread.id, async () => {
+      await thread.subscribe();
+      await postRuntimeReply(runtime, botToken, runtimeThreadIds, allowedChatIds, thread, message);
+    });
   });
 
   // Allow a first plain-text message to start a Telegram conversation without requiring an @-mention.
   bot.onNewMessage(/[\s\S]+/u, async (thread, message) => {
-    await thread.subscribe();
-    await postRuntimeReply(runtime, runtimeThreadIds, allowedChatIds, thread, message);
+    await queueThreadReply(threadQueues, thread.id, async () => {
+      await thread.subscribe();
+      await postRuntimeReply(runtime, botToken, runtimeThreadIds, allowedChatIds, thread, message);
+    });
   });
 
   bot.onSubscribedMessage(async (thread, message) => {
-    await postRuntimeReply(runtime, runtimeThreadIds, allowedChatIds, thread, message);
+    await queueThreadReply(threadQueues, thread.id, async () => {
+      await postRuntimeReply(runtime, botToken, runtimeThreadIds, allowedChatIds, thread, message);
+    });
   });
 
   await bot.initialize();
-  console.log(`[telegram] Chat SDK initialized in ${telegram.runtimeMode} mode`);
+  writeStdoutLine(`[telegram] Chat SDK initialized in ${telegram.runtimeMode} mode`);
 };

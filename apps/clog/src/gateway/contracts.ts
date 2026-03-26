@@ -1,5 +1,6 @@
 import type {
   ActionExecutionRequest,
+  SurfaceNotionTodoResponse,
   PostHogEndpointDiffRequest,
   PostHogEndpointRunRequest,
   PostHogInsightQueryRequest,
@@ -42,4 +43,9 @@ export interface AgentGatewaySurface {
   listPostHogEndpoints(cwd?: string): Promise<SurfacePostHogEndpointListResponse>;
   diffPostHogEndpoints(input: PostHogEndpointDiffRequest): Promise<SurfacePostHogEndpointDiffResponse>;
   runPostHogEndpoint(input: PostHogEndpointRunRequest): Promise<SurfacePostHogEndpointRunResponse>;
+  getNotionTodoList(input: {
+    readonly includeDone?: boolean;
+    readonly limit?: number;
+    readonly progress?: readonly string[];
+  }): Promise<SurfaceNotionTodoResponse>;
 }

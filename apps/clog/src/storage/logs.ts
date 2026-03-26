@@ -1,5 +1,3 @@
-/* eslint-disable no-console */
-
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { format } from "node:util";
@@ -13,6 +11,7 @@ type LogChunk = string | Uint8Array;
 type WriteCallback = ((error?: Error | null) => void) | undefined;
 type WriteMethod = typeof process.stdout.write;
 type ConsoleMethodName = "debug" | "error" | "info" | "log" | "trace" | "warn";
+const runtimeConsole = Reflect.get(globalThis, "console") as Console;
 
 interface ConsoleMethodSet {
   readonly debug: Console["debug"];
@@ -103,12 +102,12 @@ const closeRuntimeLogCapture = (): void => {
   clearInterval(capture.flushTimer);
   process.stdout.write = capture.originalStdoutWrite;
   process.stderr.write = capture.originalStderrWrite;
-  console.debug = capture.originalConsoleMethods.debug;
-  console.error = capture.originalConsoleMethods.error;
-  console.info = capture.originalConsoleMethods.info;
-  console.log = capture.originalConsoleMethods.log;
-  console.trace = capture.originalConsoleMethods.trace;
-  console.warn = capture.originalConsoleMethods.warn;
+  runtimeConsole.debug = capture.originalConsoleMethods.debug;
+  runtimeConsole.error = capture.originalConsoleMethods.error;
+  runtimeConsole.info = capture.originalConsoleMethods.info;
+  runtimeConsole.log = capture.originalConsoleMethods.log;
+  runtimeConsole.trace = capture.originalConsoleMethods.trace;
+  runtimeConsole.warn = capture.originalConsoleMethods.warn;
 
   try {
     capture.sink.write(`\n=== clog runtime log ended ${new Date().toISOString()} ===\n`);
@@ -178,12 +177,12 @@ export const initializeRuntimeLogCapture = (
   const originalStdoutWrite = process.stdout.write.bind(process.stdout) as WriteMethod;
   const originalStderrWrite = process.stderr.write.bind(process.stderr) as WriteMethod;
   const originalConsoleMethods: ConsoleMethodSet = {
-    debug: console.debug.bind(console),
-    error: console.error.bind(console),
-    info: console.info.bind(console),
-    log: console.log.bind(console),
-    trace: console.trace.bind(console),
-    warn: console.warn.bind(console),
+    debug: runtimeConsole.debug.bind(runtimeConsole),
+    error: runtimeConsole.error.bind(runtimeConsole),
+    info: runtimeConsole.info.bind(runtimeConsole),
+    log: runtimeConsole.log.bind(runtimeConsole),
+    trace: runtimeConsole.trace.bind(runtimeConsole),
+    warn: runtimeConsole.warn.bind(runtimeConsole),
   };
   const stdoutWrite = createPatchedWrite(originalStdoutWrite, process.stdout);
   const stderrWrite = createPatchedWrite(originalStderrWrite, process.stderr);
@@ -207,12 +206,12 @@ export const initializeRuntimeLogCapture = (
 
   process.stdout.write = stdoutWrite;
   process.stderr.write = stderrWrite;
-  console.debug = createPatchedConsoleMethod(originalConsoleMethods.debug);
-  console.error = createPatchedConsoleMethod(originalConsoleMethods.error);
-  console.info = createPatchedConsoleMethod(originalConsoleMethods.info);
-  console.log = createPatchedConsoleMethod(originalConsoleMethods.log);
-  console.trace = createPatchedConsoleMethod(originalConsoleMethods.trace);
-  console.warn = createPatchedConsoleMethod(originalConsoleMethods.warn);
+  runtimeConsole.debug = createPatchedConsoleMethod(originalConsoleMethods.debug);
+  runtimeConsole.error = createPatchedConsoleMethod(originalConsoleMethods.error);
+  runtimeConsole.info = createPatchedConsoleMethod(originalConsoleMethods.info);
+  runtimeConsole.log = createPatchedConsoleMethod(originalConsoleMethods.log);
+  runtimeConsole.trace = createPatchedConsoleMethod(originalConsoleMethods.trace);
+  runtimeConsole.warn = createPatchedConsoleMethod(originalConsoleMethods.warn);
   registerCloseHooks();
 
   writeToSink(

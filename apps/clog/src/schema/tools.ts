@@ -1,5 +1,11 @@
 import { z } from "zod";
-import type { PostHogOrganizationSummary, PostHogProjectSummary } from "@clog/types";
+import type {
+  NotionTodoItem,
+  NotionTodoStatusCount,
+  NotionTodoSummary,
+  PostHogOrganizationSummary,
+  PostHogProjectSummary,
+} from "@clog/types";
 
 const JsonRecordSchema: z.ZodType<Record<string, unknown>> = z.record(z.string(), z.unknown());
 
@@ -22,6 +28,9 @@ export const RuntimeToolsConfigSchema = z.object({
   }).strict().optional(),
   chat: z.object({
     notifyOperator: z.boolean().optional(),
+  }).strict().optional(),
+  notion: z.object({
+    readTodo: z.boolean().optional(),
   }).strict().optional(),
   shell: z.object({
     execute: z.boolean().optional(),
@@ -50,6 +59,9 @@ export const NormalizedRuntimeToolsConfigSchema = z.object({
   chat: z.object({
     notifyOperator: z.boolean(),
   }).strict(),
+  notion: z.object({
+    readTodo: z.boolean(),
+  }).strict(),
   shell: z.object({
     execute: z.boolean(),
   }).strict(),
@@ -57,7 +69,7 @@ export const NormalizedRuntimeToolsConfigSchema = z.object({
 
 export type NormalizedRuntimeToolsConfig = z.infer<typeof NormalizedRuntimeToolsConfigSchema>;
 
-export const ToolFamilySchema = z.enum(["posthog", "github", "vercel", "shell"]);
+export const ToolFamilySchema = z.enum(["posthog", "github", "vercel", "notion", "runtime", "shell"]);
 export type ToolFamily = z.infer<typeof ToolFamilySchema>;
 
 export const AgentToolNameSchema = z.enum([
@@ -70,6 +82,10 @@ export const AgentToolNameSchema = z.enum([
   "posthog_list_endpoints",
   "posthog_diff_endpoints",
   "posthog_run_endpoint",
+  "notion_get_todo_list",
+  "runtime_get_state_snapshot",
+  "runtime_get_recent_logs",
+  "runtime_read_knowledge",
   "shell_execute_command",
   "github_read_repository",
   "github_create_pull_request",
@@ -208,6 +224,129 @@ export const PostHogCallMcpToolResultSchema = z.object({
   toolName: z.string().min(1),
   text: z.string(),
   structuredContent: z.unknown().optional(),
+}).strict();
+
+export const NotionTodoStatusCountSchema: z.ZodType<NotionTodoStatusCount> = z.object({
+  progress: z.string().min(1),
+  count: z.number().int().nonnegative(),
+}).strict();
+
+export const NotionTodoItemSchema: z.ZodType<NotionTodoItem> = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  progress: z.string().nullable(),
+  dueDate: z.string().nullable(),
+  assignees: z.array(z.string()),
+  taskTypes: z.array(z.string()),
+  url: z.string().url(),
+}).strict();
+
+export const NotionTodoSummarySchema: z.ZodType<NotionTodoSummary> = z.object({
+  title: z.string().min(1),
+  dataSourceId: z.string().min(1),
+  generatedAt: z.number().int().nonnegative(),
+  total: z.number().int().nonnegative(),
+  openCount: z.number().int().nonnegative(),
+  statusCounts: z.array(NotionTodoStatusCountSchema),
+}).strict();
+
+export const NotionGetTodoListInputSchema = z.object({
+  includeDone: z.boolean().optional(),
+  limit: z.number().int().positive().max(200).optional(),
+  progress: z.array(z.string().min(1)).max(20).optional(),
+}).strict();
+
+export const NotionGetTodoListResultSchema = z.object({
+  summary: NotionTodoSummarySchema,
+  items: z.array(NotionTodoItemSchema),
+  printout: z.string().min(1),
+}).strict();
+
+const RuntimeSnapshotFindingSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  severity: z.enum(["info", "warning", "critical"]),
+  summary: z.string(),
+  lastSeenAt: z.number().int().nonnegative(),
+}).strict();
+
+const RuntimeSnapshotMessageSchema = z.object({
+  role: z.enum(["system", "user", "agent"]),
+  content: z.string(),
+  createdAt: z.number().int().nonnegative(),
+}).strict();
+
+const RuntimeSnapshotThreadSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  channel: z.enum(["web", "telegram", "cli", "system"]),
+  updatedAt: z.number().int().nonnegative(),
+  messageCount: z.number().int().nonnegative(),
+  messages: z.array(RuntimeSnapshotMessageSchema),
+}).strict();
+
+const RuntimeSnapshotMemorySchema = z.object({
+  id: z.string().min(1),
+  type: z.enum(["observation", "finding", "conversation", "insight"]),
+  importance: z.number(),
+  content: z.string(),
+  createdAt: z.number().int().nonnegative(),
+}).strict();
+
+const RuntimeSnapshotActionResultSchema = z.object({
+  actionId: z.string().min(1),
+  state: z.enum(["pending", "requires-approval", "running", "completed", "failed"]),
+  summary: z.string(),
+}).strict();
+
+export const RuntimeGetStateSnapshotInputSchema = z.object({
+  threadLimit: z.number().int().positive().max(20).optional(),
+  messageLimitPerThread: z.number().int().positive().max(50).optional(),
+  findingLimit: z.number().int().positive().max(20).optional(),
+  memoryLimit: z.number().int().positive().max(20).optional(),
+  actionResultLimit: z.number().int().positive().max(20).optional(),
+}).strict();
+
+export const RuntimeGetStateSnapshotResultSchema = z.object({
+  generatedAt: z.number().int().nonnegative(),
+  status: z.enum(["booting", "idle", "monitoring", "degraded"]),
+  openFindingsCount: z.number().int().nonnegative(),
+  openFindings: z.array(RuntimeSnapshotFindingSchema),
+  recentThreads: z.array(RuntimeSnapshotThreadSchema),
+  recentMemories: z.array(RuntimeSnapshotMemorySchema),
+  recentActionResults: z.array(RuntimeSnapshotActionResultSchema),
+}).strict();
+
+const RuntimeRecentLogFileSchema = z.object({
+  fileName: z.string().min(1),
+  relativePath: z.string().min(1),
+  totalLines: z.number().int().nonnegative(),
+  returnedLines: z.number().int().nonnegative(),
+  truncated: z.boolean(),
+  content: z.string(),
+}).strict();
+
+export const RuntimeGetRecentLogsInputSchema = z.object({
+  fileLimit: z.number().int().positive().max(10).optional(),
+  lineLimit: z.number().int().positive().max(400).optional(),
+  pathContains: z.string().min(1).optional(),
+}).strict();
+
+export const RuntimeGetRecentLogsResultSchema = z.object({
+  generatedAt: z.number().int().nonnegative(),
+  files: z.array(RuntimeRecentLogFileSchema),
+}).strict();
+
+export const RuntimeReadKnowledgeInputSchema = z.object({
+  path: z.string().min(1).optional(),
+  maxChars: z.number().int().positive().max(20_000).optional(),
+}).strict();
+
+export const RuntimeReadKnowledgeResultSchema = z.object({
+  availablePaths: z.array(z.string().min(1)),
+  selectedPath: z.string().min(1).nullable(),
+  content: z.string().nullable(),
+  truncated: z.boolean(),
 }).strict();
 
 export const PostHogListEndpointsInputSchema = z.object({

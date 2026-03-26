@@ -28,6 +28,7 @@ describe("syncRuntimeInstanceTemplate", () => {
       writeFile(join(personalRoot, "settings", "ai.json"), "{}\n");
       writeFile(join(personalRoot, "settings", "tools.json"), "{ broken json\n");
       writeFile(join(personalRoot, "brain", "README.md"), "legacy brain\n");
+      writeFile(join(personalRoot, "storage", "runtime.sqlite"), "legacy sqlite\n");
 
       syncRuntimeInstanceTemplate(
         {
@@ -42,6 +43,7 @@ describe("syncRuntimeInstanceTemplate", () => {
       expect(existsSync(join(personalRoot, "settings"))).toBe(false);
       expect(existsSync(join(personalRoot, "settings.json"))).toBe(false);
       expect(existsSync(join(personalRoot, "brain"))).toBe(false);
+      expect(existsSync(join(personalRoot, "storage", "runtime.sqlite"))).toBe(false);
       expect(readFileSync(join(personalRoot, "read-only", "tools.json"), "utf-8")).toBe("{\n  \"starter\": true\n}\n");
     } finally {
       rmSync(workspaceRoot, { recursive: true, force: true });

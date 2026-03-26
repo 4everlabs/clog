@@ -102,6 +102,18 @@ export class AgentSurfaceTransport {
       return json(await this.runtime.gateway.runPostHogEndpoint(await parseJson<PostHogEndpointRunRequest>(request)));
     }
 
+    if (pathname === "/api/notion/todo" && request.method === "GET") {
+      const includeDone = url.searchParams.get("includeDone") === "true";
+      const limitValue = url.searchParams.get("limit");
+      const parsedLimit = limitValue ? Number.parseInt(limitValue, 10) : Number.NaN;
+      const progress = url.searchParams.getAll("progress").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
+      return json(await this.runtime.gateway.getNotionTodoList({
+        includeDone,
+        limit: Number.isFinite(parsedLimit) ? parsedLimit : undefined,
+        progress: progress.length > 0 ? progress : undefined,
+      }));
+    }
+
     if (pathname === "/api/findings/acknowledge" && request.method === "POST") {
       return json(await this.runtime.gateway.acknowledgeFinding(await parseJson<SurfaceAcknowledgeFindingRequest>(request)));
     }

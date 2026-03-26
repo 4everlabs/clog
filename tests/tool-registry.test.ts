@@ -24,6 +24,9 @@ const createCapabilities = (): IntegrationCapabilitySnapshot => ({
     canSendOperatorMessages: true,
     supportedChannels: ["cli"],
   },
+  notion: {
+    canReadTodo: true,
+  },
   shell: {
     canExecute: true,
     safeCommands: ["ls"],
@@ -42,6 +45,10 @@ describe("tool registry", () => {
       "posthog_list_mcp_tools",
       "posthog_call_mcp_tool",
       "posthog_run_query",
+      "notion_get_todo_list",
+      "runtime_get_state_snapshot",
+      "runtime_get_recent_logs",
+      "runtime_read_knowledge",
       "shell_execute_command",
     ]);
   });
@@ -56,6 +63,10 @@ describe("tool registry", () => {
       "posthog_list_mcp_tools",
       "posthog_call_mcp_tool",
       "posthog_run_query",
+      "notion_get_todo_list",
+      "runtime_get_state_snapshot",
+      "runtime_get_recent_logs",
+      "runtime_read_knowledge",
       "shell_execute_command",
     ]);
     expect(tools.every((tool) => tool.type === "function")).toBe(true);
