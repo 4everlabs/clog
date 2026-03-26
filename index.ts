@@ -1,3 +1,3 @@
-import { startDefaultRuntimeServer } from "./apps/clog/src/index.ts";
+import { parseRuntimeStartupOptions, startDefaultRuntimeServer } from "./apps/clog/src/index.ts";
 
-await startDefaultRuntimeServer();
+await startDefaultRuntimeServer(parseRuntimeStartupOptions());

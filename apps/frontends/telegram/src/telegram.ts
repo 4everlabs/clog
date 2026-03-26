@@ -1,3 +1,5 @@
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { Chat, markdownToPlainText, type Message, type Thread } from "chat";
 import { createTelegramAdapter } from "@chat-adapter/telegram";
 import { createMemoryState } from "@chat-adapter/state-memory";
@@ -12,6 +14,8 @@ const writeStdoutLine = (value: string): void => {
 };
 
 const TELEGRAM_API_BASE_URL = "https://api.telegram.org";
+const TELEGRAM_THREAD_TITLE_PREFIX = "Telegram Thread ";
+const TELEGRAM_TARGET_STATE_FILE = "telegram-target.json";
 
 type TelegramThreadTarget = {
   chatId: string;
@@ -23,7 +27,42 @@ type TelegramSendMessageResponse = {
   description?: string;
 };
 
+type SavedTelegramTarget = {
+  readonly threadId: string;
+  readonly updatedAt: number;
+};
+
 const getThreadTitle = (threadId: string): string => `Telegram Thread ${threadId}`;
+
+const getTelegramTargetStatePath = (runtime: Pick<RuntimeBootstrap, "env">): string =>
+  join(runtime.env.storage.stateDir, TELEGRAM_TARGET_STATE_FILE);
+
+const readSavedTelegramTarget = (runtime: Pick<RuntimeBootstrap, "env">): string | null => {
+  try {
+    const payload = JSON.parse(readFileSync(getTelegramTargetStatePath(runtime), "utf-8")) as Partial<SavedTelegramTarget>;
+    return typeof payload.threadId === "string" && payload.threadId.startsWith("telegram:")
+      ? payload.threadId
+      : null;
+  } catch {
+    return null;
+  }
+};
+
+const persistTelegramTarget = (
+  runtime: Pick<RuntimeBootstrap, "env">,
+  threadId: string,
+): void => {
+  if (!threadId.startsWith("telegram:")) {
+    return;
+  }
+
+  const path = getTelegramTargetStatePath(runtime);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, JSON.stringify({
+    threadId,
+    updatedAt: Date.now(),
+  }, null, 2));
+};
 
 const getRawChatId = (message: Message): number | null => {
   const raw = message.raw as { chat?: { id?: unknown } } | undefined;
@@ -162,6 +201,7 @@ const postRuntimeReply = async (
     return;
   }
 
+  persistTelegramTarget(runtime, thread.id);
   writeStdoutLine(`[telegram] received message on ${thread.id}: ${message.text}`);
   const reply = await forwardMessageToRuntime(runtime, runtimeThreadIds, thread, message);
   const plainTextReply = normalizeTelegramReplyText(reply);
@@ -234,4 +274,53 @@ export const startTelegramSurface = async (runtime: RuntimeBootstrap): Promise<v
 
   await bot.initialize();
   writeStdoutLine(`[telegram] Chat SDK initialized in ${telegram.runtimeMode} mode`);
+};
+
+const listTelegramNotificationTargets = (runtime: Pick<RuntimeBootstrap, "env" | "store">): string[] => {
+  const targets = new Set<string>();
+  const savedTarget = readSavedTelegramTarget(runtime);
+  if (savedTarget) {
+    targets.add(savedTarget);
+  }
+
+  for (const thread of runtime.store.listThreads()) {
+    if (thread.channel !== "telegram" || !thread.title.startsWith(TELEGRAM_THREAD_TITLE_PREFIX)) {
+      continue;
+    }
+
+    const threadId = thread.title.slice(TELEGRAM_THREAD_TITLE_PREFIX.length).trim();
+    if (threadId.startsWith("telegram:")) {
+      targets.add(threadId);
+    }
+  }
+
+  for (const chatId of runtime.env.telegram.allowedChatIds) {
+    targets.add(`telegram:${chatId}`);
+  }
+
+  return [...targets];
+};
+
+export const sendTelegramOperatorNotifications = async (
+  runtime: Pick<RuntimeBootstrap, "env" | "store">,
+  markdown: string,
+): Promise<number> => {
+  const botToken = runtime.env.telegram.botToken;
+  if (!botToken) {
+    return 0;
+  }
+
+  const targets = listTelegramNotificationTargets(runtime);
+  if (targets.length === 0) {
+    writeStdoutLine("[telegram] skipped proactive notification because no Telegram targets are known yet");
+    return 0;
+  }
+
+  const normalizedReply = normalizeTelegramReplyText(markdown);
+  await Promise.all(targets.map(async (threadId) => {
+    await sendTelegramReply(botToken, threadId, normalizedReply);
+    writeStdoutLine(`[telegram] proactive notification posted on ${threadId}: ${normalizedReply.slice(0, 240)}`);
+  }));
+
+  return targets.length;
 };

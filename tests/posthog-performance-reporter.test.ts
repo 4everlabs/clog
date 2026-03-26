@@ -26,11 +26,13 @@ describe("PostHogPerformanceReporter", () => {
   test("keeps only the newest 48 performance reports", async () => {
     const workspaceDir = mkdtempSync(join(tmpdir(), "clog-performance-reports-"));
     cleanupPaths.push(workspaceDir);
+    const queryNames: string[] = [];
 
     const reporter = new PostHogPerformanceReporter({
       workspaceDir,
       retentionLimit: 48,
       runQuery: async (name) => {
+        queryNames.push(name);
         switch (name) {
           case "performance_summary_15m":
             return createQueryResult(name, [{
@@ -42,16 +44,6 @@ describe("PostHogPerformanceReporter", () => {
             return createQueryResult(name, [
               { path: "/memories", pageviews: 10 },
               { path: "/recipes", pageviews: 6 },
-            ]);
-          case "performance_lcp_15m":
-            return createQueryResult(name, [
-              { path: "/memories", lcp_p75_ms: 3200, samples: 5 },
-              { path: "/recipes", lcp_p75_ms: 1800, samples: 4 },
-            ]);
-          case "performance_inp_15m":
-            return createQueryResult(name, [
-              { path: "/memories", inp_p75_ms: 85, samples: 5 },
-              { path: "/recipes", inp_p75_ms: 140, samples: 4 },
             ]);
           default:
             throw new Error(`Unexpected query name: ${name}`);
@@ -82,15 +74,13 @@ describe("PostHogPerformanceReporter", () => {
     };
 
     expect(report.status).toBe("ok");
-    expect(report.summary.slowLcpPages).toBe(1);
-    expect(report.summary.slowInpPages).toBe(1);
-    expect(report.lcp[0]).toMatchObject({
-      path: "/memories",
-      status: "slow",
-    });
-    expect(report.inp[1]).toMatchObject({
-      path: "/recipes",
-      status: "slow",
-    });
+    expect(report.summary.slowLcpPages).toBe(0);
+    expect(report.summary.slowInpPages).toBe(0);
+    expect(report.lcp).toEqual([]);
+    expect(report.inp).toEqual([]);
+    expect(new Set(queryNames)).toEqual(new Set([
+      "performance_summary_15m",
+      "performance_top_paths_15m",
+    ]));
   });
 });

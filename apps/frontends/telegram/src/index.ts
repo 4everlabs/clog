@@ -1,1 +1,1 @@
-export { startTelegramSurface } from "./telegram";
+export { sendTelegramOperatorNotifications, startTelegramSurface } from "./telegram";

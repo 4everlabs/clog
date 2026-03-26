@@ -16,6 +16,8 @@ Backend-first scaffold for the `clog` oversight agent (short for “claw post ho
 ```bash
 bun install
 bun run runtime
+bun run runtime --wakeup
+bun dev --wakeup
 bun run cli
 bun run lint
 bun run typecheck
@@ -25,7 +27,7 @@ bun run ci         # lint + typecheck + test
 bun run update-all # update root + workspace deps to latest
 ```
 
-`bun run lint` executes `oxlint` across the repo, `bun run typecheck` runs `tsc`, `bun run test` runs the Bun test suite, and `bun run build` bundles `apps/clog` via `bun build`. `bun run ci` stops on the first failure. `bun run update-all` bumps root and workspace dependencies to their latest versions.
+`bun run lint` executes `oxlint` across the repo, `bun run typecheck` runs `tsc`, `bun run test` runs the Bun test suite, and `bun run build` bundles `apps/clog` via `bun build`. `bun run runtime --wakeup` and `bun dev --wakeup` start the runtime, run one monitor pass immediately, and send the configured `wakeup.json` message through the normal model reply flow without waiting for any external timer. `bun run ci` stops on the first failure. `bun run update-all` bumps root and workspace dependencies to their latest versions.
 
 ## Runtime bootstrapping
 

@@ -61,7 +61,7 @@ interface RuntimeWakeupConfig {
   readonly message: string;
 }
 
-const normalizeRuntimeWakeupConfig = (value: unknown): RuntimeWakeupConfig | null => {
+export const normalizeRuntimeWakeupConfig = (value: unknown): RuntimeWakeupConfig | null => {
   if (!value || typeof value !== "object") {
     return null;
   }
@@ -137,6 +137,15 @@ export const resolveRuntimeWakeupConfigPath = (
   return resolveRuntimeWakeupPath(env, workspaceRoot);
 };
 
+export const loadRuntimeWakeupConfig = (
+  env: NodeJS.ProcessEnv = process.env,
+  workspaceRoot = process.cwd(),
+): RuntimeWakeupConfig | null => {
+  return normalizeRuntimeWakeupConfig(
+    readOptionalJson<unknown>(resolveRuntimeWakeupConfigPath(env, workspaceRoot)),
+  );
+};
+
 export const loadAiPromptBundle = (
   env: NodeJS.ProcessEnv = process.env,
   workspaceRoot = process.cwd(),
@@ -144,9 +153,7 @@ export const loadAiPromptBundle = (
   const projectPrompt = readOptionalMarkdown(join(promptsDir, "project.md"));
   const knowledgePrompt = readKnowledgePrompt();
   const sharedWakeupPrompt = readOptionalMarkdown(join(promptsDir, "wakeup.md"));
-  const runtimeWakeupConfig = normalizeRuntimeWakeupConfig(
-    readOptionalJson<unknown>(resolveRuntimeWakeupConfigPath(env, workspaceRoot)),
-  );
+  const runtimeWakeupConfig = loadRuntimeWakeupConfig(env, workspaceRoot);
 
   return {
     systemPrompt: readMarkdown(join(promptsDir, "system.md")),

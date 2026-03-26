@@ -39,36 +39,6 @@ ORDER BY pageviews DESC
 LIMIT 10
 `;
 
-const LCP_QUERY = `
-SELECT
-  ${PATH_EXPRESSION} AS path,
-  quantile(0.75)(toFloat64OrNull(properties.$web_vitals_LCP_value)) AS lcp_p75_ms,
-  count() AS samples
-FROM events
-WHERE event = '$web_vitals'
-  AND timestamp >= now() - INTERVAL 15 MINUTE
-  AND toFloat64OrNull(properties.$web_vitals_LCP_value) IS NOT NULL
-GROUP BY path
-HAVING samples >= 3
-ORDER BY lcp_p75_ms DESC
-LIMIT 10
-`;
-
-const INP_QUERY = `
-SELECT
-  ${PATH_EXPRESSION} AS path,
-  quantile(0.75)(toFloat64OrNull(properties.$web_vitals_INP_value)) AS inp_p75_ms,
-  count() AS samples
-FROM events
-WHERE event = '$web_vitals'
-  AND timestamp >= now() - INTERVAL 15 MINUTE
-  AND toFloat64OrNull(properties.$web_vitals_INP_value) IS NOT NULL
-GROUP BY path
-HAVING samples >= 3
-ORDER BY inp_p75_ms DESC
-LIMIT 10
-`;
-
 interface PerformanceRow {
   readonly path: string;
   readonly valueMs: number;
@@ -233,13 +203,11 @@ export class PostHogPerformanceReporter {
   private async buildReport(createdAt: number): Promise<PerformanceReportSuccess> {
     const summaryResult = await this.config.runQuery("performance_summary_15m", SUMMARY_QUERY);
     const topPathsResult = await this.config.runQuery("performance_top_paths_15m", TOP_PATHS_QUERY);
-    const lcpResult = await this.config.runQuery("performance_lcp_15m", LCP_QUERY);
-    const inpResult = await this.config.runQuery("performance_inp_15m", INP_QUERY);
 
     const summaryRow = this.readSummary(summaryResult.results[0]);
     const topPaths = this.readTopPaths(topPathsResult.results);
-    const lcp = this.readPerformanceRows(lcpResult.results, "lcp_p75_ms", LCP_SLOW_THRESHOLD_MS);
-    const inp = this.readPerformanceRows(inpResult.results, "inp_p75_ms", INP_SLOW_THRESHOLD_MS);
+    const lcp: PerformanceRow[] = [];
+    const inp: PerformanceRow[] = [];
 
     return {
       kind: "posthog-performance-report",

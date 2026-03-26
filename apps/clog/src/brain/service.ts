@@ -243,7 +243,31 @@ export class BrainService {
       stopWhen: tools ? stepCountIs(this.maxToolRounds) : undefined,
     });
 
-    return result.text.trim();
+    const primaryText = result.text.trim();
+    if (primaryText) {
+      return primaryText;
+    }
+
+    if (result.toolResults.length === 0) {
+      return "";
+    }
+
+    const followup = await generateText({
+      model: openrouter.chat(this.modelName),
+      system: systemPrompt,
+      messages: [
+        ...messages,
+        ...result.response.messages,
+        {
+          role: "user",
+          content: "Now provide a direct operator-facing summary based only on the gathered tool results. Do not call tools again. Start with the most important update.",
+        },
+      ],
+      temperature: this.temperature,
+      maxOutputTokens: this.maxOutputTokens,
+    });
+
+    return followup.text.trim();
   }
 
   private toProviderMessages(
