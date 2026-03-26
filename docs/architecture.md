@@ -12,7 +12,7 @@ This scaffold is intentionally runtime-first:
   - the authority for monitoring, findings, planning, approvals, and execution
 - `apps/types`
   - the only contract frontends should depend on
-- `frontends/*`
+- `apps/frontends/*`
   - adapters, not authorities
 
 That keeps the web UI, Telegram bot, and CLI interchangeable. Each client talks to the same gateway and renders the same domain objects.
@@ -30,7 +30,8 @@ External-system boundaries:
 - PostHog for metrics, insights, flags, exceptions, and anomaly detection
 - GitHub for repo read access, branch creation, patching, and PR creation
 - Vercel for deploy actions
-- chat adapters for outbound operator messaging
+
+Chat surfaces are not part of `integrations/`. They live under `apps/frontends/*` and attach to the gateway as transports or clients.
 
 ### `monitoring`
 
@@ -41,7 +42,7 @@ The monitoring loop lives here.
 
 ### `storage`
 
-Currently in-memory only. This should eventually own:
+Runtime state lives in SQLite-backed storage today. This layer owns:
 
 - findings history
 - thread/message persistence
@@ -56,7 +57,9 @@ The transport-agnostic typed surface. This is the layer web, Telegram, and CLI s
 
 ### `server`
 
-Bootstrapping plus the HTTP transport. This is where the system becomes a server, but the server remains a thin shell around the gateway.
+`apps/clog/src/bootstrap.ts` is the composition root that wires env, storage, integrations, tools, monitoring, and the gateway together.
+
+`apps/clog/src/server.ts` is the HTTP and websocket transport. It stays thin and delegates requests into the gateway.
 
 ### `ai bridge`
 
@@ -64,11 +67,13 @@ Bootstrapping plus the HTTP transport. This is where the system becomes a server
 
 ### `telegram transport`
 
-`apps/clog/src/telegram.ts` is the runtime-side Telegram bridge. It owns thread mapping and forwards Telegram messages into the transport-agnostic gateway, while `apps/frontends/telegram/src/adapter.ts` stays as the thin Bot API adapter.
+`apps/frontends/telegram` is the Telegram frontend package.
+
+`apps/frontends/telegram/src/telegram.ts` is the runtime-side Telegram bridge. It uses Chat SDK polling to receive Telegram messages and forwards them into the transport-agnostic gateway.
 
 ### `shell tooling`
 
-`apps/clog/src/execution/shell-executor.ts` is the safe command runner. It only allows a small command set (`ls`, `cat`, `rg`, etc.), enforces that the requested working directory lives inside the permitted roots (`process.cwd()`, the `.runtime` contract, and `.runtime/workspace`), and streams the captured stdout/stderr back through `/api/shell`. Every frontend should go through that endpoint instead of spawning arbitrary shells.
+`apps/clog/src/execution/shell-executor.ts` is the safe command runner. It only allows a small read-only command set (`ls`, `cat`, `rg`, etc.), enforces that the requested working directory lives inside the permitted runtime roots, and streams the captured stdout/stderr back through `/api/shell`. Every frontend should go through that endpoint instead of spawning arbitrary shells.
 
 ## `.runtime` contract
 
@@ -80,7 +85,7 @@ Bootstrapping plus the HTTP transport. This is where the system becomes a server
 - `storage/` – per-instance runtime state such as SQLite persistence.
 - `workspace/` – per-instance workspaces kept outside the tracked runtime contract.
 
-App-owned prompts, knowledge, skills, and MCP references stay in the repo-level `apps/clog/src/brain` tree. `.runtime` is for per-instance state and guidance, with `workspace/` as the writable area, `storage/` as read-only operational state, and `read-only/` reserved for runtime-owned files the model should not browse directly.
+App-owned prompts, knowledge, skills, and MCP references stay in the repo-level `apps/clog/src/brain` tree. `.runtime` is for per-instance state and guidance, with `workspace/` as the only model-targeted writable area, `storage/` as runtime-owned persistence, and `read-only/` reserved for runtime-owned files the model should not browse directly.
 
 ## Execution Modes
 

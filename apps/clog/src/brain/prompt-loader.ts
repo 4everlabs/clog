@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveRuntimeWakeupPath } from "../../../../tests/runtime-instance-template";
@@ -6,6 +6,7 @@ import type { ToolSummary } from "../schema/tools";
 
 const brainDir = fileURLToPath(new URL("./", import.meta.url));
 const promptsDir = join(brainDir, "prompts");
+const knowledgeDir = join(brainDir, "knowledge");
 
 const readMarkdown = (path: string): string => readFileSync(path, "utf-8").trim();
 const readJson = <T>(path: string): T => JSON.parse(readFileSync(path, "utf-8")) as T;
@@ -18,10 +19,40 @@ const readOptionalMarkdown = (path: string): string | null => {
   }
 };
 
+const readKnowledgePrompt = (): string | null => {
+  try {
+    const entries = readdirSync(knowledgeDir, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+      .map((entry) => entry.name)
+      .sort((left, right) => left.localeCompare(right));
+
+    if (entries.length === 0) {
+      return null;
+    }
+
+    return entries
+      .map((entry) => readMarkdown(join(knowledgeDir, entry)))
+      .filter(Boolean)
+      .join("\n\n");
+  } catch {
+    return null;
+  }
+};
+
 export interface AiPromptBundle {
   readonly systemPrompt: string;
+  readonly projectPrompt: string | null;
+  readonly knowledgePrompt: string | null;
   readonly primaryModePrompt: string;
   readonly wakeupPrompt: string | null;
+}
+
+export interface SystemPromptOptions {
+  readonly tools?: readonly ToolSummary[];
+  readonly includeModePrompt?: boolean;
+  readonly executionMode?: string | null;
+  readonly findingsSummary?: string | null;
+  readonly wakeupPrompt?: string | null;
 }
 
 interface RuntimeWakeupConfig {
@@ -109,6 +140,8 @@ export const loadAiPromptBundle = (
   env: NodeJS.ProcessEnv = process.env,
   workspaceRoot = process.cwd(),
 ): AiPromptBundle => {
+  const projectPrompt = readOptionalMarkdown(join(promptsDir, "project.md"));
+  const knowledgePrompt = readKnowledgePrompt();
   const sharedWakeupPrompt = readOptionalMarkdown(join(promptsDir, "wakeup.md"));
   const runtimeWakeupConfig = normalizeRuntimeWakeupConfig(
     readOptionalJson<unknown>(resolveRuntimeWakeupConfigPath(env, workspaceRoot)),
@@ -116,6 +149,8 @@ export const loadAiPromptBundle = (
 
   return {
     systemPrompt: readMarkdown(join(promptsDir, "system.md")),
+    projectPrompt,
+    knowledgePrompt,
     primaryModePrompt: readMarkdown(join(promptsDir, "modes", "primary.md")),
     wakeupPrompt: buildWakeupPrompt(sharedWakeupPrompt, runtimeWakeupConfig),
   };
@@ -138,9 +173,17 @@ const buildToolPrompt = (tools: readonly ToolSummary[]): string => {
   return lines.join("\n");
 };
 
-export const buildSystemPrompt = (bundle: AiPromptBundle, tools: readonly ToolSummary[] = []): string => {
+export const buildSystemPrompt = (bundle: AiPromptBundle, options: SystemPromptOptions = {}): string => {
   return [
     bundle.systemPrompt,
-    buildToolPrompt(tools),
-  ].join("\n\n");
+    bundle.projectPrompt?.trim() ? `Project context:\n${bundle.projectPrompt}` : "",
+    bundle.knowledgePrompt?.trim() ? `Knowledge summaries:\n${bundle.knowledgePrompt}` : "",
+    options.includeModePrompt === false ? "" : bundle.primaryModePrompt,
+    buildToolPrompt(options.tools ?? []),
+    options.executionMode ? `Execution mode: ${options.executionMode}` : "",
+    options.findingsSummary?.trim() ? options.findingsSummary : "",
+    options.wakeupPrompt?.trim() ? `Wakeup guidance:\n${options.wakeupPrompt}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 };

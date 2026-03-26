@@ -4,18 +4,11 @@ Use this flow to bring the Bun runtime, PostHog tooling, and service process up 
 
 ## 1. Install prerequisites
 
-Run:
-
-```bash
-chmod +x ./install-prereqs.sh
-./install-prereqs.sh
-```
-
-The script installs:
+Install the required tooling on the host before you start:
 
 - Bun
-- `posthog-cli` via a Bun-powered wrapper
-- `gh` by default
+- `gh`
+- `@posthog/cli` if you plan to use the endpoint or sourcemap workflows
 
 ## 2. Clone and install the app
 

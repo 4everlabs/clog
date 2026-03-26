@@ -1,7 +1,9 @@
+/* eslint-disable no-console */
+
 import { bootstrapRuntime } from "./bootstrap";
 import { startRuntimeServer, type RuntimeServerInfo } from "./server";
 import { initializeRuntimeLogCapture } from "./storage/logs";
-import { startTelegramSurface } from "./telegram";
+import { startTelegramSurface } from "../../frontends/telegram/src";
 
 export { bootstrapRuntime } from "./bootstrap";
 export { AgentSurfaceTransport, createRuntimeSurfaceHandler } from "./server";

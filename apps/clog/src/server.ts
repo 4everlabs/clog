@@ -59,12 +59,39 @@ export class AgentSurfaceTransport {
       return json(await this.runtime.gateway.runShellCommand(await parseJson<ShellCommandRequest>(request)));
     }
 
+    if (pathname === "/api/posthog/organizations" && request.method === "GET") {
+      return json(await this.runtime.gateway.listPostHogOrganizations());
+    }
+
+    if (pathname === "/api/posthog/projects" && request.method === "GET") {
+      return json(await this.runtime.gateway.listPostHogProjects(url.searchParams.get("organizationId") ?? undefined));
+    }
+
     if (pathname === "/api/posthog/errors" && request.method === "GET") {
       return json(await this.runtime.gateway.listPostHogErrors());
     }
 
+    if (pathname === "/api/posthog/mcp/tools" && request.method === "GET") {
+      const includeInputSchema = url.searchParams.get("includeInputSchema") === "true";
+      return json(
+        await this.runtime.gateway.listPostHogMcpTools(
+          url.searchParams.get("nameFilter") ?? undefined,
+          includeInputSchema,
+        ),
+      );
+    }
+
+    if (pathname === "/api/posthog/mcp/call" && request.method === "POST") {
+      const input = await parseJson<{ readonly toolName: string; readonly arguments?: Record<string, unknown> }>(request);
+      return json(await this.runtime.gateway.callPostHogMcpTool(input.toolName, input.arguments));
+    }
+
     if (pathname === "/api/posthog/query" && request.method === "POST") {
       return json(await this.runtime.gateway.queryPostHogInsight(await parseJson<PostHogInsightQueryRequest>(request)));
+    }
+
+    if (pathname === "/api/posthog/endpoints" && request.method === "GET") {
+      return json(await this.runtime.gateway.listPostHogEndpoints(url.searchParams.get("cwd") ?? undefined));
     }
 
     if (pathname === "/api/posthog/endpoints/diff" && request.method === "POST") {

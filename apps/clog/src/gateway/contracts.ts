@@ -8,9 +8,14 @@ import type {
   SurfaceBootstrapResponse,
   SurfaceFindingsResponse,
   SurfacePostHogEndpointDiffResponse,
+  SurfacePostHogEndpointListResponse,
   SurfacePostHogEndpointRunResponse,
   SurfacePostHogErrorsResponse,
   SurfacePostHogInsightResponse,
+  SurfacePostHogMcpToolCallResponse,
+  SurfacePostHogMcpToolsResponse,
+  SurfacePostHogOrganizationsResponse,
+  SurfacePostHogProjectsResponse,
   SurfaceSendMessageRequest,
   SurfaceSendMessageResponse,
   SurfaceThreadsResponse,
@@ -28,8 +33,13 @@ export interface AgentGatewaySurface {
   acknowledgeFinding(input: SurfaceAcknowledgeFindingRequest): Promise<SurfaceFindingsResponse>;
   executeAction(input: ActionExecutionRequest): Promise<SurfaceActionExecutionResponse>;
   runShellCommand(input: ShellCommandRequest): Promise<SurfaceShellCommandResponse>;
+  listPostHogOrganizations(): Promise<SurfacePostHogOrganizationsResponse>;
+  listPostHogProjects(organizationId?: string): Promise<SurfacePostHogProjectsResponse>;
   listPostHogErrors(): Promise<SurfacePostHogErrorsResponse>;
+  listPostHogMcpTools(nameFilter?: string, includeInputSchema?: boolean): Promise<SurfacePostHogMcpToolsResponse>;
+  callPostHogMcpTool(toolName: string, args?: Record<string, unknown>): Promise<SurfacePostHogMcpToolCallResponse>;
   queryPostHogInsight(input: PostHogInsightQueryRequest): Promise<SurfacePostHogInsightResponse>;
+  listPostHogEndpoints(cwd?: string): Promise<SurfacePostHogEndpointListResponse>;
   diffPostHogEndpoints(input: PostHogEndpointDiffRequest): Promise<SurfacePostHogEndpointDiffResponse>;
   runPostHogEndpoint(input: PostHogEndpointRunRequest): Promise<SurfacePostHogEndpointRunResponse>;
 }

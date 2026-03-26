@@ -49,6 +49,7 @@ describe("loadAgentEnvironment", () => {
     expect(env.posthog.cliTimeoutMs).toBe(45_000);
     expect(env.storage.instanceId).toBe("config-test-1");
     expect(env.storage.databasePath.endsWith(".runtime/instances/config-test-1/storage/runtime.sqlite")).toBe(true);
+    expect(env.posthog.endpointsDir.startsWith(env.storage.workspaceDir)).toBe(true);
     expect(env.posthog.insightMonitors).toHaveLength(1);
     expect(env.posthog.insightMonitors[0]).toMatchObject({
       name: "Revenue monitor",
@@ -63,6 +64,7 @@ describe("loadAgentEnvironment", () => {
     });
     expect(env.telegram).toMatchObject({
       botToken: "123456:telegram-test-token",
+      userName: null,
       allowedChatIds: [1001, 1002],
     });
     expect(env.capabilities.posthog.canReadInsights).toBe(true);
@@ -72,9 +74,11 @@ describe("loadAgentEnvironment", () => {
     expect(env.availableTools.map((tool) => tool.name)).toEqual([
       "posthog_get_organizations",
       "posthog_get_projects",
-      "posthog_run_query",
       "posthog_list_errors",
-      "posthog_query_insight",
+      "posthog_list_mcp_tools",
+      "posthog_call_mcp_tool",
+      "posthog_run_query",
+      "posthog_list_endpoints",
       "posthog_diff_endpoints",
       "posthog_run_endpoint",
     ]);
@@ -102,6 +106,7 @@ describe("loadAgentEnvironment", () => {
     const env = loadAgentEnvironment({
       OPENROUTER_API_KEY: "sk-or-live",
       TELEGRAM_BOT_TOKEN: "123456:telegram-live-token",
+      TELEGRAM_BOT_USERNAME: "@clog4everbot",
       POSTHOG_CLAW_CHANNELS: "cli",
     });
 
@@ -109,6 +114,7 @@ describe("loadAgentEnvironment", () => {
     expect(env.ai.model).toBe("stepfun/step-3.5-flash");
     expect(env.channels).toEqual(["cli", "telegram"]);
     expect(env.telegram.botToken).toBe("123456:telegram-live-token");
+    expect(env.telegram.userName).toBe("clog4everbot");
   });
 
   test("allows overriding the runtime database path", () => {
@@ -119,6 +125,35 @@ describe("loadAgentEnvironment", () => {
 
     expect(env.storage.instanceId).toBe("operator-1");
     expect(env.storage.databasePath.endsWith("operator-1/storage/custom.sqlite")).toBe(true);
+  });
+
+  test("rejects PostHog endpoint directories outside the runtime workspace", () => {
+    expect(() => loadAgentEnvironment({
+      POSTHOG_CLAW_POSTHOG_ENDPOINTS_DIR: "../outside-endpoints",
+    })).toThrow("POSTHOG_CLAW_POSTHOG_ENDPOINTS_DIR must stay inside");
+  });
+
+  test("reads monitor interval from read-only settings", () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "clog-config-settings-"));
+    cleanupPaths.push(workspaceRoot);
+
+    const settingsDir = join(workspaceRoot, ".runtime", "instances", "personal-instance", "read-only");
+    mkdirSync(settingsDir, { recursive: true });
+    writeFileSync(join(settingsDir, "settings.json"), JSON.stringify({
+      monitor: {
+        intervalMs: 5000,
+      },
+    }));
+
+    const previousCwd = process.cwd();
+    process.chdir(workspaceRoot);
+
+    try {
+      const env = loadAgentEnvironment({});
+      expect(env.monitorIntervalMs).toBe(5000);
+    } finally {
+      process.chdir(previousCwd);
+    }
   });
 
   test("uses read-only tools config to control visible tool capabilities", () => {
@@ -172,9 +207,10 @@ describe("loadAgentEnvironment", () => {
       expect(env.availableTools.map((tool) => tool.name)).toEqual([
         "posthog_get_organizations",
         "posthog_get_projects",
-        "posthog_run_query",
         "posthog_list_errors",
-        "posthog_query_insight",
+        "posthog_list_mcp_tools",
+        "posthog_call_mcp_tool",
+        "posthog_run_query",
       ]);
       expect(env.capabilities.shell.safeRoots).toEqual([
         env.storage.workspaceDir,

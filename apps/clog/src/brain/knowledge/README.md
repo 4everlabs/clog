@@ -1,1 +1,0 @@
-This directory is reserved for knowledge artifacts the runtime uses (embedding indexes, prompt fragments, or fact sheets). Keep sensitive data out of version control or encrypt it in the eventual runtime vault.

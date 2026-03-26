@@ -1,3 +1,5 @@
+/* eslint-disable no-console */
+
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { format } from "node:util";

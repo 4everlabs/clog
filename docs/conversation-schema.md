@@ -1,12 +1,14 @@
 # Conversation JSONL Schema
 
 ## File Location
-```
+
+```text
 .conversations/{channel}/{thread_id}.jsonl
 ```
 
 Examples:
-```
+
+```text
 .conversations/telegram/123456.jsonl
 .conversations/cli/local.jsonl
 .conversations/web/session-abc123.jsonl
@@ -22,8 +24,8 @@ Examples:
   "timestamp": 1709500000000,
   "tool_calls": [
     {
-      "name": "posthog_list_errors",
-      "args": {"lookbackMinutes": 60},
+      "name": "posthog_run_query",
+      "args": {"name": "Recent errors", "query": "SELECT event, count() FROM events LIMIT 10"},
       "result": "..."
     }
   ],
@@ -38,7 +40,7 @@ Examples:
 ## Fields
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ----- | ---- | -------- | ----------- |
 | `id` | string | yes | Unique message ID (ulid or uuid) |
 | `role` | string | yes | `user`, `agent`, `system`, `tool` |
 | `content` | string | yes | Message text |
@@ -58,9 +60,9 @@ Examples:
 ```jsonl
 {"id":"msg_01","role":"system","content":"You are Clog...","timestamp":1709500000000}
 {"id":"msg_02","role":"user","content":"show me errors","timestamp":1709500001000}
-{"id":"msg_03","role":"agent","content":"Let me check...","timestamp":1709500002000,"tool_calls":[{"name":"posthog_list_errors","args":{},"result":"..."}]}
-{"id":"msg_04","role":"tool","content":"[errors array]","timestamp":1709500002500,"metadata":{"tool_call_id":"msg_03"}}
-{"id":"msg_05","role":"agent","content":"Found 12 errors in the last hour.","timestamp":1709500003000}
+{"id":"msg_03","role":"agent","content":"Let me check...","timestamp":1709500002000,"tool_calls":[{"name":"posthog_run_query","args":{"name":"Recent errors","query":"SELECT event, count() FROM events LIMIT 10"},"result":"..."}]}
+{"id":"msg_04","role":"tool","content":"[{\"event\":\"$exception\",\"count\":12}]","timestamp":1709500002500,"metadata":{"tool_call_id":"msg_03"}}
+{"id":"msg_05","role":"agent","content":"The query shows 12 recent exception events.","timestamp":1709500003000}
 ```
 
 ## Ordering

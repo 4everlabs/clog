@@ -5,7 +5,7 @@
     "readLogs": false,
     "readFlags": false,
     "readExperiments": false,
-    "manageEndpoints": false
+    "manageEndpoints": true
   },
   "github": {
     "readRepository": false,

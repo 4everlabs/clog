@@ -28,7 +28,12 @@ export const buildProviderChatCompletionRequest = (
 
 export const parseProviderAssistantMessage = (value: unknown): ProviderAssistantMessage => {
   const response = ProviderChatCompletionResponseSchema.parse(value);
-  return response.choices[0].message;
+  const firstChoice = response.choices[0];
+  if (!firstChoice) {
+    throw new Error("Provider chat completion returned no choices");
+  }
+
+  return firstChoice.message;
 };
 
 export const createProviderToolResultMessage = (

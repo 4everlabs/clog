@@ -2,9 +2,21 @@ import type {
   AgentFinding,
   AgentRuntimeSummary,
   IntegrationHealthView,
+  PostHogEndpointDiffRequest,
+  PostHogEndpointRunRequest,
+  PostHogInsightQueryRequest,
   RuntimeObservation,
   SurfaceBootstrapResponse,
   SurfaceFindingsResponse,
+  SurfacePostHogEndpointDiffResponse,
+  SurfacePostHogEndpointListResponse,
+  SurfacePostHogEndpointRunResponse,
+  SurfacePostHogErrorsResponse,
+  SurfacePostHogInsightResponse,
+  SurfacePostHogMcpToolCallResponse,
+  SurfacePostHogMcpToolsResponse,
+  SurfacePostHogOrganizationsResponse,
+  SurfacePostHogProjectsResponse,
   SurfaceSendMessageRequest,
   SurfaceSendMessageResponse,
   SurfaceThreadsResponse,
@@ -69,6 +81,70 @@ export class ClogApiClient {
 
   async sendMessage(input: SurfaceSendMessageRequest): Promise<SurfaceSendMessageResponse> {
     return await this.request<SurfaceSendMessageResponse>("/api/chat", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  async listPostHogOrganizations(): Promise<SurfacePostHogOrganizationsResponse> {
+    return await this.request<SurfacePostHogOrganizationsResponse>("/api/posthog/organizations");
+  }
+
+  async listPostHogProjects(organizationId?: string): Promise<SurfacePostHogProjectsResponse> {
+    const search = organizationId ? `?organizationId=${encodeURIComponent(organizationId)}` : "";
+    return await this.request<SurfacePostHogProjectsResponse>(`/api/posthog/projects${search}`);
+  }
+
+  async listPostHogErrors(): Promise<SurfacePostHogErrorsResponse> {
+    return await this.request<SurfacePostHogErrorsResponse>("/api/posthog/errors");
+  }
+
+  async listPostHogMcpTools(nameFilter?: string, includeInputSchema = false): Promise<SurfacePostHogMcpToolsResponse> {
+    const searchParams = new URLSearchParams();
+    if (nameFilter?.trim()) {
+      searchParams.set("nameFilter", nameFilter.trim());
+    }
+    if (includeInputSchema) {
+      searchParams.set("includeInputSchema", "true");
+    }
+    const search = searchParams.size > 0 ? `?${searchParams.toString()}` : "";
+    return await this.request<SurfacePostHogMcpToolsResponse>(`/api/posthog/mcp/tools${search}`);
+  }
+
+  async callPostHogMcpTool(
+    toolName: string,
+    args?: Record<string, unknown>,
+  ): Promise<SurfacePostHogMcpToolCallResponse> {
+    return await this.request<SurfacePostHogMcpToolCallResponse>("/api/posthog/mcp/call", {
+      method: "POST",
+      body: JSON.stringify({
+        toolName,
+        arguments: args,
+      }),
+    });
+  }
+
+  async queryPostHog(input: PostHogInsightQueryRequest): Promise<SurfacePostHogInsightResponse> {
+    return await this.request<SurfacePostHogInsightResponse>("/api/posthog/query", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  async listPostHogEndpoints(cwd?: string): Promise<SurfacePostHogEndpointListResponse> {
+    const search = cwd ? `?cwd=${encodeURIComponent(cwd)}` : "";
+    return await this.request<SurfacePostHogEndpointListResponse>(`/api/posthog/endpoints${search}`);
+  }
+
+  async diffPostHogEndpoints(input: PostHogEndpointDiffRequest): Promise<SurfacePostHogEndpointDiffResponse> {
+    return await this.request<SurfacePostHogEndpointDiffResponse>("/api/posthog/endpoints/diff", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  async runPostHogEndpoint(input: PostHogEndpointRunRequest): Promise<SurfacePostHogEndpointRunResponse> {
+    return await this.request<SurfacePostHogEndpointRunResponse>("/api/posthog/endpoints/run", {
       method: "POST",
       body: JSON.stringify(input),
     });

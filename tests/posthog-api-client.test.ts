@@ -1,11 +1,25 @@
 import { describe, expect, test } from "bun:test";
 import { PostHogApiClient } from "../apps/clog/src/integrations/posthog/api-client";
 
+const toEventStreamBody = (payload: unknown): string => (
+  `event: message\ndata: ${JSON.stringify(payload)}\n\n`
+);
+
+const createEventStreamResponse = (
+  payload: unknown,
+  extraHeaders: Record<string, string> = {},
+): Response => (
+  new Response(toEventStreamBody(payload), {
+    status: 200,
+    headers: {
+      "Content-Type": "text/event-stream",
+      ...extraHeaders,
+    },
+  })
+);
+
 const createClient = (
-  responses: Array<{
-    readonly ok: boolean;
-    readonly body: unknown;
-  }>,
+  responses: readonly Response[],
 ) => {
   const requests: Array<{
     readonly url: string;
@@ -13,7 +27,7 @@ const createClient = (
   }> = [];
   let callIndex = 0;
 
-  const fetchFn: typeof fetch = async (input, init) => {
+  const fetchFn = async (input: URL | RequestInfo, init?: RequestInit) => {
     requests.push({
       url: typeof input === "string" ? input : input.toString(),
       init,
@@ -24,17 +38,13 @@ const createClient = (
       throw new Error("Missing mocked response");
     }
 
-    return new Response(JSON.stringify(response.body), {
-      status: response.ok ? 200 : 500,
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
+    return response;
   };
 
   return {
     client: new PostHogApiClient({
       host: "https://us.posthog.com",
+      workspaceDir: "/tmp/workspace",
       projectId: "238024",
       personalApiKey: "phx_test",
       projectApiKey: "phc_test",
@@ -57,34 +67,63 @@ const createClient = (
 };
 
 describe("PostHogApiClient", () => {
-  test("lists organizations and projects with simplified typed results", async () => {
+  test("lists organizations and projects through the MCP transport", async () => {
     const { client, requests } = createClient([
-      {
-        ok: true,
-        body: {
-          results: [
+      createEventStreamResponse({
+        jsonrpc: "2.0",
+        id: 1,
+        result: {
+          protocolVersion: "2025-06-18",
+          capabilities: {
+            tools: {
+              listChanged: true,
+            },
+          },
+          serverInfo: {
+            name: "PostHog",
+            version: "1.0.0",
+          },
+        },
+      }, {
+        "mcp-session-id": "session-1",
+      }),
+      new Response(null, { status: 202 }),
+      createEventStreamResponse({
+        jsonrpc: "2.0",
+        id: 2,
+        result: {
+          content: [
             {
-              id: "org_1",
-              name: "Acme",
-              slug: "acme",
-              membership_level: 15,
+              type: "text",
+              text: [
+                "[1]:",
+                "  - id: org_1",
+                "    name: Acme",
+                "    slug: acme",
+                "    membership_level: 15",
+              ].join("\n"),
             },
           ],
         },
-      },
-      {
-        ok: true,
-        body: {
-          results: [
+      }),
+      createEventStreamResponse({
+        jsonrpc: "2.0",
+        id: 3,
+        result: {
+          content: [
             {
-              id: 238024,
-              organization_id: "org_1",
-              name: "Acme Product",
-              api_token: "phc_project",
+              type: "text",
+              text: [
+                "[1]:",
+                "  - id: 238024",
+                "    organization: org_1",
+                "    api_token: phc_project",
+                "    name: Acme Product",
+              ].join("\n"),
             },
           ],
         },
-      },
+      }),
     ]);
 
     await expect(client.getOrganizations()).resolves.toEqual([
@@ -109,23 +148,60 @@ describe("PostHogApiClient", () => {
     });
 
     expect(requests.map((request) => request.url)).toEqual([
-      "https://us.posthog.com/api/organizations/",
-      "https://us.posthog.com/api/organizations/org_1/projects/",
+      "https://mcp.posthog.com/mcp",
+      "https://mcp.posthog.com/mcp",
+      "https://mcp.posthog.com/mcp",
+      "https://mcp.posthog.com/mcp",
     ]);
+    expect(JSON.parse(String(requests[0]?.init?.body ?? "{}")).method).toBe("initialize");
+    expect(JSON.parse(String(requests[1]?.init?.body ?? "{}")).method).toBe("notifications/initialized");
+    expect(JSON.parse(String(requests[2]?.init?.body ?? "{}")).params.name).toBe("organizations-get");
+    expect(JSON.parse(String(requests[3]?.init?.body ?? "{}")).params.name).toBe("projects-get");
+    expect(new Headers(requests[3]?.init?.headers).get("mcp-session-id")).toBe("session-1");
   });
 
-  test("runs HogQL queries and maps row arrays to keyed objects", async () => {
+  test("runs HogQL queries through the MCP transport and maps row arrays to keyed objects", async () => {
     const { client, requests } = createClient([
-      {
-        ok: true,
-        body: {
-          columns: ["event", "count"],
-          results: [
-            ["$pageview", 12],
-            ["signup", 3],
-          ],
+      createEventStreamResponse({
+        jsonrpc: "2.0",
+        id: 1,
+        result: {
+          protocolVersion: "2025-06-18",
+          capabilities: {
+            tools: {
+              listChanged: true,
+            },
+          },
+          serverInfo: {
+            name: "PostHog",
+            version: "1.0.0",
+          },
         },
-      },
+      }, {
+        "mcp-session-id": "session-2",
+      }),
+      new Response(null, { status: 202 }),
+      createEventStreamResponse({
+        jsonrpc: "2.0",
+        id: 2,
+        result: {
+          content: [
+            {
+              type: "text",
+              text: "query result",
+            },
+          ],
+          structuredContent: {
+            results: {
+              columns: ["event", "count"],
+              results: [
+                ["$pageview", 12],
+                ["signup", 3],
+              ],
+            },
+          },
+        },
+      }),
     ]);
 
     await expect(client.runQuery("recent_events", "select event, count() from events limit 2")).resolves.toEqual({
@@ -137,7 +213,17 @@ describe("PostHogApiClient", () => {
       ],
     });
 
-    expect(requests[0]?.url).toBe("https://us.posthog.com/api/projects/238024/query/");
-    expect(requests[0]?.init?.method).toBe("POST");
+    expect(requests[2]?.url).toBe("https://mcp.posthog.com/mcp");
+    expect(requests[2]?.init?.method).toBe("POST");
+    const body = JSON.parse(String(requests[2]?.init?.body ?? "{}"));
+    expect(body.method).toBe("tools/call");
+    expect(body.params.name).toBe("query-run");
+    expect(body.params.arguments.query).toEqual({
+      kind: "DataVisualizationNode",
+      source: {
+        kind: "HogQLQuery",
+        query: "select event, count() from events limit 2",
+      },
+    });
   });
 });

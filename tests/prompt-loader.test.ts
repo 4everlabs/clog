@@ -36,12 +36,18 @@ describe("prompt loader", () => {
 
     const bundle = loadAiPromptBundle(env, workspaceRoot);
 
-    expect(bundle.systemPrompt).toContain("Clog runtime brain");
+    expect(bundle.systemPrompt).toContain("You are `clog`");
+    expect(bundle.projectPrompt).toContain("4ever.ai");
+    expect(bundle.projectPrompt).toContain("app.4ever.ai");
+    expect(bundle.knowledgePrompt).toContain("4ever Product Summary");
+    expect(bundle.knowledgePrompt).toContain("Beta Launch Monitoring Priorities");
     expect(bundle.primaryModePrompt).toContain("Operating mode");
     expect(bundle.wakeupPrompt).toContain("Wakeup is the periodic monitoring pass");
     expect(bundle.wakeupPrompt).toContain("Check the latest signals");
     expect(bundle.wakeupPrompt).toContain("60000ms");
-    expect(buildSystemPrompt(bundle)).toContain("shared repo brain");
+    expect(buildSystemPrompt(bundle)).toContain("Project context:");
+    expect(buildSystemPrompt(bundle)).toContain("Knowledge summaries:");
+    expect(buildSystemPrompt(bundle)).toContain("4ever.ai");
   });
 
   test("keeps runtime wakeup config optional", () => {
@@ -55,6 +61,7 @@ describe("prompt loader", () => {
       workspaceRoot,
     );
 
+    expect(bundle.knowledgePrompt).toContain("Clog Role And Boundaries");
     expect(bundle.wakeupPrompt).toContain("Wakeup is the periodic monitoring pass");
   });
 });

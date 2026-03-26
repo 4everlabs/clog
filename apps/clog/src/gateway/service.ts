@@ -11,9 +11,14 @@ import type {
   SurfaceBootstrapResponse,
   SurfaceFindingsResponse,
   SurfacePostHogEndpointDiffResponse,
+  SurfacePostHogEndpointListResponse,
   SurfacePostHogEndpointRunResponse,
   SurfacePostHogErrorsResponse,
   SurfacePostHogInsightResponse,
+  SurfacePostHogMcpToolCallResponse,
+  SurfacePostHogMcpToolsResponse,
+  SurfacePostHogOrganizationsResponse,
+  SurfacePostHogProjectsResponse,
   SurfaceSendMessageRequest,
   SurfaceSendMessageResponse,
   SurfaceShellCommandResponse,
@@ -22,12 +27,11 @@ import type {
 import type { AgentEnvironment } from "../config";
 import type { PostHogIntegrationClient } from "../integrations/posthog/client";
 import { BrainService } from "../brain/service";
-import { PostHogApiClient } from "../integrations/posthog/api-client";
-import { PostHogCliTool } from "../integrations/posthog/cli-tool";
 import type { MonitoringLoop } from "../monitoring/monitor-loop";
 import { ShellExecutor } from "../execution/shell-executor";
 import type { RuntimeStore } from "../storage/chat";
 import type { AgentGatewaySurface } from "./contracts";
+import type { PostHogToolServices } from "../tools/types";
 
 export interface AgentGatewayDependencies {
   readonly env: AgentEnvironment;
@@ -35,8 +39,18 @@ export interface AgentGatewayDependencies {
   readonly brain: BrainService;
   readonly monitorLoop: MonitoringLoop;
   readonly posthog: PostHogIntegrationClient;
-  readonly posthogApi: PostHogApiClient;
-  readonly posthogCli: PostHogCliTool;
+  readonly posthogServices: Pick<
+    PostHogToolServices,
+    | "getOrganizations"
+    | "getProjects"
+    | "listMcpTools"
+    | "callMcpTool"
+    | "runQuery"
+    | "listErrors"
+    | "listEndpoints"
+    | "diffEndpoints"
+    | "runEndpoint"
+  >;
   readonly store: RuntimeStore;
 }
 
@@ -124,7 +138,6 @@ export class AgentGateway implements AgentGatewaySurface {
   }
 
   async executeAction(input: ActionExecutionRequest): Promise<SurfaceActionExecutionResponse> {
-    const finding = input.findingId ? this.deps.store.listFindings().find((entry) => entry.id === input.findingId) : null;
     const action = this.deps.store.listActions().find((entry) => entry.id === input.actionId);
 
     if (!action) {
@@ -152,14 +165,56 @@ export class AgentGateway implements AgentGatewaySurface {
     return { result };
   }
 
+  async listPostHogOrganizations(): Promise<SurfacePostHogOrganizationsResponse> {
+    if (!this.deps.env.capabilities.posthog.canReadInsights) {
+      throw new Error("PostHog insight reads are disabled in the current configuration");
+    }
+
+    return {
+      organizations: await this.deps.posthogServices.getOrganizations(),
+    };
+  }
+
+  async listPostHogProjects(organizationId?: string): Promise<SurfacePostHogProjectsResponse> {
+    if (!this.deps.env.capabilities.posthog.canReadInsights) {
+      throw new Error("PostHog insight reads are disabled in the current configuration");
+    }
+
+    return await this.deps.posthogServices.getProjects(organizationId);
+  }
+
   async listPostHogErrors(): Promise<SurfacePostHogErrorsResponse> {
     if (!this.deps.env.capabilities.posthog.canReadErrors) {
       throw new Error("PostHog error reads are disabled in the current configuration");
     }
 
     return {
-      observations: await this.deps.posthog.listErrorObservations(),
+      observations: await this.deps.posthogServices.listErrors(),
     };
+  }
+
+  async listPostHogMcpTools(nameFilter?: string, includeInputSchema = false): Promise<SurfacePostHogMcpToolsResponse> {
+    if (!this.deps.env.capabilities.posthog.canReadInsights) {
+      throw new Error("PostHog insight reads are disabled in the current configuration");
+    }
+
+    return await this.deps.posthogServices.listMcpTools({
+      nameFilter,
+      includeInputSchema,
+    });
+  }
+
+  async callPostHogMcpTool(toolName: string, args?: Record<string, unknown>): Promise<SurfacePostHogMcpToolCallResponse> {
+    if (!this.deps.env.capabilities.posthog.canReadInsights) {
+      throw new Error("PostHog insight reads are disabled in the current configuration");
+    }
+
+    const normalizedToolName = toolName.trim();
+    if (!normalizedToolName) {
+      throw new Error("PostHog MCP tool name cannot be empty");
+    }
+
+    return await this.deps.posthogServices.callMcpTool(normalizedToolName, args);
   }
 
   async queryPostHogInsight(input: PostHogInsightQueryRequest): Promise<SurfacePostHogInsightResponse> {
@@ -174,7 +229,17 @@ export class AgentGateway implements AgentGatewaySurface {
     }
 
     return {
-      result: await this.deps.posthogApi.runInsightQuery(name, query),
+      result: await this.deps.posthogServices.runQuery(name, query),
+    };
+  }
+
+  async listPostHogEndpoints(cwd?: string): Promise<SurfacePostHogEndpointListResponse> {
+    if (!this.deps.env.capabilities.posthog.canManageEndpoints) {
+      throw new Error("PostHog endpoint management is disabled in the current configuration");
+    }
+
+    return {
+      result: this.deps.posthogServices.listEndpoints(cwd),
     };
   }
 
@@ -184,7 +249,7 @@ export class AgentGateway implements AgentGatewaySurface {
     }
 
     return {
-      result: this.deps.posthogCli.diffEndpoints(input.path, input.cwd),
+      result: this.deps.posthogServices.diffEndpoints(input.path, input.cwd),
     };
   }
 
@@ -194,7 +259,7 @@ export class AgentGateway implements AgentGatewaySurface {
     }
 
     return {
-      result: this.deps.posthogCli.runEndpoint(input),
+      result: this.deps.posthogServices.runEndpoint(input),
     };
   }
 }

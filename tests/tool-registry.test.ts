@@ -36,8 +36,12 @@ describe("tool registry", () => {
     const summaries = summarizeEnabledTools(createCapabilities());
 
     expect(summaries.map((tool) => tool.name)).toEqual([
+      "posthog_get_organizations",
+      "posthog_get_projects",
       "posthog_list_errors",
-      "posthog_query_insight",
+      "posthog_list_mcp_tools",
+      "posthog_call_mcp_tool",
+      "posthog_run_query",
       "shell_execute_command",
     ]);
   });
@@ -46,8 +50,12 @@ describe("tool registry", () => {
     const tools = buildProviderTools(createCapabilities());
 
     expect(tools.map((tool) => tool.function.name)).toEqual([
+      "posthog_get_organizations",
+      "posthog_get_projects",
       "posthog_list_errors",
-      "posthog_query_insight",
+      "posthog_list_mcp_tools",
+      "posthog_call_mcp_tool",
+      "posthog_run_query",
       "shell_execute_command",
     ]);
     expect(tools.every((tool) => tool.type === "function")).toBe(true);

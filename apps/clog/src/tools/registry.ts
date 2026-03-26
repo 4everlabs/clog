@@ -1,5 +1,6 @@
 import { zodToJsonSchema } from "zod-to-json-schema";
 import type { IntegrationCapabilitySnapshot } from "@clog/types";
+import type { ZodTypeAny } from "zod";
 import { ProviderFunctionToolSchema, type ProviderFunctionTool } from "../schema/provider";
 import { ToolSummarySchema, type AgentToolName, type ToolSummary } from "../schema/tools";
 import { githubTools } from "./definitions/github";
@@ -8,12 +9,12 @@ import { shellTools } from "./definitions/shell";
 import { vercelTools } from "./definitions/vercel";
 import type { AnyRegisteredTool } from "./types";
 
-const registeredTools = [
+const registeredTools: readonly AnyRegisteredTool[] = [
   ...posthogTools,
   ...shellTools,
   ...githubTools,
   ...vercelTools,
-] as const satisfies readonly AnyRegisteredTool[];
+];
 
 const toolMap = new Map<AgentToolName, AnyRegisteredTool>(
   registeredTools.map((tool) => [tool.name, tool]),
@@ -30,10 +31,17 @@ const toToolSummary = (tool: AnyRegisteredTool): ToolSummary =>
   });
 
 const toProviderFunctionTool = (tool: AnyRegisteredTool): ProviderFunctionTool => {
-  const parameters = zodToJsonSchema(tool.inputSchema, {
+  const toJsonSchema = zodToJsonSchema as unknown as (
+    schema: ZodTypeAny,
+    options: {
+      readonly target: "openAi";
+      readonly $refStrategy: "none";
+    },
+  ) => Record<string, unknown>;
+  const parameters = toJsonSchema(tool.inputSchema as ZodTypeAny, {
     target: "openAi",
     $refStrategy: "none",
-  }) as Record<string, unknown>;
+  });
   delete parameters.$schema;
 
   return ProviderFunctionToolSchema.parse({

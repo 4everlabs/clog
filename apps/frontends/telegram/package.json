@@ -3,9 +3,12 @@
   "version": "0.0.0",
   "type": "module",
   "private": true,
-  "main": "./src/adapter.ts",
-  "module": "./src/adapter.ts",
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
   "dependencies": {
-    "@clog/types": "workspace:*"
+    "@chat-adapter/state-memory": "^4.22.0",
+    "@chat-adapter/telegram": "^4.22.0",
+    "@clog/core": "workspace:*",
+    "chat": "^4.22.0"
   }
 }

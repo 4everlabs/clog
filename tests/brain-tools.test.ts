@@ -72,12 +72,41 @@ describe("BrainService tool loop", () => {
       capabilities,
       services: {
         posthog: {
+          getOrganizations: async () => [
+            {
+              id: "org_1",
+              name: "Org",
+              slug: "org",
+              membershipLevel: null,
+            },
+          ],
+          getProjects: async () => ({
+            organizationId: "org_1",
+            projects: [],
+          }),
+          listMcpTools: async () => ({
+            total: 1,
+            returned: 1,
+            tools: [{ name: "query-run", title: "Query Run", description: "Run a query" }],
+          }),
+          callMcpTool: async (toolName) => ({
+            toolName,
+            text: "mcp ok",
+          }),
+          runQuery: async (name, query) => ({
+            name,
+            columns: ["query"],
+            results: [{ query }],
+          }),
           listErrors: async () => [],
           queryInsight: async (name, query) => ({
             name,
             columns: ["query"],
             results: [{ query }],
           }),
+          listEndpoints: () => {
+            throw new Error("not used");
+          },
           diffEndpoints: () => {
             throw new Error("not used");
           },
@@ -103,7 +132,7 @@ describe("BrainService tool loop", () => {
                   id: "call_1",
                   type: "function",
                   function: {
-                    name: "posthog_query_insight",
+                    name: "posthog_run_query",
                     arguments: JSON.stringify({
                       name: "Revenue monitor",
                       query: "SELECT 1",
@@ -155,10 +184,15 @@ describe("BrainService tool loop", () => {
 
     expect(reply).toContain("query returned successfully");
     expect(requests).toHaveLength(2);
-    expect((requests[0]?.tools as Array<{ function: { name: string } }>).map((tool) => tool.function.name)).toEqual([
-      "posthog_query_insight",
+    const firstRequestTools = (requests[0]?.tools ?? []) as Array<{ function: { name: string } }>;
+    expect(firstRequestTools.map((tool) => tool.function.name)).toEqual([
+      "posthog_get_organizations",
+      "posthog_get_projects",
+      "posthog_list_mcp_tools",
+      "posthog_call_mcp_tool",
+      "posthog_run_query",
     ]);
-    expect(JSON.stringify(requests[1]?.messages)).toContain("posthog_query_insight");
+    expect(JSON.stringify(requests[1]?.messages)).toContain("posthog_run_query");
     expect(JSON.stringify(requests[1]?.messages)).toContain("Revenue monitor");
   });
 });

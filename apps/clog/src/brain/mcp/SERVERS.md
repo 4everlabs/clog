@@ -1,45 +1,16 @@
-# MCP Servers Configuration
+# MCP Notes
 
-This folder contains MCP (Model Context Protocol) server configurations.
+The runtime does not rely on editor-managed MCP launcher configs in this repo.
 
-## Format
+For PostHog, `clog` talks to the remote PostHog MCP endpoint directly from Bun using the runtime code in `src/integrations/posthog/mcp-client.ts`.
 
-Each server is defined as a JSON file:
+## Why
 
-```json
-{
-  "name": "filesystem",
-  "command": "npx",
-  "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/allowed"],
-  "enabled": true
-}
-```
+- Avoid Node-based helper wrappers for PostHog MCP.
+- Keep MCP usage inside the runtime's typed tool path.
+- Make it obvious that the runtime, not the editor, owns PostHog MCP access.
 
-## Available MCP Servers
+## Rule
 
-### Filesystem
-```bash
-npx -y @modelcontextprotocol/server-filesystem /allowed/path
-```
-
-### GitHub
-```bash
-npx -y @modelcontextprotocol/server-github
-```
-
-### Postgres
-```bash
-npx -y @modelcontextprotocol/server-postgres postgres://user:pass@localhost/db
-```
-
-## Adding a Server
-
-1. Create a JSON file in this folder
-2. Add the server configuration
-3. Restart the agent
-
-## Security
-
-- Only enable servers you need
-- Restrict filesystem access to necessary paths
-- Don't expose credentials in config files
+- Do not add `npx`-based PostHog MCP launch configs here.
+- If PostHog MCP behavior changes, update the Bun client implementation instead.

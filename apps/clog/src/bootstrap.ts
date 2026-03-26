@@ -6,6 +6,7 @@ import { GitHubIntegrationClient } from "./integrations/github/client";
 import { PostHogIntegrationClient } from "./integrations/posthog/client";
 import { PostHogApiClient } from "./integrations/posthog/api-client";
 import { PostHogCliTool } from "./integrations/posthog/cli-tool";
+import { PostHogWorkspaceReporter } from "./integrations/posthog/workspace-reporter";
 import { VercelIntegrationClient } from "./integrations/vercel/client";
 import { MonitoringLoop } from "./monitoring/monitor-loop";
 import { syncRuntimeInstanceTemplate } from "../../../tests/runtime-instance-template";
@@ -14,6 +15,7 @@ import type { RuntimeStore } from "./storage/chat";
 import { ToolExecutor } from "./execution/tool-executor";
 import { ShellExecutor } from "./execution/shell-executor";
 import { buildProviderTools, resolveEnabledTools } from "./tools/registry";
+import type { PostHogToolServices } from "./tools/types";
 
 export interface RuntimeBootstrap {
   readonly env: AgentEnvironment;
@@ -35,23 +37,62 @@ export const bootstrapRuntime = (): RuntimeBootstrap => {
   store.setStatus("booting");
   const posthogApi = new PostHogApiClient(env.posthog);
   const posthogCli = new PostHogCliTool(env.posthog);
+  const posthogWorkspaceReporter = new PostHogWorkspaceReporter(env.storage.workspaceDir);
   const posthog = new PostHogIntegrationClient({
     api: posthogApi,
     config: env.posthog,
     capabilities: env.capabilities.posthog,
   });
+  const recordAsync = async <T>(operation: string, execute: () => Promise<T>): Promise<T> => {
+    const result = await execute();
+    posthogWorkspaceReporter.record(operation, result);
+    return result;
+  };
+  const recordSync = <T>(operation: string, execute: () => T): T => {
+    const result = execute();
+    posthogWorkspaceReporter.record(operation, result);
+    return result;
+  };
+  const posthogServices: PostHogToolServices = {
+    getOrganizations: async () => await recordAsync("organizations", async () => await posthogApi.getOrganizations()),
+    getProjects: async (organizationId?: string) => await recordAsync(
+      "projects",
+      async () => await posthogApi.getProjects(organizationId),
+    ),
+    listMcpTools: async (input) => await recordAsync(
+      "mcpTools",
+      async () => await posthogApi.listMcpTools(input),
+    ),
+    callMcpTool: async (toolName: string, args?: Record<string, unknown>) => await recordAsync(
+      "mcpCall",
+      async () => await posthogApi.callMcpTool(toolName, args),
+    ),
+    runQuery: async (name: string, query: string, refresh?: string) => await recordAsync(
+      "query",
+      async () => await posthogApi.runQuery(name, query, refresh),
+    ),
+    listErrors: async () => await recordAsync("errors", async () => await posthog.listErrorObservations()),
+    queryInsight: async (name: string, query: string) => await recordAsync(
+      "insight",
+      async () => await posthogApi.runInsightQuery(name, query),
+    ),
+    listEndpoints: (cwd?: string) => recordSync(
+      "endpointList",
+      () => posthogCli.listEndpoints(cwd),
+    ),
+    diffEndpoints: (path: string, cwd?: string) => recordSync(
+      "endpointDiff",
+      () => posthogCli.diffEndpoints(path, cwd),
+    ),
+    runEndpoint: (input) => recordSync(
+      "endpointRun",
+      () => posthogCli.runEndpoint(input),
+    ),
+  };
   const toolExecutor = new ToolExecutor({
     capabilities: env.capabilities,
     services: {
-      posthog: {
-        getOrganizations: async () => await posthogApi.getOrganizations(),
-        getProjects: async (organizationId) => await posthogApi.getProjects(organizationId),
-        runQuery: async (name, query, refresh) => await posthogApi.runQuery(name, query, refresh),
-        listErrors: async () => await posthog.listErrorObservations(),
-        queryInsight: async (name, query) => await posthogApi.runInsightQuery(name, query),
-        diffEndpoints: (path, cwd) => posthogCli.diffEndpoints(path, cwd),
-        runEndpoint: (input) => posthogCli.runEndpoint(input),
-      },
+      posthog: posthogServices,
       shell: {
         safeRoots: env.capabilities.shell.safeRoots,
         execute: (input) => ShellExecutor.execute(input, env.capabilities.shell.safeRoots),
@@ -83,8 +124,7 @@ export const bootstrapRuntime = (): RuntimeBootstrap => {
     brain,
     monitorLoop,
     posthog,
-    posthogApi,
-    posthogCli,
+    posthogServices,
     store,
   });
 

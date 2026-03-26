@@ -1,4 +1,6 @@
-import { generateText, stepCountIs, tool, type ModelMessage } from "ai";
+/* eslint-disable no-console */
+
+import { generateText, stepCountIs, tool, type ModelMessage, type ToolSet } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { AgentExecutionMode, AgentFinding, ConversationMessage, ConversationThread } from "@clog/types";
 import type { AiRuntimeConfig } from "../config";
@@ -24,7 +26,7 @@ export interface BrainServiceConfig {
   readonly registeredTools?: readonly AnyRegisteredTool[];
   readonly providerTools?: readonly ProviderFunctionTool[];
   readonly toolExecutor?: ToolExecutor | null;
-  readonly fetchFn?: typeof fetch;
+  readonly fetchFn?: FetchFn;
 }
 
 export interface BrainReplyInput {
@@ -32,6 +34,13 @@ export interface BrainReplyInput {
   readonly message: string;
   readonly findings: readonly AgentFinding[];
 }
+
+interface BrainModelPayload {
+  readonly systemPrompt: string;
+  readonly messages: readonly ModelMessage[];
+}
+
+type FetchFn = (input: URL | RequestInfo, init?: RequestInit) => Promise<Response>;
 
 export class BrainService {
   private readonly temperature: number;
@@ -44,8 +53,9 @@ export class BrainService {
   private readonly registeredTools: readonly AnyRegisteredTool[];
   private readonly providerTools: readonly ProviderFunctionTool[];
   private readonly toolExecutor: ToolExecutor | null;
-  private readonly fetchFn: typeof fetch;
+  private readonly fetchFn: FetchFn;
   private readonly maxToolRounds = 5;
+  private readonly maxConversationContextTokens = 2_000;
 
   constructor(config: BrainServiceConfig = {}) {
     const aiConfig = config.aiConfig;
@@ -68,8 +78,9 @@ export class BrainService {
     }
 
     try {
-      const { systemPrompt, messages } = this.buildMessages(input.thread, input.findings);
-      const response = await this.callLlm(systemPrompt, messages);
+      const payload = this.buildModelPayload(input.thread, input.findings);
+      this.logModelDispatch(payload);
+      const response = await this.callLlm(payload.systemPrompt, payload.messages);
       return response || this.buildFallbackReply(input.message, input.findings);
     } catch (error) {
       console.error("[brain] Falling back to local reply:", error);
@@ -77,26 +88,29 @@ export class BrainService {
     }
   }
 
-  private buildMessages(thread: ConversationThread, findings: readonly AgentFinding[]): {
-    readonly systemPrompt: string;
-    readonly messages: readonly ModelMessage[];
-  } {
+  private buildModelPayload(thread: ConversationThread, findings: readonly AgentFinding[]): BrainModelPayload {
     const promptBundle = loadAiPromptBundle();
-    const systemPrompt = [
-      buildSystemPrompt(promptBundle, this.availableTools),
-      "",
-      promptBundle.primaryModePrompt,
-      `Execution mode: ${this.executionMode}`,
-      this.buildFindingsSummary(findings),
-      promptBundle.wakeupPrompt ? `Wakeup guidance:\n${promptBundle.wakeupPrompt}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
+    const systemPrompt = buildSystemPrompt(promptBundle, {
+      tools: this.availableTools,
+      executionMode: this.executionMode,
+      findingsSummary: this.buildFindingsSummary(findings),
+      wakeupPrompt: promptBundle.wakeupPrompt,
+    });
 
     return {
       systemPrompt,
       messages: this.mapThreadMessages(thread.messages),
     };
+  }
+
+  private logModelDispatch(payload: BrainModelPayload): void {
+    console.log("[brain] dispatching model payload", JSON.stringify({
+      provider: this.aiConfig?.provider ?? "direct",
+      model: this.modelName,
+      toolNames: this.registeredTools.map((registeredTool) => registeredTool.name),
+      systemPrompt: payload.systemPrompt,
+      messages: payload.messages,
+    }, null, 2));
   }
 
   private buildFindingsSummary(findings: readonly AgentFinding[]): string {
@@ -113,13 +127,33 @@ export class BrainService {
   }
 
   private mapThreadMessages(messages: readonly ConversationMessage[]): ModelMessage[] {
-    return messages
-      .filter((message) => message.role === "system" || message.role === "user" || message.role === "agent")
-      .slice(-20)
-      .map((message) => ({
+    const eligibleMessages = messages.filter((message) => (
+      message.role === "system" || message.role === "user" || message.role === "agent"
+    ));
+    const selectedMessages: ModelMessage[] = [];
+    let usedTokens = 0;
+
+    for (let index = eligibleMessages.length - 1; index >= 0; index -= 1) {
+      const message = eligibleMessages[index]!;
+      const estimatedTokens = this.estimateMessageTokens(message.content);
+
+      if (selectedMessages.length > 0 && usedTokens + estimatedTokens > this.maxConversationContextTokens) {
+        break;
+      }
+
+      selectedMessages.push({
         role: message.role === "agent" ? "assistant" : message.role,
         content: message.content,
-      }));
+      });
+      usedTokens += estimatedTokens;
+    }
+
+    return selectedMessages.reverse();
+  }
+
+  private estimateMessageTokens(content: string): number {
+    // Keep this intentionally simple: roughly 4 characters per token plus a small per-message overhead.
+    return Math.max(1, Math.ceil(content.length / 4) + 8);
   }
 
   private async callLlm(systemPrompt: string, messages: readonly ModelMessage[]): Promise<string> {
@@ -130,7 +164,7 @@ export class BrainService {
     return await this.callProviderApi(this.toProviderMessages(systemPrompt, messages));
   }
 
-  private buildAiSdkTools(): Record<string, ReturnType<typeof tool>> | undefined {
+  private buildAiSdkTools(): ToolSet | undefined {
     if (!this.toolExecutor || this.registeredTools.length === 0) {
       return undefined;
     }
@@ -140,8 +174,8 @@ export class BrainService {
         registeredTool.name,
         tool({
           description: registeredTool.description,
-          inputSchema: registeredTool.inputSchema,
-          execute: async (input) => {
+          inputSchema: registeredTool.inputSchema as never,
+          execute: async (input: unknown) => {
             const result = await this.toolExecutor!.execute(registeredTool.name, input);
             if (!result.ok) {
               throw new Error(result.error?.message ?? result.content);
@@ -151,14 +185,14 @@ export class BrainService {
           },
         }),
       ]),
-    );
+    ) as ToolSet;
   }
 
   private async callOpenRouter(systemPrompt: string, messages: readonly ModelMessage[]): Promise<string> {
     const openrouter = createOpenRouter({
       apiKey: this.apiKey,
       compatibility: "strict",
-      fetch: this.fetchFn,
+      fetch: this.fetchFn as typeof fetch,
       headers: {
         "HTTP-Referer": "https://clog.local",
         "X-Title": "Clog",
@@ -168,7 +202,7 @@ export class BrainService {
     const result = await generateText({
       model: openrouter.chat(this.modelName),
       system: systemPrompt,
-      messages,
+      messages: [...messages],
       temperature: this.temperature,
       maxOutputTokens: 1200,
       tools,
@@ -198,7 +232,7 @@ export class BrainService {
   }
 
   private async callProviderApi(messages: ProviderRequestMessage[]): Promise<string> {
-    let conversation = [...messages];
+    const conversation = [...messages];
 
     for (let round = 0; round < this.maxToolRounds; round += 1) {
       const assistantMessage = await this.requestAssistantMessage(conversation);
@@ -243,8 +277,8 @@ export class BrainService {
       model: this.modelName,
       temperature: this.temperature,
       maxTokens: 1200,
-      messages,
-      tools: this.providerTools,
+      messages: [...messages],
+      tools: this.providerTools.length > 0 ? [...this.providerTools] : undefined,
     });
 
     const response = await this.fetchFn(`${this.baseUrl}/chat/completions`, {

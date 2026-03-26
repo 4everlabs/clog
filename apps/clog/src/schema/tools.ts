@@ -63,9 +63,11 @@ export type ToolFamily = z.infer<typeof ToolFamilySchema>;
 export const AgentToolNameSchema = z.enum([
   "posthog_get_organizations",
   "posthog_get_projects",
-  "posthog_run_query",
   "posthog_list_errors",
-  "posthog_query_insight",
+  "posthog_run_query",
+  "posthog_list_mcp_tools",
+  "posthog_call_mcp_tool",
+  "posthog_list_endpoints",
   "posthog_diff_endpoints",
   "posthog_run_endpoint",
   "shell_execute_command",
@@ -176,6 +178,40 @@ export const PostHogListErrorsInputSchema = z.object({}).strict();
 
 export const PostHogListErrorsResultSchema = z.object({
   observations: z.array(RuntimeObservationSchema),
+}).strict();
+
+export const PostHogListMcpToolsInputSchema = z.object({
+  nameFilter: z.string().min(1).optional(),
+  includeInputSchema: z.boolean().optional(),
+  limit: z.number().int().positive().max(200).optional(),
+}).strict();
+
+export const PostHogMcpToolSchema = z.object({
+  name: z.string().min(1),
+  title: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  inputSchema: z.unknown().optional(),
+}).strict();
+
+export const PostHogListMcpToolsResultSchema = z.object({
+  total: z.number().int().nonnegative(),
+  returned: z.number().int().nonnegative(),
+  tools: z.array(PostHogMcpToolSchema),
+}).strict();
+
+export const PostHogCallMcpToolInputSchema = z.object({
+  toolName: z.string().min(1),
+  arguments: z.object({}).catchall(z.unknown()).optional(),
+}).strict();
+
+export const PostHogCallMcpToolResultSchema = z.object({
+  toolName: z.string().min(1),
+  text: z.string(),
+  structuredContent: z.unknown().optional(),
+}).strict();
+
+export const PostHogListEndpointsInputSchema = z.object({
+  cwd: z.string().optional(),
 }).strict();
 
 export const PostHogEndpointDiffInputSchema = z.object({

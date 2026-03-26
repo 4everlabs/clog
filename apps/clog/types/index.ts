@@ -209,12 +209,38 @@ export interface PostHogProjectSummary {
   readonly projectToken: string | null;
 }
 
+export interface SurfacePostHogOrganizationsResponse {
+  readonly organizations: readonly PostHogOrganizationSummary[];
+}
+
+export interface SurfacePostHogProjectsResponse {
+  readonly organizationId: string;
+  readonly projects: readonly PostHogProjectSummary[];
+}
+
 export interface SurfacePostHogInsightResponse {
   readonly result: PostHogInsightQueryResult;
 }
 
 export interface SurfacePostHogErrorsResponse {
   readonly observations: readonly RuntimeObservation[];
+}
+
+export interface SurfacePostHogMcpToolsResponse {
+  readonly total: number;
+  readonly returned: number;
+  readonly tools: ReadonlyArray<{
+    readonly name: string;
+    readonly title?: string | null;
+    readonly description?: string | null;
+    readonly inputSchema?: unknown;
+  }>;
+}
+
+export interface SurfacePostHogMcpToolCallResponse {
+  readonly toolName: string;
+  readonly text: string;
+  readonly structuredContent?: unknown;
 }
 
 export interface PostHogEndpointDiffRequest {
@@ -243,6 +269,10 @@ export interface PostHogCliCommandResponse {
 }
 
 export interface SurfacePostHogEndpointDiffResponse {
+  readonly result: PostHogCliCommandResponse;
+}
+
+export interface SurfacePostHogEndpointListResponse {
   readonly result: PostHogCliCommandResponse;
 }
 

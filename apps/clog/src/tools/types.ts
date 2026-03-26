@@ -20,7 +20,27 @@ export interface PostHogToolServices {
   }>;
   runQuery(name: string, query: string, refresh?: string): Promise<PostHogInsightQueryResult>;
   listErrors(): Promise<readonly RuntimeObservation[]>;
+  listMcpTools(input: {
+    readonly nameFilter?: string;
+    readonly includeInputSchema?: boolean;
+    readonly limit?: number;
+  }): Promise<{
+    readonly total: number;
+    readonly returned: number;
+    readonly tools: ReadonlyArray<{
+      readonly name: string;
+      readonly title?: string | null;
+      readonly description?: string | null;
+      readonly inputSchema?: unknown;
+    }>;
+  }>;
+  callMcpTool(toolName: string, args?: Record<string, unknown>): Promise<{
+    readonly toolName: string;
+    readonly text: string;
+    readonly structuredContent?: unknown;
+  }>;
   queryInsight(name: string, query: string): Promise<PostHogInsightQueryResult>;
+  listEndpoints(cwd?: string): PostHogCliCommandResponse;
   diffEndpoints(path: string, cwd?: string): PostHogCliCommandResponse;
   runEndpoint(input: PostHogEndpointRunRequest): PostHogCliCommandResponse;
 }

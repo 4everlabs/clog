@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 import type { AgentExecutionMode, IntegrationCapabilitySnapshot, SurfaceChannelKind } from "@clog/types";
 import type { ToolSummary } from "./schema/tools";
 import { RuntimeToolsConfigSchema, type RuntimeToolsConfig } from "./schema/tools";
@@ -60,6 +60,26 @@ const resolveWorkspacePath = (value: string | undefined, fallback: string): stri
   return resolve(process.cwd(), target);
 };
 
+const isWithinRoot = (candidate: string, root: string): boolean => {
+  const normalizedCandidate = resolve(candidate);
+  const normalizedRoot = resolve(root);
+  return normalizedCandidate === normalizedRoot || normalizedCandidate.startsWith(`${normalizedRoot}${sep}`);
+};
+
+const resolvePathWithinRoot = (
+  value: string | undefined,
+  fallback: string,
+  root: string,
+  label: string,
+): string => {
+  const target = readOptionalString(value) ?? fallback;
+  const candidate = resolve(root, target);
+  if (!isWithinRoot(candidate, root)) {
+    throw new Error(`${label} must stay inside ${root}. Received: ${candidate}`);
+  }
+  return candidate;
+};
+
 export const getRuntimeProcessEnv = (): NodeJS.ProcessEnv => {
   return typeof Bun !== "undefined" ? Bun.env : process.env;
 };
@@ -93,6 +113,7 @@ export interface PostHogInsightMonitorConfig {
 
 export interface PostHogRuntimeConfig {
   readonly host: string;
+  readonly workspaceDir: string;
   readonly projectId: string | null;
   readonly personalApiKey: string | null;
   readonly projectApiKey: string | null;
@@ -129,8 +150,26 @@ export interface AiRuntimeConfig {
 
 export interface TelegramRuntimeConfig {
   readonly botToken: string | null;
+  readonly userName: string | null;
   readonly allowedChatIds: readonly number[];
 }
+
+const readSettingsMonitorIntervalMs = (storage: RuntimeStorageConfig): number | null => {
+  const value = readOptionalJson<unknown>(join(storage.readOnlyDir, "settings.json"));
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const monitor = (value as { monitor?: unknown }).monitor;
+  if (!monitor || typeof monitor !== "object") {
+    return null;
+  }
+
+  const intervalMs = (monitor as { intervalMs?: unknown }).intervalMs;
+  return typeof intervalMs === "number" && Number.isFinite(intervalMs)
+    ? Math.max(5_000, intervalMs)
+    : null;
+};
 
 const readInsightMonitor = (
   env: NodeJS.ProcessEnv,
@@ -150,12 +189,13 @@ const readInsightMonitor = (
   };
 };
 
-const createPostHogConfig = (env: NodeJS.ProcessEnv): PostHogRuntimeConfig => {
+const createPostHogConfig = (env: NodeJS.ProcessEnv, storage: RuntimeStorageConfig): PostHogRuntimeConfig => {
   const primaryInsight = readInsightMonitor(env, "POSTHOG_CLAW_POSTHOG_PRIMARY_INSIGHT", "Primary insight monitor");
   const secondaryInsight = readInsightMonitor(env, "POSTHOG_CLAW_POSTHOG_SECONDARY_INSIGHT", "Secondary insight monitor");
 
   return {
     host: normalizeHost(env.POSTHOG_CLAW_POSTHOG_HOST, "https://us.posthog.com"),
+    workspaceDir: storage.workspaceDir,
     projectId: readOptionalString(env.POSTHOG_CLAW_POSTHOG_PROJECT_ID)
       ?? readOptionalString(env.POSTHOG_PROJECT_ID),
     personalApiKey: readOptionalString(env.POSTHOG_CLAW_POSTHOG_PERSONAL_API_KEY)
@@ -163,7 +203,12 @@ const createPostHogConfig = (env: NodeJS.ProcessEnv): PostHogRuntimeConfig => {
     projectApiKey: readOptionalString(env.POSTHOG_CLAW_POSTHOG_PROJECT_API_KEY)
       ?? readOptionalString(env.POSTHOG_PROJECT_TOKEN),
     featureFlagsSecureApiKey: readOptionalString(env.POSTHOG_CLAW_POSTHOG_FEATURE_FLAGS_SECURE_KEY),
-    endpointsDir: resolveWorkspacePath(env.POSTHOG_CLAW_POSTHOG_ENDPOINTS_DIR, "posthog/endpoints"),
+    endpointsDir: resolvePathWithinRoot(
+      env.POSTHOG_CLAW_POSTHOG_ENDPOINTS_DIR,
+      "posthog/endpoints",
+      storage.workspaceDir,
+      "POSTHOG_CLAW_POSTHOG_ENDPOINTS_DIR",
+    ),
     cliBin: readOptionalString(env.POSTHOG_CLAW_POSTHOG_CLI_BIN) ?? "posthog-cli",
     cliTimeoutMs: Math.max(1_000, readInteger(env.POSTHOG_CLAW_POSTHOG_CLI_TIMEOUT_MS, 30_000)),
     requestTimeoutMs: Math.max(1_000, readInteger(env.POSTHOG_CLAW_POSTHOG_REQUEST_TIMEOUT_MS, 10_000)),
@@ -226,8 +271,10 @@ const readAllowedChatIds = (value: string | undefined): number[] => {
 };
 
 const createTelegramConfig = (env: NodeJS.ProcessEnv): TelegramRuntimeConfig => {
+  const userName = readOptionalString(env.TELEGRAM_BOT_USERNAME)?.replace(/^@/u, "") ?? null;
   return {
     botToken: readOptionalString(env.TELEGRAM_BOT_TOKEN),
+    userName,
     allowedChatIds: readAllowedChatIds(env.TELEGRAM_ALLOWED_CHATS),
   };
 };
@@ -266,11 +313,12 @@ export const loadAgentEnvironment = (env: NodeJS.ProcessEnv = getRuntimeProcessE
   const canCreatePullRequest = readBoolean(env.POSTHOG_CLAW_GITHUB_PR, false);
   const canPushBranch = readBoolean(env.POSTHOG_CLAW_GITHUB_PUSH, false);
   const requestedPort = readInteger(env.PORT, 3000);
-  const posthog = createPostHogConfig(env);
+  const storage = createRuntimeStorageConfig(env);
+  const posthog = createPostHogConfig(env, storage);
   const ai = createAiConfig(env);
   const telegram = createTelegramConfig(env);
   const channels = telegram.botToken ? appendChannel(requestedChannels, "telegram") : requestedChannels;
-  const storage = createRuntimeStorageConfig(env);
+  const monitorIntervalMs = readSettingsMonitorIntervalMs(storage) ?? 60_000;
   const runtimeTools = readRuntimeToolsConfig(storage);
   const hasPostHogAccess = hasPostHogManagementAccess(posthog);
   const capabilities: IntegrationCapabilitySnapshot = {
@@ -328,7 +376,7 @@ export const loadAgentEnvironment = (env: NodeJS.ProcessEnv = getRuntimeProcessE
     appName: env.POSTHOG_CLAW_APP_NAME?.trim() || "PostHog Claw",
     port: Number.isFinite(requestedPort) ? requestedPort : 3000,
     executionMode: readExecutionMode(env.POSTHOG_CLAW_EXECUTION_MODE),
-    monitorIntervalMs: Math.max(5_000, readInteger(env.POSTHOG_CLAW_MONITOR_INTERVAL_MS, 60_000)),
+    monitorIntervalMs,
     channels,
     posthog,
     ai,

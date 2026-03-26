@@ -1,11 +1,12 @@
 {
   "compilerOptions": {
-    "lib": ["ESNext"],
+    "lib": ["ESNext", "DOM"],
     "target": "ESNext",
     "module": "Preserve",
     "moduleDetection": "force",
     "jsx": "react-jsx",
     "allowJs": false,
+    "types": ["bun"],
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
@@ -15,11 +16,10 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
-    "baseUrl": ".",
-  "paths": {
-    "@clog/core": ["./apps/clog/src/index.ts"],
-    "@clog/types": ["./apps/types/index.ts"]
-  }
+    "paths": {
+      "@clog/core": ["./apps/clog/src/index.ts"],
+      "@clog/types": ["./apps/types/index.ts"]
+    }
   },
   "include": [
     "index.ts",

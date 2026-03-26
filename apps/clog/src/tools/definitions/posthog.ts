@@ -1,15 +1,19 @@
 import {
   CliCommandResultSchema,
+  PostHogCallMcpToolInputSchema,
+  PostHogCallMcpToolResultSchema,
   PostHogEndpointDiffInputSchema,
   PostHogEndpointRunInputSchema,
   PostHogGetOrganizationsInputSchema,
   PostHogGetOrganizationsResultSchema,
   PostHogGetProjectsInputSchema,
   PostHogGetProjectsResultSchema,
-  PostHogInsightQueryInputSchema,
   PostHogInsightQueryResultSchema,
+  PostHogListEndpointsInputSchema,
   PostHogListErrorsInputSchema,
   PostHogListErrorsResultSchema,
+  PostHogListMcpToolsInputSchema,
+  PostHogListMcpToolsResultSchema,
   PostHogRunQueryInputSchema,
 } from "../../schema/tools";
 import type { RegisteredTool } from "../types";
@@ -66,6 +70,68 @@ export const posthogTools = [
     },
   },
   {
+    name: "posthog_list_errors",
+    title: "PostHog Error Observations",
+    description: "List active PostHog error tracking issues from the project-pinned MCP session.",
+    integration: "posthog",
+    approvalRequired: false,
+    implemented: true,
+    inputSchema: PostHogListErrorsInputSchema,
+    outputSchema: PostHogListErrorsResultSchema,
+    isEnabled(capabilities) {
+      return capabilities.posthog.canReadErrors;
+    },
+    async execute(services) {
+      if (!services.posthog) {
+        throw new Error("PostHog services are unavailable");
+      }
+
+      return {
+        observations: await services.posthog.listErrors(),
+      };
+    },
+  },
+  {
+    name: "posthog_list_mcp_tools",
+    title: "PostHog MCP Tool Catalog",
+    description: "List the full PostHog MCP tool catalog currently available to this project-pinned session. Use this to discover supported tool names and optionally inspect input schemas.",
+    integration: "posthog",
+    approvalRequired: false,
+    implemented: true,
+    inputSchema: PostHogListMcpToolsInputSchema,
+    outputSchema: PostHogListMcpToolsResultSchema,
+    isEnabled(capabilities) {
+      return capabilities.posthog.canReadInsights;
+    },
+    async execute(services, input) {
+      if (!services.posthog) {
+        throw new Error("PostHog services are unavailable");
+      }
+
+      return await services.posthog.listMcpTools(input);
+    },
+  },
+  {
+    name: "posthog_call_mcp_tool",
+    title: "PostHog MCP Tool Call",
+    description: "Call any available PostHog MCP tool directly by name with JSON arguments. Use `posthog_list_mcp_tools` first when you need to discover the exact tool name or schema.",
+    integration: "posthog",
+    approvalRequired: false,
+    implemented: true,
+    inputSchema: PostHogCallMcpToolInputSchema,
+    outputSchema: PostHogCallMcpToolResultSchema,
+    isEnabled(capabilities) {
+      return capabilities.posthog.canReadInsights;
+    },
+    async execute(services, input) {
+      if (!services.posthog) {
+        throw new Error("PostHog services are unavailable");
+      }
+
+      return await services.posthog.callMcpTool(input.toolName, input.arguments);
+    },
+  },
+  {
     name: "posthog_run_query",
     title: "PostHog HogQL Query",
     description: "Run a typed PostHog HogQL query against the configured project using the project query API.",
@@ -86,45 +152,23 @@ export const posthogTools = [
     },
   },
   {
-    name: "posthog_list_errors",
-    title: "PostHog Error Observations",
-    description: "List current PostHog error observations that the runtime has permission to read.",
+    name: "posthog_list_endpoints",
+    title: "PostHog Endpoint List",
+    description: "List PostHog endpoints available from the configured runtime workspace.",
     integration: "posthog",
     approvalRequired: false,
     implemented: true,
-    inputSchema: PostHogListErrorsInputSchema,
-    outputSchema: PostHogListErrorsResultSchema,
+    inputSchema: PostHogListEndpointsInputSchema,
+    outputSchema: CliCommandResultSchema,
     isEnabled(capabilities) {
-      return capabilities.posthog.canReadErrors;
+      return capabilities.posthog.canManageEndpoints;
     },
-    async execute(services) {
+    execute(services, input) {
       if (!services.posthog) {
         throw new Error("PostHog services are unavailable");
       }
 
-      return {
-        observations: await services.posthog.listErrors(),
-      };
-    },
-  },
-  {
-    name: "posthog_query_insight",
-    title: "PostHog Insight Query",
-    description: "Run a typed PostHog insight query by name and query string.",
-    integration: "posthog",
-    approvalRequired: false,
-    implemented: true,
-    inputSchema: PostHogInsightQueryInputSchema,
-    outputSchema: PostHogInsightQueryResultSchema,
-    isEnabled(capabilities) {
-      return capabilities.posthog.canReadInsights;
-    },
-    async execute(services, input) {
-      if (!services.posthog) {
-        throw new Error("PostHog services are unavailable");
-      }
-
-      return await services.posthog.queryInsight(input.name, input.query);
+      return services.posthog.listEndpoints(input.cwd);
     },
   },
   {
