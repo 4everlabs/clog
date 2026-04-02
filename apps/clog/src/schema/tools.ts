@@ -106,6 +106,10 @@ export const AgentToolNameSchema = z.enum([
   "runtime_get_state_snapshot",
   "runtime_get_recent_logs",
   "runtime_get_monitoring_snapshot",
+  "runtime_list_actions",
+  "runtime_run_action",
+  "runtime_list_routines",
+  "runtime_run_routine",
   "runtime_read_knowledge",
   "shell_execute_command",
   "github_read_repository",
@@ -671,7 +675,7 @@ const RuntimeSnapshotMessageSchema = z.object({
 const RuntimeSnapshotThreadSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
-  channel: z.enum(["web", "telegram", "cli", "system"]),
+  channel: z.enum(["web", "telegram", "tui", "system"]),
   updatedAt: z.number().int().nonnegative(),
   messageCount: z.number().int().nonnegative(),
   messages: z.array(RuntimeSnapshotMessageSchema),
@@ -851,6 +855,93 @@ export const VercelTriggerDeployResultSchema = z.object({
 export const ToolExecutionErrorSchema = z.object({
   code: z.string().min(1),
   message: z.string().min(1),
+}).strict();
+
+const RuntimeActionParameterSchema = z.object({
+  name: z.string().min(1),
+  type: z.enum(["string", "number", "boolean", "object", "array"]),
+  required: z.boolean(),
+  description: z.string().min(1),
+}).strict();
+
+const RuntimeActionCatalogItemSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  description: z.string().min(1),
+  summary: z.string().min(1),
+  tags: z.array(z.string().min(1)),
+  available: z.boolean(),
+  toolName: AgentToolNameSchema.nullable(),
+  inputFields: z.array(RuntimeActionParameterSchema),
+}).strict();
+
+const RuntimeRoutineCatalogItemSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  description: z.string().min(1),
+  summary: z.string().min(1),
+  tags: z.array(z.string().min(1)),
+  available: z.boolean(),
+  actionIds: z.array(z.string().min(1)),
+  inputFields: z.array(RuntimeActionParameterSchema),
+}).strict();
+
+export const RuntimeListActionsInputSchema = z.object({
+  tag: z.string().min(1).optional(),
+  availableOnly: z.boolean().optional(),
+}).strict();
+
+export const RuntimeListActionsResultSchema = z.object({
+  generatedAt: z.number().int().nonnegative(),
+  actions: z.array(RuntimeActionCatalogItemSchema),
+}).strict();
+
+export const RuntimeRunActionInputSchema = z.object({
+  actionId: z.string().min(1),
+  arguments: z.object({}).catchall(z.unknown()).optional(),
+}).strict();
+
+export const RuntimeRunActionResultSchema = z.object({
+  actionId: z.string().min(1),
+  title: z.string().min(1),
+  ok: z.boolean(),
+  summary: z.string().min(1),
+  toolName: AgentToolNameSchema.nullable(),
+  output: z.unknown().optional(),
+  error: ToolExecutionErrorSchema.optional(),
+}).strict();
+
+export const RuntimeListRoutinesInputSchema = z.object({
+  tag: z.string().min(1).optional(),
+  availableOnly: z.boolean().optional(),
+}).strict();
+
+export const RuntimeListRoutinesResultSchema = z.object({
+  generatedAt: z.number().int().nonnegative(),
+  routines: z.array(RuntimeRoutineCatalogItemSchema),
+}).strict();
+
+const RuntimeRoutineStepResultSchema = z.object({
+  actionId: z.string().min(1),
+  title: z.string().min(1),
+  ok: z.boolean(),
+  summary: z.string().min(1),
+  toolName: AgentToolNameSchema.nullable(),
+  output: z.unknown().optional(),
+  error: ToolExecutionErrorSchema.optional(),
+}).strict();
+
+export const RuntimeRunRoutineInputSchema = z.object({
+  routineId: z.string().min(1),
+  arguments: z.object({}).catchall(z.unknown()).optional(),
+}).strict();
+
+export const RuntimeRunRoutineResultSchema = z.object({
+  routineId: z.string().min(1),
+  title: z.string().min(1),
+  ok: z.boolean(),
+  summary: z.string().min(1),
+  steps: z.array(RuntimeRoutineStepResultSchema),
 }).strict();
 
 export const ToolExecutionResultEnvelopeSchema = z.object({

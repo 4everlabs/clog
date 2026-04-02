@@ -22,7 +22,7 @@ Notes:
 The first line is a header record that identifies the conversation. Later note entries can be appended as additional JSONL lines.
 
 ```jsonl
-{"type":"conversation-header","schemaVersion":1,"fileKind":"notes","conversationId":"conversation-2026-03-26T01-32-20-418Z-thread_abc123","threadId":"thread_abc123","channel":"cli","title":"Operator Conversation","createdAt":1774402340418,"updatedAt":1774402340418}
+{"type":"conversation-header","schemaVersion":1,"fileKind":"notes","conversationId":"conversation-2026-03-26T01-32-20-418Z-thread_abc123","threadId":"thread_abc123","channel":"tui","title":"Operator Conversation","createdAt":1774402340418,"updatedAt":1774402340418}
 ```
 
 Recommended future note entries:
@@ -36,9 +36,9 @@ Recommended future note entries:
 `chat.jsonl` starts with the same style of header record followed by one message record per line.
 
 ```jsonl
-{"type":"conversation-header","schemaVersion":1,"fileKind":"chat","conversationId":"conversation-2026-03-26T01-32-20-418Z-thread_abc123","threadId":"thread_abc123","channel":"cli","title":"Operator Conversation","createdAt":1774402340418,"updatedAt":1774402400000}
-{"type":"message","conversationId":"conversation-2026-03-26T01-32-20-418Z-thread_abc123","threadId":"thread_abc123","messageId":"msg_01","role":"system","channel":"cli","content":"PostHog Claw is online.","createdAt":1774402340418}
-{"type":"message","conversationId":"conversation-2026-03-26T01-32-20-418Z-thread_abc123","threadId":"thread_abc123","messageId":"msg_02","role":"user","channel":"cli","content":"what errors happened today?","createdAt":1774402350000}
+{"type":"conversation-header","schemaVersion":1,"fileKind":"chat","conversationId":"conversation-2026-03-26T01-32-20-418Z-thread_abc123","threadId":"thread_abc123","channel":"tui","title":"Operator Conversation","createdAt":1774402340418,"updatedAt":1774402400000}
+{"type":"message","conversationId":"conversation-2026-03-26T01-32-20-418Z-thread_abc123","threadId":"thread_abc123","messageId":"msg_01","role":"system","channel":"tui","content":"PostHog Claw is online.","createdAt":1774402340418}
+{"type":"message","conversationId":"conversation-2026-03-26T01-32-20-418Z-thread_abc123","threadId":"thread_abc123","messageId":"msg_02","role":"user","channel":"tui","content":"what errors happened today?","createdAt":1774402350000}
 ```
 
 Legacy `storage/runtime.sqlite` files are not used anymore and are removed during runtime setup.

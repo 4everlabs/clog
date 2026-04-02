@@ -17,6 +17,7 @@ import { syncRuntimeInstanceTemplate } from "../../../tests/runtime-instance-tem
 import { FileRuntimeStore } from "./storage/file-runtime-store";
 import type { RuntimeStore } from "./storage/chat";
 import { RuntimeReadService } from "./runtime/read-service";
+import { RuntimeOrchestrationService } from "./runtime/orchestration-service";
 import { ToolExecutor } from "./execution/tool-executor";
 import { ShellExecutor } from "./execution/shell-executor";
 import { buildProviderTools, resolveEnabledTools } from "./tools/registry";
@@ -54,6 +55,7 @@ export const bootstrapRuntime = (): RuntimeBootstrap => {
     capabilities: env.capabilities.posthog,
   });
   const notion = new NotionIntegrationClient(env.notion);
+  let toolExecutor: ToolExecutor | null = null;
   const recordAsync = async <T>(operation: string, execute: () => Promise<T>): Promise<T> => {
     const result = await execute();
     posthogWorkspaceReporter.record(operation, result);
@@ -112,14 +114,33 @@ export const bootstrapRuntime = (): RuntimeBootstrap => {
       () => posthogCli.runEndpoint(input),
     ),
   };
-  const toolExecutor = new ToolExecutor({
+  const runtimeOrchestrationService = new RuntimeOrchestrationService({
+    capabilities: env.capabilities,
+    executeTool: async (toolName, args) => {
+      if (!toolExecutor) {
+        throw new Error("Tool executor is not ready");
+      }
+      return await toolExecutor.execute(toolName, args);
+    },
+  });
+  const runtimeServices = {
+    getStateSnapshot: (input?: Parameters<RuntimeReadService["getStateSnapshot"]>[0]) => runtimeReadService.getStateSnapshot(input),
+    getRecentLogs: (input?: Parameters<RuntimeReadService["getRecentLogs"]>[0]) => runtimeReadService.getRecentLogs(input),
+    getMonitoringSnapshot: (input?: Parameters<RuntimeReadService["getMonitoringSnapshot"]>[0]) => runtimeReadService.getMonitoringSnapshot(input),
+    listActions: (input?: Parameters<RuntimeOrchestrationService["listActions"]>[0]) => runtimeOrchestrationService.listActions(input),
+    runAction: async (input: Parameters<RuntimeOrchestrationService["runAction"]>[0]) => await runtimeOrchestrationService.runAction(input),
+    listRoutines: (input?: Parameters<RuntimeOrchestrationService["listRoutines"]>[0]) => runtimeOrchestrationService.listRoutines(input),
+    runRoutine: async (input: Parameters<RuntimeOrchestrationService["runRoutine"]>[0]) => await runtimeOrchestrationService.runRoutine(input),
+    readKnowledge: (input?: Parameters<RuntimeReadService["readKnowledge"]>[0]) => runtimeReadService.readKnowledge(input),
+  };
+  toolExecutor = new ToolExecutor({
     capabilities: env.capabilities,
     services: {
       posthog: posthogServices,
       notion: {
         getTodoList: async (input) => await notionApi.getTodoList(input),
       },
-      runtime: runtimeReadService,
+      runtime: runtimeServices,
       shell: {
         safeRoots: env.capabilities.shell.safeRoots,
         execute: (input) => ShellExecutor.execute(input, env.capabilities.shell.safeRoots),

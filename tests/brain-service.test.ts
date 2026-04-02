@@ -6,14 +6,14 @@ import type { ToolSummary } from "../apps/clog/src/schema/tools";
 const createThread = (message: string): ConversationThread => ({
   id: "thread_1",
   title: "Test Thread",
-  channel: "cli",
+  channel: "tui",
   createdAt: 1,
   updatedAt: 2,
   messages: [
     {
       id: "msg_1",
       role: "user",
-      channel: "cli",
+      channel: "tui",
       content: message,
       createdAt: 2,
     },
@@ -23,13 +23,13 @@ const createThread = (message: string): ConversationThread => ({
 const createThreadWithMessages = (messages: string[]): ConversationThread => ({
   id: "thread_long",
   title: "Long Thread",
-  channel: "cli",
+  channel: "tui",
   createdAt: 1,
   updatedAt: 2,
   messages: messages.map((content, index) => ({
     id: `msg_${index + 1}`,
     role: index % 2 === 0 ? "user" : "agent",
-    channel: "cli",
+    channel: "tui",
     content,
     createdAt: index + 1,
   })),

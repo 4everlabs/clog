@@ -107,6 +107,10 @@ describe("loadAgentEnvironment", () => {
       "runtime_get_state_snapshot",
       "runtime_get_recent_logs",
       "runtime_get_monitoring_snapshot",
+      "runtime_list_actions",
+      "runtime_run_action",
+      "runtime_list_routines",
+      "runtime_run_routine",
       "runtime_read_knowledge",
     ]);
   });
@@ -117,7 +121,7 @@ describe("loadAgentEnvironment", () => {
       POSTHOG_CLAW_POSTHOG_PROJECT_ID: "12345",
     });
 
-    expect(env.channels).toEqual(["cli"]);
+    expect(env.channels).toEqual(["tui"]);
     expect(env.capabilities.posthog.canReadInsights).toBe(false);
     expect(env.capabilities.posthog.canReadErrors).toBe(false);
     expect(env.capabilities.posthog.canManageEndpoints).toBe(false);
@@ -130,6 +134,10 @@ describe("loadAgentEnvironment", () => {
       "runtime_get_state_snapshot",
       "runtime_get_recent_logs",
       "runtime_get_monitoring_snapshot",
+      "runtime_list_actions",
+      "runtime_run_action",
+      "runtime_list_routines",
+      "runtime_run_routine",
       "runtime_read_knowledge",
     ]);
   });
@@ -139,12 +147,12 @@ describe("loadAgentEnvironment", () => {
       OPENROUTER_API_KEY: "sk-or-live",
       TELEGRAM_BOT_TOKEN: "123456:telegram-live-token",
       TELEGRAM_BOT_USERNAME: "@clog4everbot",
-      POSTHOG_CLAW_CHANNELS: "cli",
+      POSTHOG_CLAW_CHANNELS: "tui",
     });
 
     expect(env.ai.provider).toBe("openrouter");
     expect(env.ai.model).toBe("stepfun/step-3.5-flash");
-    expect(env.channels).toEqual(["cli", "telegram"]);
+    expect(env.channels).toEqual(["tui", "telegram"]);
     expect(env.telegram.botToken).toBe("123456:telegram-live-token");
     expect(env.telegram.userName).toBe("clog4everbot");
   });
@@ -260,10 +268,14 @@ describe("loadAgentEnvironment", () => {
         "posthog_read_data_warehouse_schema",
         "posthog_execute_sql",
         "posthog_search_docs",
-        "runtime_get_state_snapshot",
-        "runtime_get_recent_logs",
-        "runtime_get_monitoring_snapshot",
-        "runtime_read_knowledge",
+      "runtime_get_state_snapshot",
+      "runtime_get_recent_logs",
+      "runtime_get_monitoring_snapshot",
+      "runtime_list_actions",
+      "runtime_run_action",
+      "runtime_list_routines",
+      "runtime_run_routine",
+      "runtime_read_knowledge",
       ]);
       expect(env.capabilities.shell.safeRoots).toEqual([
         env.storage.workspaceDir,

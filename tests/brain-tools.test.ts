@@ -3,6 +3,7 @@ import type { AgentFinding, ConversationThread, IntegrationCapabilitySnapshot } 
 import { BrainService } from "../apps/clog/src/brain/service";
 import { ToolExecutor } from "../apps/clog/src/execution/tool-executor";
 import { buildProviderTools, summarizeEnabledTools } from "../apps/clog/src/tools/registry";
+import type { RuntimeToolServices } from "../apps/clog/src/tools/types";
 
 const createCapabilities = (): IntegrationCapabilitySnapshot => ({
   posthog: {
@@ -24,7 +25,7 @@ const createCapabilities = (): IntegrationCapabilitySnapshot => ({
   },
   chat: {
     canSendOperatorMessages: true,
-    supportedChannels: ["cli"],
+    supportedChannels: ["tui"],
   },
   notion: {
     canReadTodo: false,
@@ -39,14 +40,14 @@ const createCapabilities = (): IntegrationCapabilitySnapshot => ({
 const createThread = (message: string): ConversationThread => ({
   id: "thread_1",
   title: "Tool Thread",
-  channel: "cli",
+  channel: "tui",
   createdAt: 1,
   updatedAt: 2,
   messages: [
     {
       id: "msg_1",
       role: "user",
-      channel: "cli",
+      channel: "tui",
       content: message,
       createdAt: 2,
     },
@@ -67,7 +68,7 @@ const createFinding = (): AgentFinding => ({
   proposedActions: [],
 });
 
-const createRuntimeServices = () => ({
+const createRuntimeServices = (): RuntimeToolServices => ({
   getStateSnapshot: () => ({
     generatedAt: 1,
     status: "idle",
@@ -86,6 +87,29 @@ const createRuntimeServices = () => ({
     latestPerformanceReport: null,
     recentPerformanceReports: [],
     recentPostHogOperations: [],
+  }),
+  listActions: () => ({
+    generatedAt: 1,
+    actions: [],
+  }),
+  runAction: async () => ({
+    actionId: "posthog.dashboard_snapshot",
+    title: "PostHog Dashboard Snapshot",
+    ok: true,
+    summary: "Action completed.",
+    toolName: "posthog_get_dashboard_snapshot",
+    output: {},
+  }),
+  listRoutines: () => ({
+    generatedAt: 1,
+    routines: [],
+  }),
+  runRoutine: async () => ({
+    routineId: "posthog.incident_triage",
+    title: "PostHog Incident Triage",
+    ok: true,
+    summary: "Routine completed.",
+    steps: [],
   }),
   readKnowledge: () => ({
     availablePaths: ["knowledge/example.md"],
@@ -283,6 +307,10 @@ describe("BrainService tool loop", () => {
       "runtime_get_state_snapshot",
       "runtime_get_recent_logs",
       "runtime_get_monitoring_snapshot",
+      "runtime_list_actions",
+      "runtime_run_action",
+      "runtime_list_routines",
+      "runtime_run_routine",
       "runtime_read_knowledge",
     ]);
     expect(JSON.stringify(requests[1]?.messages)).toContain("posthog_run_query");

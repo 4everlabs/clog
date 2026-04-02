@@ -22,7 +22,7 @@ const createCapabilities = (): IntegrationCapabilitySnapshot => ({
   },
   chat: {
     canSendOperatorMessages: true,
-    supportedChannels: ["cli"],
+    supportedChannels: ["tui"],
   },
   notion: {
     canReadTodo: true,
@@ -60,6 +60,10 @@ describe("tool registry", () => {
       "runtime_get_state_snapshot",
       "runtime_get_recent_logs",
       "runtime_get_monitoring_snapshot",
+      "runtime_list_actions",
+      "runtime_run_action",
+      "runtime_list_routines",
+      "runtime_run_routine",
       "runtime_read_knowledge",
       "shell_execute_command",
     ]);
@@ -90,6 +94,10 @@ describe("tool registry", () => {
       "runtime_get_state_snapshot",
       "runtime_get_recent_logs",
       "runtime_get_monitoring_snapshot",
+      "runtime_list_actions",
+      "runtime_run_action",
+      "runtime_list_routines",
+      "runtime_run_routine",
       "runtime_read_knowledge",
       "shell_execute_command",
     ]);

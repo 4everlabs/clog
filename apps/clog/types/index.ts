@@ -6,7 +6,7 @@ export type IntegrationKind = "posthog" | "github" | "vercel" | "chat" | "notion
 
 export type IntegrationStatus = "ready" | "degraded" | "missing-config";
 
-export type SurfaceChannelKind = "web" | "telegram" | "cli" | "system";
+export type SurfaceChannelKind = "web" | "telegram" | "tui" | "system";
 
 export type FindingSeverity = "info" | "warning" | "critical";
 

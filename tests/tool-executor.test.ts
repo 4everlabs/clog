@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { IntegrationCapabilitySnapshot, RuntimeObservation } from "@clog/types";
 import { ToolExecutor } from "../apps/clog/src/execution/tool-executor";
+import type { RuntimeToolServices } from "../apps/clog/src/tools/types";
 
 const createCapabilities = (): IntegrationCapabilitySnapshot => ({
   posthog: {
@@ -22,7 +23,7 @@ const createCapabilities = (): IntegrationCapabilitySnapshot => ({
   },
   chat: {
     canSendOperatorMessages: true,
-    supportedChannels: ["cli"],
+    supportedChannels: ["tui"],
   },
   notion: {
     canReadTodo: true,
@@ -44,7 +45,7 @@ const sampleObservation: RuntimeObservation = {
   detectedAt: 1,
 };
 
-const createRuntimeServices = () => ({
+const createRuntimeServices = (): RuntimeToolServices => ({
   getStateSnapshot: () => ({
     generatedAt: 1,
     status: "idle",
@@ -76,6 +77,47 @@ const createRuntimeServices = () => ({
     latestPerformanceReport: null,
     recentPerformanceReports: [],
     recentPostHogOperations: [],
+  }),
+  listActions: () => ({
+    generatedAt: 1,
+    actions: [{
+      id: "posthog.dashboard_snapshot",
+      title: "PostHog Dashboard Snapshot",
+      description: "Get the high-signal product and performance snapshot.",
+      summary: "Best first look.",
+      tags: ["posthog"],
+      available: true,
+      toolName: "posthog_get_dashboard_snapshot",
+      inputFields: [],
+    }],
+  }),
+  runAction: async () => ({
+    actionId: "posthog.dashboard_snapshot",
+    title: "PostHog Dashboard Snapshot",
+    ok: true,
+    summary: "Action completed.",
+    toolName: "posthog_get_dashboard_snapshot",
+    output: { summary: { pageviews: 10 } },
+  }),
+  listRoutines: () => ({
+    generatedAt: 1,
+    routines: [{
+      id: "posthog.incident_triage",
+      title: "PostHog Incident Triage",
+      description: "Incident routine",
+      summary: "Runs health plus errors.",
+      tags: ["posthog"],
+      available: true,
+      actionIds: ["posthog.dashboard_snapshot", "posthog.list_errors"],
+      inputFields: [],
+    }],
+  }),
+  runRoutine: async () => ({
+    routineId: "posthog.incident_triage",
+    title: "PostHog Incident Triage",
+    ok: true,
+    summary: "Routine completed.",
+    steps: [],
   }),
   readKnowledge: () => ({
     availablePaths: ["knowledge/example.md"],
@@ -539,6 +581,48 @@ describe("ToolExecutor", () => {
     expect(result.ok).toBe(true);
     expect(result.content).toContain("latest.log");
     expect(result.content).toContain("recent log line");
+  });
+
+  test("executes the runtime action runner tool", async () => {
+    const executor = new ToolExecutor({
+      capabilities: createCapabilities(),
+      services: {
+        posthog: null,
+        notion: null,
+        runtime: createRuntimeServices(),
+        shell: null,
+        github: null,
+        vercel: null,
+      },
+    });
+
+    const result = await executor.execute("runtime_run_action", {
+      actionId: "posthog.dashboard_snapshot",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.content).toContain("posthog.dashboard_snapshot");
+  });
+
+  test("executes the runtime routine runner tool", async () => {
+    const executor = new ToolExecutor({
+      capabilities: createCapabilities(),
+      services: {
+        posthog: null,
+        notion: null,
+        runtime: createRuntimeServices(),
+        shell: null,
+        github: null,
+        vercel: null,
+      },
+    });
+
+    const result = await executor.execute("runtime_run_routine", {
+      routineId: "posthog.incident_triage",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.content).toContain("posthog.incident_triage");
   });
 
   test("executes the runtime knowledge reader tool", async () => {

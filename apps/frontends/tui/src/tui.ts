@@ -3,15 +3,15 @@
 import { createInterface } from "readline";
 import { ClogApiClient } from "./clog-api";
 
-export interface CliOptions {
+export interface TuiOptions {
   client: ClogApiClient;
 }
 
-export class Cli {
+export class Tui {
   private readonly client: ClogApiClient;
   private currentThreadId: string | undefined;
 
-  constructor(options: CliOptions) {
+  constructor(options: TuiOptions) {
     this.client = options.client;
   }
 
@@ -235,7 +235,7 @@ Available Commands:
   /todo-all     Print the full Notion todo list, including done items
   /todo-status <status>
                 Print Notion todo items for a specific Progress value
-  /quit, /q     Exit the CLI
+  /quit, /q     Exit the TUI
 `);
   }
 
@@ -303,11 +303,12 @@ Available Commands:
         this.currentThreadId
           ? {
               channel: "cli",
+              channel: "tui",
               threadId: this.currentThreadId,
               message,
             }
           : {
-              channel: "cli",
+              channel: "tui",
               title: "Operator Conversation",
               message,
             },
@@ -422,6 +423,7 @@ Available Commands:
     try {
       const response = await this.client.queryPostHog({
         name: "CLI PostHog Query",
+        name: "TUI PostHog Query",
         query,
       });
       this.printJsonBlock("Query result:", response.result);
@@ -507,11 +509,11 @@ Available Commands:
   }
 }
 
-export const createCli = (client: ClogApiClient): Cli => {
-  return new Cli({ client });
+export const createTui = (client: ClogApiClient): Tui => {
+  return new Tui({ client });
 };
 
-export const startCli = async (client: ClogApiClient): Promise<void> => {
-  const cli = createCli(client);
-  await cli.start();
+export const startTui = async (client: ClogApiClient): Promise<void> => {
+  const tui = createTui(client);
+  await tui.start();
 };

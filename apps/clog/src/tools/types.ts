@@ -103,6 +103,45 @@ export interface RuntimeToolServices {
     readonly recentPerformanceReports: readonly unknown[];
     readonly recentPostHogOperations: readonly unknown[];
   };
+  listActions(input?: {
+    readonly tag?: string;
+    readonly availableOnly?: boolean;
+  }): {
+    readonly generatedAt: number;
+    readonly actions: readonly unknown[];
+  };
+  runAction(input: {
+    readonly actionId: string;
+    readonly arguments?: Record<string, unknown>;
+  }): Promise<{
+    readonly actionId: string;
+    readonly title: string;
+    readonly ok: boolean;
+    readonly summary: string;
+    readonly toolName: AgentToolName | null;
+    readonly output?: unknown;
+    readonly error?: {
+      readonly code: string;
+      readonly message: string;
+    };
+  }>;
+  listRoutines(input?: {
+    readonly tag?: string;
+    readonly availableOnly?: boolean;
+  }): {
+    readonly generatedAt: number;
+    readonly routines: readonly unknown[];
+  };
+  runRoutine(input: {
+    readonly routineId: string;
+    readonly arguments?: Record<string, unknown>;
+  }): Promise<{
+    readonly routineId: string;
+    readonly title: string;
+    readonly ok: boolean;
+    readonly summary: string;
+    readonly steps: readonly unknown[];
+  }>;
   readKnowledge(input?: {
     readonly path?: string;
     readonly maxChars?: number;

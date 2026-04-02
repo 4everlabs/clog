@@ -1,5 +1,5 @@
 {
-  "name": "@clog/frontend-cli",
+  "name": "@clog/frontend-tui",
   "version": "0.0.0",
   "type": "module",
   "private": true,

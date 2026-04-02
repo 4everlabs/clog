@@ -3,6 +3,14 @@ import {
   RuntimeGetMonitoringSnapshotResultSchema,
   RuntimeGetRecentLogsInputSchema,
   RuntimeGetRecentLogsResultSchema,
+  RuntimeListActionsInputSchema,
+  RuntimeListActionsResultSchema,
+  RuntimeListRoutinesInputSchema,
+  RuntimeListRoutinesResultSchema,
+  RuntimeRunActionInputSchema,
+  RuntimeRunActionResultSchema,
+  RuntimeRunRoutineInputSchema,
+  RuntimeRunRoutineResultSchema,
   RuntimeGetStateSnapshotInputSchema,
   RuntimeGetStateSnapshotResultSchema,
   RuntimeReadKnowledgeInputSchema,
@@ -69,6 +77,86 @@ export const runtimeTools = [
       }
 
       return services.runtime.getMonitoringSnapshot(input);
+    },
+  },
+  {
+    name: "runtime_list_actions",
+    title: "Runtime Action Catalog",
+    description: "List small modular runtime actions. Actions are the building blocks that routines string together.",
+    integration: "runtime",
+    approvalRequired: false,
+    implemented: true,
+    inputSchema: RuntimeListActionsInputSchema,
+    outputSchema: RuntimeListActionsResultSchema,
+    isEnabled() {
+      return true;
+    },
+    execute(services, input) {
+      if (!services.runtime) {
+        throw new Error("Runtime orchestration services are unavailable");
+      }
+
+      return services.runtime.listActions(input);
+    },
+  },
+  {
+    name: "runtime_run_action",
+    title: "Runtime Run Action",
+    description: "Run one small modular runtime action. Prefer actions when you only need a single step.",
+    integration: "runtime",
+    approvalRequired: false,
+    implemented: true,
+    inputSchema: RuntimeRunActionInputSchema,
+    outputSchema: RuntimeRunActionResultSchema,
+    isEnabled() {
+      return true;
+    },
+    async execute(services, input) {
+      if (!services.runtime) {
+        throw new Error("Runtime orchestration services are unavailable");
+      }
+
+      return await services.runtime.runAction(input);
+    },
+  },
+  {
+    name: "runtime_list_routines",
+    title: "Runtime Routine Catalog",
+    description: "List smart routines. Routines string multiple actions together without introducing heavy workflow overhead.",
+    integration: "runtime",
+    approvalRequired: false,
+    implemented: true,
+    inputSchema: RuntimeListRoutinesInputSchema,
+    outputSchema: RuntimeListRoutinesResultSchema,
+    isEnabled() {
+      return true;
+    },
+    execute(services, input) {
+      if (!services.runtime) {
+        throw new Error("Runtime orchestration services are unavailable");
+      }
+
+      return services.runtime.listRoutines(input);
+    },
+  },
+  {
+    name: "runtime_run_routine",
+    title: "Runtime Run Routine",
+    description: "Run a smart routine that strings multiple actions together into one compact investigation or review flow.",
+    integration: "runtime",
+    approvalRequired: false,
+    implemented: true,
+    inputSchema: RuntimeRunRoutineInputSchema,
+    outputSchema: RuntimeRunRoutineResultSchema,
+    isEnabled() {
+      return true;
+    },
+    async execute(services, input) {
+      if (!services.runtime) {
+        throw new Error("Runtime orchestration services are unavailable");
+      }
+
+      return await services.runtime.runRoutine(input);
     },
   },
   {

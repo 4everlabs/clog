@@ -113,8 +113,8 @@ describe("FileRuntimeStore", () => {
 
   test("creates conversation folders with seeded notes and channel-specific chat logs", () => {
     const store = createStore();
-    const cliThread = store.createThread("cli", "CLI thread");
-    const cliUserMessage = store.createMessage("user", "cli", "hello from cli");
+    const cliThread = store.createThread("tui", "TUI thread");
+    const cliUserMessage = store.createMessage("user", "tui", "hello from tui");
     store.appendMessages(cliThread.id, [cliUserMessage]);
 
     const telegramThread = store.seedOperatorThread("telegram");
@@ -130,7 +130,7 @@ describe("FileRuntimeStore", () => {
       type: "conversation-header",
       fileKind: "notes",
       threadId: cliThread.id,
-      channel: "cli",
+      channel: "tui",
       title: "CLI thread",
     });
     expect(cliChatEntries[0]).toMatchObject({

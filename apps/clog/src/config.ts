@@ -85,16 +85,16 @@ export const getRuntimeProcessEnv = (): NodeJS.ProcessEnv => {
 };
 
 const readChannels = (value: string | undefined): SurfaceChannelKind[] => {
-  const requested = (value ?? "cli")
+  const requested = (value ?? "tui")
     .split(",")
     .map((entry) => entry.trim())
     .filter(Boolean);
 
   const channels = requested.filter((entry): entry is SurfaceChannelKind => (
-    entry === "web" || entry === "telegram" || entry === "cli" || entry === "system"
+    entry === "web" || entry === "telegram" || entry === "tui" || entry === "system"
   ));
 
-  return channels.length > 0 ? channels : ["cli"];
+  return channels.length > 0 ? channels : ["tui"];
 };
 
 const appendChannel = (
