@@ -1,61 +1,78 @@
+<p align="center">
+  <img src="public/logo.png" alt="clog logo" width="180">
+</p>
+
 # clog
 
-Backend-first scaffold for the `clog` oversight agent (short for “claw post hog”).
+[![GitHub](https://img.shields.io/badge/GitHub-4everlabs%2Fclog-181717?logo=github)](https://github.com/4everlabs/clog)
+[![Bun](https://img.shields.io/badge/Bun-1.3.11-000000?logo=bun)](https://bun.sh/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6.0-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Oxlint](https://img.shields.io/badge/Lint-Oxlint-111111)](https://oxc.rs/docs/guide/usage/linter.html)
 
-## Workspace layout
+`clog` is a runtime-first oversight agent for watching product and runtime health, pulling evidence from systems like PostHog, GitHub, and Vercel, and surfacing clear findings through a shared backend.
 
-- `apps/clog`: runtime, monitoring loop, gateway, and AI bridge.
-- `apps/types`: shared contract for every frontend channel.
-- `apps/frontends/cli`: CLI frontend package.
-- `apps/frontends/web`: placeholder package for the eventual web UI.
-- `apps/frontends/telegram`: Telegram frontend package and runtime bridge.
-- `.runtime/`: runtime-centered settings, storage, and workspace structure (see below).
+## What is here
 
-## Commands
+- `apps/clog`: core runtime, gateway, monitoring loop, integrations, and AI bridge.
+- `apps/types`: shared contracts consumed by every frontend.
+- `apps/frontends/cli`: CLI client for the runtime.
+- `apps/frontends/telegram`: Telegram transport and bridge.
+- `apps/frontends/web`: web frontend placeholder.
+- `docs`: architecture, runtime setup, and service docs.
+
+## Quick start
 
 ```bash
 bun install
 bun run runtime
-bun run runtime --wakeup
-bun dev --wakeup
-bun run cli
-bun run lint
-bun run typecheck
-bun run test
-bun run build
-bun run ci         # lint + typecheck + test
-bun run update-all # update root + workspace deps to latest
 ```
 
-`bun run lint` executes `oxlint` across the repo, `bun run typecheck` runs `tsc`, `bun run test` runs the Bun test suite, and `bun run build` bundles `apps/clog` via `bun build`. `bun run runtime --wakeup` and `bun dev --wakeup` start the runtime, run one monitor pass immediately, and send the configured `wakeup.json` message through the normal model reply flow without waiting for any external timer. `bun run ci` stops on the first failure. `bun run update-all` bumps root and workspace dependencies to their latest versions.
+In another terminal:
 
-## Runtime bootstrapping
+```bash
+bun run cli
+```
 
-1. The environment loader in `apps/clog/src/config.ts` shapes capability flags, monitor intervals, and channel broadcasts.
-2. `apps/clog/src/brain/service.ts` is the shared chat brain used by the gateway and Telegram transport. It loads app-owned prompts from `apps/clog/src/brain`, plus the per-instance wakeup config from `.runtime/instances/<instance>/wakeup.json`.
-3. Monitoring, findings, and proposed actions stay in `apps/clog/src/monitoring`, `apps/clog/src/storage`, and `apps/clog/src/gateway`.
-4. The Telegram transport in `apps/frontends/telegram/src/telegram.ts` and the web/CLI connectors all talk to the same runtime surface on `apps/clog` so Telegram, GUI, and CLI can share the same domain model.
+## Common commands
 
-## Shell tooling
+```bash
+bun run runtime          # start the runtime
+bun run runtime --wakeup # start and run one wakeup pass immediately
+bun dev --wakeup         # dev entrypoint with immediate wakeup
+bun run cli              # start the CLI frontend
+bun run lint             # run oxlint
+bun run typecheck        # run tsc --noEmit
+bun run test             # run the Bun test suite
+bun run build            # bundle apps/clog to dist/
+bun run ci               # lint + typecheck + test
+bun run update-all       # update workspace deps to latest
+```
 
-`apps/clog/src/execution/shell-executor.ts` exposes a restricted `/api/shell` endpoint. The executor enforces a read-only allow list (`ls`, `cat`, `rg`, `grep`, `head`, `tail`, `wc`, `find`), keeps execution inside runtime-approved roots, and captures stdout/stderr/duration so the model can inspect data without escaping the sandbox.
+## How it is structured
 
-## `.runtime` structure
+`apps/clog` is the authority. Frontends are adapters.
 
-The `.runtime` folder is the protected contract area that the runtime expects. Each instance contains:
+- `src/config.ts`: environment parsing and capability shaping.
+- `src/brain/service.ts`: shared chat entrypoint used by the gateway and transports.
+- `src/monitoring`: turns observations into findings.
+- `src/gateway`: transport-agnostic API surface.
+- `src/integrations`: PostHog, GitHub, Vercel, and other external boundaries.
+- `src/execution/shell-executor.ts`: restricted read-only shell access for runtime inspection.
 
-- `read-only/settings.json` – runtime-facing settings kept out of model access.
-- `read-only/tools.json` – tool visibility and enablement for the model/runtime surface.
-- `wakeup.json` – per-instance wakeup message and frequency in one editable file.
-- `storage/` – per-instance structured JSON state and runtime-owned persistence.
-- `workspace/` – the model-targeted writable workspace area.
+## Runtime layout
 
-Secrets and real API keys still live in `.env` for now, not in the tracked instance settings files.
+The runtime expects per-instance state under `.runtime/instances/<instance>/`:
 
-Create files inside these folders before connecting live services.
+- `read-only/settings.json`: runtime-owned settings.
+- `read-only/tools.json`: tool visibility and enablement.
+- `wakeup.json`: wakeup prompt and frequency.
+- `storage/`: structured runtime state.
+- `workspace/`: model-targeted writable workspace.
 
-## Next steps
+Secrets still belong in `.env`.
 
-1. Wire real PostHog, GitHub, and Vercel clients to replace the stubs.
-2. Persist findings/threads and add approval history.
-3. Expand frontends (GUI, CLI) against `@clog/types`.
+## Docs
+
+- [Architecture](docs/architecture.md)
+- [Runtime setup](docs/runtime-setup.md)
+- [Conversation schema](docs/conversation-schema.md)
