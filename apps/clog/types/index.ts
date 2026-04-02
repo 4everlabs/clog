@@ -225,6 +225,40 @@ export interface SurfacePostHogInsightResponse {
   readonly result: PostHogInsightQueryResult;
 }
 
+export interface SurfacePostHogDocumentedToolCatalogResponse {
+  readonly verifiedAt: string;
+  readonly sources: readonly string[];
+  readonly serverUrls: {
+    readonly us: string;
+    readonly eu: string;
+  };
+  readonly pinning: {
+    readonly supportedHeaders: readonly string[];
+    readonly supportedQueryParameters: readonly string[];
+  };
+  readonly featureFilterExample: string;
+  readonly apiPrimitives: ReadonlyArray<{
+    readonly name: string;
+    readonly purpose: string;
+  }>;
+  readonly recommendedBuildOrder: ReadonlyArray<{
+    readonly surface: string;
+    readonly why: string;
+    readonly features: readonly string[];
+  }>;
+  readonly features: ReadonlyArray<{
+    readonly feature: string;
+    readonly title: string;
+    readonly description: string;
+    readonly docsUrl: string | null;
+    readonly priority: "core" | "high" | "extended";
+    readonly tools: ReadonlyArray<{
+      readonly name: string;
+      readonly purpose: string;
+    }>;
+  }>;
+}
+
 export interface SurfacePostHogErrorsResponse {
   readonly observations: readonly RuntimeObservation[];
 }

@@ -1,6 +1,11 @@
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { PostHogInsightQueryResult } from "@clog/types";
+import {
+  buildPostHogDashboardSnapshot,
+  POSTHOG_DASHBOARD_DEFAULT_WINDOW_MINUTES,
+  type PostHogDashboardSnapshot,
+} from "./dashboard-snapshot";
 
 const writeStdoutLine = (value: string): void => {
   process.stdout.write(`${value}\n`);
@@ -12,66 +17,12 @@ const writeStderrLine = (value: string): void => {
 
 const PERFORMANCE_REPORT_INTERVAL_MS = 15 * 60_000;
 const PERFORMANCE_REPORT_RETENTION_LIMIT = 48;
-const PERFORMANCE_REPORT_DIRECTORY = "performance-reports";
-const PERFORMANCE_REPORT_WINDOW_MINUTES = 15;
-const LCP_SLOW_THRESHOLD_MS = 2_500;
-const INP_SLOW_THRESHOLD_MS = 100;
-const PATH_EXPRESSION = "coalesce(nullIf(properties.$pathname, ''), nullIf(properties.$current_url, ''), '<unknown>')";
+export const POSTHOG_PERFORMANCE_REPORT_DIRECTORY_NAME = "performance-reports";
 
-const SUMMARY_QUERY = `
-SELECT
-  countIf(event = '$pageview') AS pageviews,
-  uniqIf(person_id, event = '$pageview') AS unique_visitors,
-  countIf(event = '$web_vitals') AS web_vitals_events
-FROM events
-WHERE timestamp >= now() - INTERVAL 15 MINUTE
-`;
-
-const TOP_PATHS_QUERY = `
-SELECT
-  ${PATH_EXPRESSION} AS path,
-  count() AS pageviews
-FROM events
-WHERE event = '$pageview'
-  AND timestamp >= now() - INTERVAL 15 MINUTE
-GROUP BY path
-ORDER BY pageviews DESC
-LIMIT 10
-`;
-
-interface PerformanceRow {
-  readonly path: string;
-  readonly valueMs: number;
-  readonly samples: number;
-  readonly status: "good" | "slow";
-}
-
-interface TopPathRow {
-  readonly path: string;
-  readonly pageviews: number;
-}
-
-interface PerformanceSummaryRow {
-  readonly pageviews: number;
-  readonly uniqueVisitors: number;
-  readonly webVitalsEvents: number;
-}
-
-interface PerformanceReportSuccess {
+interface PerformanceReportSuccess extends PostHogDashboardSnapshot {
   readonly kind: "posthog-performance-report";
   readonly status: "ok";
   readonly createdAt: number;
-  readonly windowMinutes: number;
-  readonly summary: {
-    readonly pageviews: number;
-    readonly uniqueVisitors: number;
-    readonly webVitalsEvents: number;
-    readonly slowLcpPages: number;
-    readonly slowInpPages: number;
-  };
-  readonly topPaths: readonly TopPathRow[];
-  readonly lcp: readonly PerformanceRow[];
-  readonly inp: readonly PerformanceRow[];
 }
 
 interface PerformanceReportFailure {
@@ -97,32 +48,9 @@ export interface PostHogPerformanceReporterConfig {
   readonly retentionLimit?: number;
 }
 
-const toNumber = (value: unknown): number => {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-  }
-
-  return 0;
-};
-
-const toString = (value: unknown): string => {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : "<unknown>";
-};
-
 const describeError = (error: unknown): string => {
   return error instanceof Error ? error.stack ?? error.message : String(error);
 };
-
-const classifyMetric = (valueMs: number, slowThresholdMs: number): "good" | "slow" => (
-  valueMs > slowThresholdMs ? "slow" : "good"
-);
 
 const formatReportFileName = (createdAt: number, sequence: number): string => {
   const timestamp = new Date(createdAt).toISOString().replaceAll(":", "-").replaceAll(".", "-");
@@ -147,7 +75,7 @@ export class PostHogPerformanceReporter {
   private sequence = 0;
 
   constructor(private readonly config: PostHogPerformanceReporterConfig) {
-    this.reportDirectory = join(config.workspaceDir, PERFORMANCE_REPORT_DIRECTORY);
+    this.reportDirectory = join(config.workspaceDir, POSTHOG_PERFORMANCE_REPORT_DIRECTORY_NAME);
     this.intervalMs = config.intervalMs ?? PERFORMANCE_REPORT_INTERVAL_MS;
     this.retentionLimit = config.retentionLimit ?? PERFORMANCE_REPORT_RETENTION_LIMIT;
   }
@@ -179,7 +107,7 @@ export class PostHogPerformanceReporter {
           kind: "posthog-performance-report",
           status: "error",
           createdAt,
-          windowMinutes: PERFORMANCE_REPORT_WINDOW_MINUTES,
+          windowMinutes: POSTHOG_DASHBOARD_DEFAULT_WINDOW_MINUTES,
           error: describeError(error),
         };
         this.writeReport(failure);
@@ -201,61 +129,17 @@ export class PostHogPerformanceReporter {
   }
 
   private async buildReport(createdAt: number): Promise<PerformanceReportSuccess> {
-    const summaryResult = await this.config.runQuery("performance_summary_15m", SUMMARY_QUERY);
-    const topPathsResult = await this.config.runQuery("performance_top_paths_15m", TOP_PATHS_QUERY);
-
-    const summaryRow = this.readSummary(summaryResult.results[0]);
-    const topPaths = this.readTopPaths(topPathsResult.results);
-    const lcp: PerformanceRow[] = [];
-    const inp: PerformanceRow[] = [];
+    const snapshot = await buildPostHogDashboardSnapshot({
+      generatedAt: createdAt,
+      runQuery: this.config.runQuery,
+    });
 
     return {
       kind: "posthog-performance-report",
       status: "ok",
       createdAt,
-      windowMinutes: PERFORMANCE_REPORT_WINDOW_MINUTES,
-      summary: {
-        pageviews: summaryRow.pageviews,
-        uniqueVisitors: summaryRow.uniqueVisitors,
-        webVitalsEvents: summaryRow.webVitalsEvents,
-        slowLcpPages: lcp.filter((row) => row.status === "slow").length,
-        slowInpPages: inp.filter((row) => row.status === "slow").length,
-      },
-      topPaths,
-      lcp,
-      inp,
+      ...snapshot,
     };
-  }
-
-  private readSummary(row: Record<string, unknown> | undefined): PerformanceSummaryRow {
-    return {
-      pageviews: toNumber(row?.pageviews),
-      uniqueVisitors: toNumber(row?.unique_visitors),
-      webVitalsEvents: toNumber(row?.web_vitals_events),
-    };
-  }
-
-  private readTopPaths(rows: readonly Record<string, unknown>[]): TopPathRow[] {
-    return rows.map((row) => ({
-      path: toString(row.path),
-      pageviews: toNumber(row.pageviews),
-    }));
-  }
-
-  private readPerformanceRows(
-    rows: readonly Record<string, unknown>[],
-    metricKey: "lcp_p75_ms" | "inp_p75_ms",
-    slowThresholdMs: number,
-  ): PerformanceRow[] {
-    return rows.map((row) => {
-      const valueMs = toNumber(row[metricKey]);
-      return {
-        path: toString(row.path),
-        valueMs,
-        samples: toNumber(row.samples),
-        status: classifyMetric(valueMs, slowThresholdMs),
-      };
-    });
   }
 
   private writeReport(report: PerformanceReport): void {

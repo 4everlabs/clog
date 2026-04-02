@@ -8,6 +8,7 @@ import type {
   SurfaceActionExecutionResponse,
   SurfaceBootstrapResponse,
   SurfaceFindingsResponse,
+  SurfacePostHogDocumentedToolCatalogResponse,
   SurfacePostHogEndpointDiffResponse,
   SurfacePostHogEndpointListResponse,
   SurfacePostHogEndpointRunResponse,
@@ -36,6 +37,11 @@ export interface AgentGatewaySurface {
   runShellCommand(input: ShellCommandRequest): Promise<SurfaceShellCommandResponse>;
   listPostHogOrganizations(): Promise<SurfacePostHogOrganizationsResponse>;
   listPostHogProjects(organizationId?: string): Promise<SurfacePostHogProjectsResponse>;
+  getPostHogDocumentedToolCatalog(input?: {
+    readonly feature?: string;
+    readonly priority?: "core" | "high" | "extended";
+    readonly includeExtended?: boolean;
+  }): Promise<SurfacePostHogDocumentedToolCatalogResponse>;
   listPostHogErrors(): Promise<SurfacePostHogErrorsResponse>;
   listPostHogMcpTools(nameFilter?: string, includeInputSchema?: boolean): Promise<SurfacePostHogMcpToolsResponse>;
   callPostHogMcpTool(toolName: string, args?: Record<string, unknown>): Promise<SurfacePostHogMcpToolCallResponse>;

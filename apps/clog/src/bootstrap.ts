@@ -8,6 +8,8 @@ import { NotionIntegrationClient } from "./integrations/notion/client";
 import { PostHogIntegrationClient } from "./integrations/posthog/client";
 import { PostHogApiClient } from "./integrations/posthog/api-client";
 import { PostHogCliTool } from "./integrations/posthog/cli-tool";
+import { buildPostHogDashboardSnapshot } from "./integrations/posthog/dashboard-snapshot";
+import { getPostHogDocumentedToolCatalog } from "./integrations/posthog/documented-tool-catalog";
 import { PostHogWorkspaceReporter } from "./integrations/posthog/workspace-reporter";
 import { VercelIntegrationClient } from "./integrations/vercel/client";
 import { MonitoringLoop } from "./monitoring/monitor-loop";
@@ -81,6 +83,18 @@ export const bootstrapRuntime = (): RuntimeBootstrap => {
       async () => await posthogApi.runQuery(name, query, refresh),
     ),
     listErrors: async () => await recordAsync("errors", async () => await posthog.listErrorObservations()),
+    getDashboardSnapshot: async (input = {}) => await recordAsync(
+      "dashboardSnapshot",
+      async () => await buildPostHogDashboardSnapshot({
+        windowMinutes: input.windowMinutes,
+        topPathsLimit: input.topPathsLimit,
+        runQuery: async (name, query) => await posthogApi.runQuery(name, query),
+      }),
+    ),
+    getDocumentedToolCatalog: async (input = {}) => await recordAsync(
+      "documentedToolCatalog",
+      async () => getPostHogDocumentedToolCatalog(input),
+    ),
     queryInsight: async (name: string, query: string) => await recordAsync(
       "insight",
       async () => await posthogApi.runInsightQuery(name, query),

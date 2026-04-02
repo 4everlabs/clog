@@ -59,6 +59,7 @@ describe("runtime startup", () => {
           runMonitorCycle: async () => {
             calls.push("monitor");
             return {
+              observations: [],
               integrationHealth: [],
               findings: [],
               checkedAt: 1,

@@ -11,6 +11,8 @@ import type {
   ShellCommandResponse,
 } from "@clog/types";
 import type { z, ZodTypeAny } from "zod";
+import type { PostHogDashboardSnapshot } from "../integrations/posthog/dashboard-snapshot";
+import type { PostHogDocumentedToolCatalog } from "../integrations/posthog/documented-tool-catalog";
 import type { AgentToolName, ToolExecutionResultEnvelope, ToolFamily, ToolSummary } from "../schema/tools";
 
 export interface PostHogToolServices {
@@ -40,6 +42,15 @@ export interface PostHogToolServices {
     readonly text: string;
     readonly structuredContent?: unknown;
   }>;
+  getDashboardSnapshot(input?: {
+    readonly windowMinutes?: number;
+    readonly topPathsLimit?: number;
+  }): Promise<PostHogDashboardSnapshot>;
+  getDocumentedToolCatalog(input?: {
+    readonly feature?: string;
+    readonly priority?: "core" | "high" | "extended";
+    readonly includeExtended?: boolean;
+  }): Promise<PostHogDocumentedToolCatalog> | PostHogDocumentedToolCatalog;
   queryInsight(name: string, query: string): Promise<PostHogInsightQueryResult>;
   listEndpoints(cwd?: string): PostHogCliCommandResponse;
   diffEndpoints(path: string, cwd?: string): PostHogCliCommandResponse;
@@ -82,6 +93,15 @@ export interface RuntimeToolServices {
   }): {
     readonly generatedAt: number;
     readonly files: readonly unknown[];
+  };
+  getMonitoringSnapshot(input?: {
+    readonly reportLimit?: number;
+    readonly operationHistoryLimit?: number;
+  }): {
+    readonly generatedAt: number;
+    readonly latestPerformanceReport: unknown | null;
+    readonly recentPerformanceReports: readonly unknown[];
+    readonly recentPostHogOperations: readonly unknown[];
   };
   readKnowledge(input?: {
     readonly path?: string;

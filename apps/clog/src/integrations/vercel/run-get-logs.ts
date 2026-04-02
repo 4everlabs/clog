@@ -1,39 +1,20 @@
-import { Vercel } from '@vercel/sdk';
+const deploymentId = process.env.VERCEL_DEPLOYMENT_ID?.trim();
+const token = process.env.VERCEL_TOKEN?.trim();
 
-const vercel = new Vercel({
-  bearerToken: process.env.VERCEL_TOKEN,
-});
+if (!deploymentId || !token) {
+  console.error("Set VERCEL_DEPLOYMENT_ID and VERCEL_TOKEN before running this example.");
+  process.exitCode = 1;
+} else {
+  const response = await fetch(
+    `https://api.vercel.com/v2/deployments/${encodeURIComponent(deploymentId)}/events`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    },
+  );
 
-async function getLogsAndStatus() {
-  try {
-    const logsResponse = await vercel.deployments.getDeploymentEvents({
-      idOrUrl: 'project-name-uniqueid.vercel.app',
-    });
-    if (Array.isArray(logsResponse)) {
-      if ('deploymentId' in logsResponse[0]) {
-        const deploymentID = logsResponse[0].deploymentId;
-        const deploymentStatus = await vercel.deployments.getDeployment({
-          idOrUrl: deploymentID,
-        });
-        console.log(
-          `Deployment with id, ${deploymentID} status is ${deploymentStatus.status}`,
-        );
-      }
-      for (const item of logsResponse) {
-        if ('text' in item) {
-          console.log(
-            `${item.type} at ${new Date(item.created).toLocaleTimeString()}: ${
-              item.text
-            }`,
-          );
-        }
-      }
-    }
-  } catch (error) {
-    console.error(
-      error instanceof Error ? `Error: ${error.message}` : String(error),
-    );
-  }
+  const body = await response.text();
+  console.log(body);
 }
-
-getLogsAndStatus();

@@ -76,7 +76,7 @@ const readStoredStatus = (path: string): AgentStatus | null => {
     return null;
   }
 
-  const storedStatus = value as StoredStatus;
+  const storedStatus = value as unknown as StoredStatus;
   return storedStatus.status;
 };
 

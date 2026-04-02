@@ -1,4 +1,6 @@
 import {
+  RuntimeGetMonitoringSnapshotInputSchema,
+  RuntimeGetMonitoringSnapshotResultSchema,
   RuntimeGetRecentLogsInputSchema,
   RuntimeGetRecentLogsResultSchema,
   RuntimeGetStateSnapshotInputSchema,
@@ -47,6 +49,26 @@ export const runtimeTools = [
       }
 
       return services.runtime.getRecentLogs(input);
+    },
+  },
+  {
+    name: "runtime_get_monitoring_snapshot",
+    title: "Runtime Monitoring Snapshot",
+    description: "Read retained PostHog monitoring artifacts including recent performance reports and historical tool-operation snapshots from the runtime workspace.",
+    integration: "runtime",
+    approvalRequired: false,
+    implemented: true,
+    inputSchema: RuntimeGetMonitoringSnapshotInputSchema,
+    outputSchema: RuntimeGetMonitoringSnapshotResultSchema,
+    isEnabled() {
+      return true;
+    },
+    execute(services, input) {
+      if (!services.runtime) {
+        throw new Error("Runtime read services are unavailable");
+      }
+
+      return services.runtime.getMonitoringSnapshot(input);
     },
   },
   {

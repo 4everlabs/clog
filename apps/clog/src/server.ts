@@ -67,6 +67,15 @@ export class AgentSurfaceTransport {
       return json(await this.runtime.gateway.listPostHogProjects(url.searchParams.get("organizationId") ?? undefined));
     }
 
+    if (pathname === "/api/posthog/catalog" && request.method === "GET") {
+      const priority = url.searchParams.get("priority");
+      return json(await this.runtime.gateway.getPostHogDocumentedToolCatalog({
+        feature: url.searchParams.get("feature") ?? undefined,
+        priority: priority === "core" || priority === "high" || priority === "extended" ? priority : undefined,
+        includeExtended: url.searchParams.get("includeExtended") === "false" ? false : undefined,
+      }));
+    }
+
     if (pathname === "/api/posthog/errors" && request.method === "GET") {
       return json(await this.runtime.gateway.listPostHogErrors());
     }

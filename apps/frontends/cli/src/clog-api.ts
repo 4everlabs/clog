@@ -9,6 +9,7 @@ import type {
   RuntimeObservation,
   SurfaceBootstrapResponse,
   SurfaceFindingsResponse,
+  SurfacePostHogDocumentedToolCatalogResponse,
   SurfacePostHogEndpointDiffResponse,
   SurfacePostHogEndpointListResponse,
   SurfacePostHogEndpointRunResponse,
@@ -27,6 +28,7 @@ export interface MonitorCycleResponse {
   readonly observations: readonly RuntimeObservation[];
   readonly findings: readonly AgentFinding[];
   readonly integrationHealth: readonly IntegrationHealthView[];
+  readonly checkedAt: number;
 }
 
 interface HealthzResponse {
@@ -94,6 +96,25 @@ export class ClogApiClient {
   async listPostHogProjects(organizationId?: string): Promise<SurfacePostHogProjectsResponse> {
     const search = organizationId ? `?organizationId=${encodeURIComponent(organizationId)}` : "";
     return await this.request<SurfacePostHogProjectsResponse>(`/api/posthog/projects${search}`);
+  }
+
+  async getPostHogDocumentedToolCatalog(input: {
+    readonly feature?: string;
+    readonly priority?: "core" | "high" | "extended";
+    readonly includeExtended?: boolean;
+  } = {}): Promise<SurfacePostHogDocumentedToolCatalogResponse> {
+    const searchParams = new URLSearchParams();
+    if (input.feature?.trim()) {
+      searchParams.set("feature", input.feature.trim());
+    }
+    if (input.priority) {
+      searchParams.set("priority", input.priority);
+    }
+    if (input.includeExtended === false) {
+      searchParams.set("includeExtended", "false");
+    }
+    const search = searchParams.size > 0 ? `?${searchParams.toString()}` : "";
+    return await this.request<SurfacePostHogDocumentedToolCatalogResponse>(`/api/posthog/catalog${search}`);
   }
 
   async listPostHogErrors(): Promise<SurfacePostHogErrorsResponse> {

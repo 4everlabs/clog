@@ -7,6 +7,7 @@ export interface PostHogIntegrationClientConfig {
   readonly config: PostHogRuntimeConfig;
   readonly capabilities: {
     readonly canReadErrors: boolean;
+    readonly canReadInsights: boolean;
   };
 }
 
@@ -34,8 +35,52 @@ const toTimestamp = (value: unknown): number => {
   return Date.now();
 };
 
+const toNumber = (value: unknown): number => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return 0;
+};
+
+const sanitizeId = (value: string): string => (
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, "-")
+    .replace(/-+/gu, "-")
+    .replace(/^-|-$/gu, "")
+);
+
+const readMetricValue = (row: Record<string, unknown>, keys: readonly string[]): number => {
+  for (const key of keys) {
+    const value = toNumber(row[key]);
+    if (value !== 0 || row[key] === 0 || row[key] === "0") {
+      return value;
+    }
+  }
+
+  return 0;
+};
+
 export class PostHogIntegrationClient {
   constructor(private readonly deps: PostHogIntegrationClientConfig) {}
+
+  async listObservations(): Promise<readonly RuntimeObservation[]> {
+    const results = await Promise.all([
+      this.listErrorObservations(),
+      this.listInsightRegressionObservations(),
+    ]);
+
+    return results.flat();
+  }
 
   async listErrorObservations(): Promise<readonly RuntimeObservation[]> {
     if (!this.deps.capabilities.canReadErrors) {
@@ -85,6 +130,55 @@ export class PostHogIntegrationClient {
         },
       } satisfies RuntimeObservation];
     });
+  }
+
+  async listInsightRegressionObservations(): Promise<readonly RuntimeObservation[]> {
+    if (!this.deps.capabilities.canReadInsights || this.deps.config.insightMonitors.length === 0) {
+      return [];
+    }
+
+    const results: Array<RuntimeObservation | null> = await Promise.all(this.deps.config.insightMonitors.map(async (monitor) => {
+      const response = await this.deps.api.runQuery(`monitor_${sanitizeId(monitor.name)}`, monitor.query);
+      const row = response.results[0];
+      if (!row) {
+        return null;
+      }
+
+      const currentValue = readMetricValue(row, ["current_value", "current", "value", "current_count"]);
+      const previousValue = readMetricValue(row, ["previous_value", "previous", "baseline", "previous_count"]);
+
+      if (previousValue < monitor.minimumPreviousValue || previousValue <= 0) {
+        return null;
+      }
+
+      const dropPercent = ((previousValue - currentValue) / previousValue) * 100;
+      if (dropPercent < monitor.regressionThresholdPercent) {
+        return null;
+      }
+
+      return {
+        id: `posthog-insight-${sanitizeId(monitor.name)}`,
+        kind: "insight-regression",
+        source: {
+          kind: "posthog",
+          label: "PostHog insight monitor",
+          referenceId: monitor.name,
+        },
+        summary: `${monitor.name} regressed ${dropPercent.toFixed(1)}%`,
+        details: `${monitor.name} fell from ${previousValue} to ${currentValue} in the configured comparison window.`,
+        severity: dropPercent >= monitor.regressionThresholdPercent * 2 ? "critical" : "warning",
+        detectedAt: Date.now(),
+        metadata: {
+          monitorName: monitor.name,
+          currentValue,
+          previousValue,
+          dropPercent: Number(dropPercent.toFixed(2)),
+          thresholdPercent: monitor.regressionThresholdPercent,
+        },
+      } satisfies RuntimeObservation;
+    }));
+
+    return results.flatMap((result) => result ? [result] : []);
   }
 
   async getHealth(): Promise<IntegrationHealthView> {

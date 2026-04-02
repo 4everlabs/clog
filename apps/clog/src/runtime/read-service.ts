@@ -2,6 +2,12 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { RuntimeStorageConfig } from "../config";
+import {
+  POSTHOG_PERFORMANCE_REPORT_DIRECTORY_NAME,
+} from "../integrations/posthog/performance-reporter";
+import {
+  POSTHOG_WORKSPACE_SNAPSHOT_FILE_NAME,
+} from "../integrations/posthog/workspace-reporter";
 import type { RuntimeStore } from "../storage/chat";
 
 const DEFAULT_THREAD_LIMIT = 3;
@@ -12,6 +18,8 @@ const DEFAULT_ACTION_RESULT_LIMIT = 5;
 const DEFAULT_LOG_FILE_LIMIT = 2;
 const DEFAULT_LOG_LINE_LIMIT = 80;
 const DEFAULT_KNOWLEDGE_MAX_CHARS = 8_000;
+const DEFAULT_MONITORING_REPORT_LIMIT = 3;
+const DEFAULT_MONITORING_OPERATION_HISTORY_LIMIT = 4;
 
 const readTextIfExists = (path: string): string | null => {
   if (!existsSync(path)) {
@@ -19,6 +27,14 @@ const readTextIfExists = (path: string): string | null => {
   }
 
   return readFileSync(path, "utf-8");
+};
+
+const readOptionalJson = <T>(path: string): T | null => {
+  try {
+    return JSON.parse(readFileSync(path, "utf-8")) as T;
+  } catch {
+    return null;
+  }
 };
 
 const truncateContent = (content: string, maxChars: number): {
@@ -93,6 +109,26 @@ export interface RuntimeRecentLogsInput {
 export interface RuntimeReadKnowledgeInput {
   readonly path?: string;
   readonly maxChars?: number;
+}
+
+export interface RuntimeMonitoringSnapshotInput {
+  readonly reportLimit?: number;
+  readonly operationHistoryLimit?: number;
+}
+
+interface WorkspaceOperationHistoryEntry {
+  readonly recordedAt?: number;
+  readonly data?: unknown;
+}
+
+type WorkspaceOperationSnapshot = {
+  readonly lastRecordedAt?: number;
+  readonly history?: readonly WorkspaceOperationHistoryEntry[];
+} | WorkspaceOperationHistoryEntry;
+
+interface WorkspaceMonitoringSnapshot {
+  readonly updatedAt?: number;
+  readonly operations?: Record<string, WorkspaceOperationSnapshot>;
 }
 
 export class RuntimeReadService {
@@ -218,6 +254,66 @@ export class RuntimeReadService {
       selectedPath,
       content: truncatedContent.content,
       truncated: truncatedContent.truncated,
+    };
+  }
+
+  getMonitoringSnapshot(input: RuntimeMonitoringSnapshotInput = {}) {
+    const reportLimit = clamp(input.reportLimit, DEFAULT_MONITORING_REPORT_LIMIT, 10);
+    const operationHistoryLimit = clamp(
+      input.operationHistoryLimit,
+      DEFAULT_MONITORING_OPERATION_HISTORY_LIMIT,
+      20,
+    );
+    const workspaceSnapshotPath = join(this.storage.workspaceDir, POSTHOG_WORKSPACE_SNAPSHOT_FILE_NAME);
+    const performanceReportsDir = join(this.storage.workspaceDir, POSTHOG_PERFORMANCE_REPORT_DIRECTORY_NAME);
+    const workspaceSnapshot = readOptionalJson<WorkspaceMonitoringSnapshot>(workspaceSnapshotPath);
+    const recentPostHogOperations = Object.entries(workspaceSnapshot?.operations ?? {})
+      .map(([operation, snapshot]) => {
+        let history: Array<{ recordedAt: number; data: unknown }> = [];
+        if ("history" in snapshot && Array.isArray(snapshot.history)) {
+          history = snapshot.history
+            .filter((entry) => typeof entry?.recordedAt === "number")
+            .map((entry) => ({
+              recordedAt: entry.recordedAt as number,
+              data: entry.data,
+            }));
+        } else if ("recordedAt" in snapshot && typeof snapshot.recordedAt === "number") {
+          history = [{
+            recordedAt: snapshot.recordedAt,
+            data: snapshot.data,
+          }];
+        }
+
+        return {
+          operation,
+          lastRecordedAt: "lastRecordedAt" in snapshot && typeof snapshot.lastRecordedAt === "number"
+            ? snapshot.lastRecordedAt
+            : (history.at(-1)?.recordedAt ?? 0),
+          history: history.slice(-operationHistoryLimit).reverse(),
+        };
+      })
+      .sort((left, right) => right.lastRecordedAt - left.lastRecordedAt);
+    const recentPerformanceReports = existsSync(performanceReportsDir)
+      ? readdirSync(performanceReportsDir, { withFileTypes: true })
+        .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+        .map((entry) => {
+          const path = join(performanceReportsDir, entry.name);
+          const parsed = readOptionalJson<Record<string, unknown>>(path) ?? {};
+          return {
+            fileName: entry.name,
+            createdAt: typeof parsed.createdAt === "number" ? parsed.createdAt : 0,
+            report: parsed,
+          };
+        })
+        .sort((left, right) => right.createdAt - left.createdAt || right.fileName.localeCompare(left.fileName))
+        .slice(0, reportLimit)
+      : [];
+
+    return {
+      generatedAt: Date.now(),
+      latestPerformanceReport: recentPerformanceReports[0]?.report ?? null,
+      recentPerformanceReports,
+      recentPostHogOperations,
     };
   }
 

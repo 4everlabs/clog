@@ -11,6 +11,7 @@ import type {
   SurfaceActionExecutionResponse,
   SurfaceBootstrapResponse,
   SurfaceFindingsResponse,
+  SurfacePostHogDocumentedToolCatalogResponse,
   SurfacePostHogEndpointDiffResponse,
   SurfacePostHogEndpointListResponse,
   SurfacePostHogEndpointRunResponse,
@@ -45,6 +46,7 @@ export interface AgentGatewayDependencies {
     PostHogToolServices,
     | "getOrganizations"
     | "getProjects"
+    | "getDocumentedToolCatalog"
     | "listMcpTools"
     | "callMcpTool"
     | "runQuery"
@@ -194,6 +196,18 @@ export class AgentGateway implements AgentGatewaySurface {
     }
 
     return await this.deps.posthogServices.getProjects(organizationId);
+  }
+
+  async getPostHogDocumentedToolCatalog(input: {
+    readonly feature?: string;
+    readonly priority?: "core" | "high" | "extended";
+    readonly includeExtended?: boolean;
+  } = {}): Promise<SurfacePostHogDocumentedToolCatalogResponse> {
+    if (!this.deps.env.capabilities.posthog.canReadInsights) {
+      throw new Error("PostHog insight reads are disabled in the current configuration");
+    }
+
+    return await this.deps.posthogServices.getDocumentedToolCatalog(input);
   }
 
   async listPostHogErrors(): Promise<SurfacePostHogErrorsResponse> {

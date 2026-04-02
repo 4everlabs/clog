@@ -264,17 +264,31 @@ Available Commands:
 
       this.writeLine(`\n✓ Observations: ${result.observations.length}`);
       this.writeLine(`✓ Findings: ${result.findings.length}`);
+      this.writeLine(`✓ Checked at: ${new Date(result.checkedAt).toLocaleString()}`);
 
       if (result.findings.length > 0) {
-        this.writeLine("\n📋 New Findings:");
-        for (const finding of result.findings) {
-          this.writeLine(`  - [${finding.severity}] ${finding.title}`);
+        const openFindings = result.findings.filter((f) => f.state === "open");
+        if (openFindings.length > 0) {
+          this.writeLine(`\n📋 Open Findings (${openFindings.length}):`);
+          for (const finding of openFindings) {
+            this.writeLine(`  [${finding.severity.toUpperCase()}] ${finding.title}`);
+            this.writeLine(`    ${finding.summary}`);
+          }
+        }
+
+        const resolvedFindings = result.findings.filter((f) => f.state === "resolved");
+        if (resolvedFindings.length > 0) {
+          this.writeLine(`\n✅ Resolved (${resolvedFindings.length}):`);
+          for (const finding of resolvedFindings) {
+            this.writeLine(`  ${finding.title}`);
+          }
         }
       }
 
       this.writeLine("\n📊 Integration Health:");
       for (const health of result.integrationHealth) {
-        this.writeLine(`  ${health.kind}: ${health.status} - ${health.summary}`);
+        const icon = health.status === "ready" ? "✅" : health.status === "degraded" ? "⚠️" : "❌";
+        this.writeLine(`  ${icon} ${health.kind}: ${health.status} - ${health.summary}`);
       }
     } catch (error) {
       this.writeErrorLine(`\n❌ Monitor error: ${error instanceof Error ? error.message : "Unknown"}`);
