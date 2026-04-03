@@ -1,6 +1,8 @@
 #!/usr/bin/env bun
 
+import { existsSync } from "node:fs";
 import { emitKeypressEvents } from "readline";
+import { fileURLToPath } from "node:url";
 import { startDefaultRuntimeServer } from "../../clog/src/index.ts";
 import { resolveBackendBaseUrl } from "../../frontends/tui/src/clog-api";
 import { startTuiFrontend } from "../../frontends/tui/src/index.ts";
@@ -24,6 +26,9 @@ interface RuntimeSession {
   readonly baseUrl: string;
   readonly startedByLauncher: boolean;
 }
+
+const WEB_FRONTEND_DIRECTORY = fileURLToPath(new URL("../../frontends/web/", import.meta.url));
+const WEB_FRONTEND_ENTRY = fileURLToPath(new URL("../../frontends/web/dist/index.html", import.meta.url));
 
 const clearScreen = (): void => {
   process.stdout.write("\u001Bc");
@@ -235,15 +240,34 @@ const waitForShutdownSignal = async (): Promise<void> => {
   });
 };
 
+const ensureWebDashboardBuilt = async (): Promise<void> => {
+  if (existsSync(WEB_FRONTEND_ENTRY)) {
+    return;
+  }
+
+  writeLine(colorize("Building Svelte dashboard...", ANSI.dim));
+  const child = Bun.spawn({
+    cmd: ["bun", "run", "build"],
+    cwd: WEB_FRONTEND_DIRECTORY,
+    stdout: "inherit",
+    stderr: "inherit",
+    stdin: "ignore",
+  });
+  const exitCode = await child.exited;
+  if (exitCode !== 0) {
+    throw new Error("Web dashboard build failed");
+  }
+};
+
 const launchWeb = async (session: RuntimeSession): Promise<void> => {
+  await ensureWebDashboardBuilt();
   const opened = await openBrowser(session.baseUrl);
   writeLine();
   if (opened) {
-    writeLine(`${colorize("Opened browser:", ANSI.green, ANSI.bold)} ${session.baseUrl}`);
+    writeLine(`${colorize("Opened browser dashboard:", ANSI.green, ANSI.bold)} ${session.baseUrl}`);
   } else {
     writeErrorLine(`${colorize("Could not open a browser automatically.", ANSI.red, ANSI.bold)} Open ${session.baseUrl} manually.`);
   }
-  writeLine(colorize("The web frontend is not built yet. This opens the runtime placeholder page for now.", ANSI.dim));
 
   if (session.startedByLauncher) {
     writeLine(colorize("Press Ctrl+C to stop the local runtime.", ANSI.dim));

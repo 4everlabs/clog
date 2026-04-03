@@ -18,7 +18,7 @@
 - `apps/launcher`: bootstrap launcher and frontend chooser.
 - `apps/frontends/tui`: terminal UI for the runtime.
 - `apps/frontends/telegram`: Telegram transport and bridge.
-- `apps/frontends/web`: web frontend placeholder.
+- `apps/frontends/web`: Svelte dashboard frontend.
 - `docs`: architecture, runtime setup, and service docs.
 
 ## Quick start
@@ -35,6 +35,7 @@ Direct entrypoints:
 ```bash
 bun run runtime
 bun run tui
+bun run web
 ```
 
 ## Common commands
@@ -44,8 +45,11 @@ bun run dev              # start the launcher
 bun run runtime          # start the runtime only
 bun run runtime --wakeup # start runtime and run one wakeup pass immediately
 bun run tui              # start the terminal UI directly
+bun run web              # start the Svelte dashboard in Vite
+bun run web:build        # build the Svelte dashboard for the runtime server
 bun run lint             # run oxlint
 bun run typecheck        # run tsc --noEmit
+bun run web:typecheck    # run svelte-check for the dashboard
 bun run test             # run the Bun test suite
 bun run build            # bundle apps/clog to dist/
 bun run ci               # lint + typecheck + test

@@ -1,10 +1,15 @@
 import type {
-  SurfaceNotionTodoResponse,
+  AgentFinding,
+  AgentRuntimeSummary,
+  IntegrationHealthView,
   PostHogEndpointDiffRequest,
   PostHogEndpointRunRequest,
   PostHogInsightQueryRequest,
+  RuntimeObservation,
+  ShellCommandRequest,
   SurfaceBootstrapResponse,
   SurfaceFindingsResponse,
+  SurfaceNotionTodoResponse,
   SurfacePostHogDocumentedToolCatalogResponse,
   SurfacePostHogEndpointDiffResponse,
   SurfacePostHogEndpointListResponse,
@@ -17,6 +22,7 @@ import type {
   SurfacePostHogProjectsResponse,
   SurfaceSendMessageRequest,
   SurfaceSendMessageResponse,
+  SurfaceShellCommandResponse,
   SurfaceThreadsResponse,
 } from "@clog/types";
 
@@ -24,12 +30,34 @@ export interface ClogApiClientOptions {
   readonly baseUrl: string;
 }
 
+export interface MonitorCycleResponse {
+  readonly observations: readonly RuntimeObservation[];
+  readonly findings: readonly AgentFinding[];
+  readonly integrationHealth: readonly IntegrationHealthView[];
+  readonly checkedAt: number;
+}
+
+interface HealthzResponse {
+  readonly ok: boolean;
+  readonly runtime: AgentRuntimeSummary;
+}
+
+const importMetaEnv = (import.meta as ImportMeta & {
+  readonly env?: Record<string, string | undefined>;
+}).env;
+
 const normalizeBaseUrl = (value: string): string => value.trim().replace(/\/+$/u, "");
 
-export const resolveBackendBaseUrl = (env: NodeJS.ProcessEnv = process.env): string => {
-  const explicit = env.CLOG_BACKEND_URL?.trim();
+export const resolveBackendBaseUrl = (
+  env: Record<string, string | undefined> = typeof process === "undefined" ? {} : process.env,
+): string => {
+  const explicit = env.CLOG_BACKEND_URL?.trim() || importMetaEnv?.VITE_CLOG_BACKEND_URL?.trim();
   if (explicit) {
     return normalizeBaseUrl(explicit);
+  }
+
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return normalizeBaseUrl(window.location.origin);
   }
 
   const port = env.PORT?.trim() || "6900";
@@ -43,8 +71,19 @@ export class ClogApiClient {
     this.baseUrl = normalizeBaseUrl(options.baseUrl);
   }
 
+  async getRuntimeHealth(): Promise<AgentRuntimeSummary> {
+    const response = await this.request<HealthzResponse>("/healthz");
+    return response.runtime;
+  }
+
   async bootstrap(): Promise<SurfaceBootstrapResponse> {
     return await this.request<SurfaceBootstrapResponse>("/api/bootstrap");
+  }
+
+  async runMonitorCycle(): Promise<MonitorCycleResponse> {
+    return await this.request<MonitorCycleResponse>("/api/monitor/tick", {
+      method: "POST",
+    });
   }
 
   async listFindings(): Promise<SurfaceFindingsResponse> {
@@ -57,6 +96,13 @@ export class ClogApiClient {
 
   async sendMessage(input: SurfaceSendMessageRequest): Promise<SurfaceSendMessageResponse> {
     return await this.request<SurfaceSendMessageResponse>("/api/chat", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  async runShellCommand(input: ShellCommandRequest): Promise<SurfaceShellCommandResponse> {
+    return await this.request<SurfaceShellCommandResponse>("/api/shell", {
       method: "POST",
       body: JSON.stringify(input),
     });
