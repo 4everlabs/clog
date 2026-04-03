@@ -43,9 +43,7 @@ sudo systemctl status clog
 ## 5. Smoke check the runtime
 
 ```bash
-bun run runtime
-# in another terminal
-bun run cli
+bun run dev
 
 curl http://127.0.0.1:6900/healthz
 curl http://127.0.0.1:6900/api/bootstrap

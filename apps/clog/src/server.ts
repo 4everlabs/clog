@@ -17,6 +17,14 @@ const json = (payload: unknown, status = 200): Response =>
     },
   });
 
+const html = (payload: string, status = 200): Response =>
+  new Response(payload, {
+    status,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+    },
+  });
+
 const parseJson = async <T>(request: Request): Promise<T> => {
   return await request.json() as T;
 };
@@ -27,6 +35,57 @@ export class AgentSurfaceTransport {
   async handle(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const { pathname } = url;
+
+    if (pathname === "/" && request.method === "GET") {
+      return html(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CLOG Runtime</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        background: #0b1020;
+        color: #eef2ff;
+      }
+      main {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 56px 24px;
+      }
+      .eyebrow {
+        color: #7dd3fc;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-size: 12px;
+        font-weight: 700;
+      }
+      h1 {
+        margin: 12px 0 16px;
+        font-size: 40px;
+      }
+      p {
+        color: #cbd5e1;
+        line-height: 1.6;
+      }
+      code, a {
+        color: #93c5fd;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="eyebrow">CLOG</div>
+      <h1>Runtime is up.</h1>
+      <p>The launcher can open a browser target now, but the real web frontend is not built yet.</p>
+      <p>Use the TUI for the actual interface, or hit <a href="/healthz"><code>/healthz</code></a> and <a href="/api/bootstrap"><code>/api/bootstrap</code></a> for runtime data.</p>
+    </main>
+  </body>
+</html>`);
+    }
 
     if (pathname === "/healthz" && request.method === "GET") {
       return json({

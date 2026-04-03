@@ -15,7 +15,8 @@
 
 - `apps/clog`: core runtime, gateway, monitoring loop, integrations, and AI bridge.
 - `apps/types`: shared contracts consumed by every frontend.
-- `apps/frontends/cli`: CLI client for the runtime.
+- `apps/launcher`: bootstrap launcher and frontend chooser.
+- `apps/frontends/tui`: terminal UI for the runtime.
 - `apps/frontends/telegram`: Telegram transport and bridge.
 - `apps/frontends/web`: web frontend placeholder.
 - `docs`: architecture, runtime setup, and service docs.
@@ -24,22 +25,25 @@
 
 ```bash
 bun install
-bun run runtime
+bun run dev
 ```
 
-In another terminal:
+The launcher boots or connects to the runtime, then lets you choose `TUI` or `Web`.
+
+Direct entrypoints:
 
 ```bash
-bun run cli
+bun run runtime
+bun run tui
 ```
 
 ## Common commands
 
 ```bash
-bun run runtime          # start the runtime
-bun run runtime --wakeup # start and run one wakeup pass immediately
-bun dev --wakeup         # dev entrypoint with immediate wakeup
-bun run cli              # start the CLI frontend
+bun run dev              # start the launcher
+bun run runtime          # start the runtime only
+bun run runtime --wakeup # start runtime and run one wakeup pass immediately
+bun run tui              # start the terminal UI directly
 bun run lint             # run oxlint
 bun run typecheck        # run tsc --noEmit
 bun run test             # run the Bun test suite

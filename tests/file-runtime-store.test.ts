@@ -113,32 +113,32 @@ describe("FileRuntimeStore", () => {
 
   test("creates conversation folders with seeded notes and channel-specific chat logs", () => {
     const store = createStore();
-    const cliThread = store.createThread("tui", "TUI thread");
-    const cliUserMessage = store.createMessage("user", "tui", "hello from tui");
-    store.appendMessages(cliThread.id, [cliUserMessage]);
+    const tuiThread = store.createThread("tui", "TUI thread");
+    const tuiUserMessage = store.createMessage("user", "tui", "hello from tui");
+    store.appendMessages(tuiThread.id, [tuiUserMessage]);
 
     const telegramThread = store.seedOperatorThread("telegram");
     const telegramUserMessage = store.createMessage("user", "telegram", "hello from telegram");
     store.appendMessages(telegramThread.id, [telegramUserMessage]);
     store.close();
 
-    const cliConversationDir = getConversationDirectoryForThread(store.config.storageDir, cliThread.id);
-    const cliNotesEntries = readJsonl(join(cliConversationDir, "notes.jsonl"));
-    const cliChatEntries = readJsonl(join(cliConversationDir, "chat.jsonl"));
+    const tuiConversationDir = getConversationDirectoryForThread(store.config.storageDir, tuiThread.id);
+    const tuiNotesEntries = readJsonl(join(tuiConversationDir, "notes.jsonl"));
+    const tuiChatEntries = readJsonl(join(tuiConversationDir, "chat.jsonl"));
 
-    expect(cliNotesEntries[0]).toMatchObject({
+    expect(tuiNotesEntries[0]).toMatchObject({
       type: "conversation-header",
       fileKind: "notes",
-      threadId: cliThread.id,
+      threadId: tuiThread.id,
       channel: "tui",
-      title: "CLI thread",
+      title: "TUI thread",
     });
-    expect(cliChatEntries[0]).toMatchObject({
+    expect(tuiChatEntries[0]).toMatchObject({
       type: "conversation-header",
       fileKind: "chat",
-      threadId: cliThread.id,
+      threadId: tuiThread.id,
     });
-    expect(cliChatEntries.some((entry) => entry.type === "message" && entry.content === "hello from cli")).toBe(true);
+    expect(tuiChatEntries.some((entry) => entry.type === "message" && entry.content === "hello from tui")).toBe(true);
 
     const telegramConversationDir = getConversationDirectoryForThread(store.config.storageDir, telegramThread.id);
     const telegramNotesEntries = readJsonl(join(telegramConversationDir, "notes.jsonl"));
