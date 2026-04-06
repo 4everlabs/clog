@@ -151,7 +151,7 @@ const buildWebVitalsQuery = (
 ): string => `
 SELECT
   ${PATH_EXPRESSION} AS path,
-  round(quantileIf(0.75)(toFloat64(properties.${metricProperty}), properties.${metricProperty} IS NOT NULL), 1) AS ${alias},
+  round(quantileIf(0.75)(toFloat(properties.${metricProperty}), properties.${metricProperty} IS NOT NULL), 1) AS ${alias},
   countIf(properties.${metricProperty} IS NOT NULL) AS samples
 FROM events
 WHERE event = '$web_vitals'
