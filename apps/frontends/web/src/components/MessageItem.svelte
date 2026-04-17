@@ -40,6 +40,11 @@
     font-size: 0.875rem;
   }
 
+  .msg[data-role="user"] {
+    background: var(--accent-strong);
+    border-color: var(--accent-strong);
+  }
+
   .msg-head {
     display: flex;
     gap: 0.5rem;

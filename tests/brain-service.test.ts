@@ -131,13 +131,13 @@ describe("BrainService", () => {
     const systemPrompt = messages[0]?.content ?? "";
     expect(systemPrompt.indexOf("## Hard Rules")).toBeGreaterThanOrEqual(0);
     expect(systemPrompt.indexOf("Operating mode: `primary`.")).toBeGreaterThan(systemPrompt.indexOf("## Hard Rules"));
-    expect(systemPrompt.indexOf("Runtime context:")).toBeGreaterThan(systemPrompt.indexOf("## Hard Rules"));
-    expect(systemPrompt.indexOf("Runtime context:")).toBeLessThan(systemPrompt.indexOf("Operating mode: `primary`."));
-    expect(systemPrompt.indexOf("Enabled tools for this turn:")).toBeGreaterThan(
+    expect(systemPrompt.indexOf("Runtime Context:")).toBeGreaterThan(systemPrompt.indexOf("## Hard Rules"));
+    expect(systemPrompt.indexOf("Runtime Context:")).toBeLessThan(systemPrompt.indexOf("Operating mode: `primary`."));
+    expect(systemPrompt.indexOf("Tool access:")).toBeGreaterThan(
       systemPrompt.indexOf("Operating mode: `primary`."),
     );
     expect(systemPrompt).toContain("PostHog context: 4ever.ai / app.4ever.ai");
-    expect(systemPrompt).not.toContain("Knowledge summaries:");
+    expect(systemPrompt).not.toContain("Knowledge Context:");
   });
 
   test("falls back immediately when the provider returns an empty response", async () => {

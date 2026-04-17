@@ -1,4 +1,7 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import type { AgentEnvironment } from "../apps/clog/src/config";
 import { AgentGateway } from "../apps/clog/src/gateway/service";
 import type { MonitoringTickResult } from "../apps/clog/src/monitoring/monitor-loop";
@@ -8,7 +11,18 @@ import type { PostHogIntegrationClient } from "../apps/clog/src/integrations/pos
 import type { PostHogToolServices } from "../apps/clog/src/tools/types";
 import type { MonitoringLoop } from "../apps/clog/src/monitoring/monitor-loop";
 
-const createEnvironment = (): AgentEnvironment => ({
+const cleanupPaths: string[] = [];
+
+afterEach(() => {
+  while (cleanupPaths.length > 0) {
+    const path = cleanupPaths.pop();
+    if (path) {
+      rmSync(path, { recursive: true, force: true });
+    }
+  }
+});
+
+const createEnvironment = (overrides: Partial<AgentEnvironment> = {}): AgentEnvironment => ({
   appName: "clog",
   port: 6900,
   executionMode: "propose",
@@ -94,6 +108,7 @@ const createEnvironment = (): AgentEnvironment => ({
     },
   },
   availableTools: [],
+  ...overrides,
 });
 
 const createCliResponse = (command: string) => ({
@@ -170,7 +185,7 @@ const createPostHogServices = (): PostHogToolServices => ({
 });
 
 describe("AgentGateway", () => {
-  test("waits for an in-flight reply before running another monitor cycle", async () => {
+  test("allows a monitor cycle to run while a reply is still in flight", async () => {
     const store = new InMemoryRuntimeStore();
     store.setStatus("idle");
 
@@ -226,7 +241,7 @@ describe("AgentGateway", () => {
     const monitorPromise = gateway.runMonitorCycle();
 
     await Promise.resolve();
-    expect(monitorStarted).toBe(false);
+    expect(monitorStarted).toBe(true);
 
     replyPromise.resolve("All clear.");
     const sendResult = await sendPromise;
@@ -234,5 +249,161 @@ describe("AgentGateway", () => {
 
     await monitorPromise;
     expect(monitorStarted).toBe(true);
+  });
+
+  test("serializes replies on the same thread", async () => {
+    const store = new InMemoryRuntimeStore();
+    store.setStatus("idle");
+    const thread = store.createThread("telegram", "Operator thread");
+
+    const firstReply = Promise.withResolvers<string>();
+    let replyCallCount = 0;
+    let secondReplyStarted = false;
+    const brain = {
+      reply: async () => {
+        replyCallCount += 1;
+        if (replyCallCount === 1) {
+          return await firstReply.promise;
+        }
+        secondReplyStarted = true;
+        return "Second reply";
+      },
+    } as unknown as BrainService;
+
+    const monitorLoop = {
+      tick: async (): Promise<MonitoringTickResult> => ({
+        observations: [],
+        integrationHealth: [],
+        findings: [],
+        checkedAt: Date.now(),
+      }),
+    } as MonitoringLoop;
+
+    const gateway = new AgentGateway({
+      env: createEnvironment(),
+      bootedAt: 1,
+      brain,
+      monitorLoop,
+      posthog: {} as PostHogIntegrationClient,
+      posthogServices: createPostHogServices(),
+      notionServices: {
+        getTodoList: async () => ({
+          summary: {
+            title: "Pre Beta To Do",
+            dataSourceId: "todo_1",
+            generatedAt: 1,
+            total: 1,
+            openCount: 1,
+            statusCounts: [{ progress: "Not started", count: 1 }],
+          },
+          items: [],
+          printout: "todo",
+        }),
+      },
+      store,
+    });
+
+    const firstSend = gateway.sendMessage({
+      channel: "telegram",
+      threadId: thread.id,
+      message: "first",
+    });
+
+    await Promise.resolve();
+
+    const secondSend = gateway.sendMessage({
+      channel: "telegram",
+      threadId: thread.id,
+      message: "second",
+    });
+
+    await Promise.resolve();
+    expect(secondReplyStarted).toBe(false);
+
+    firstReply.resolve("First reply");
+    const firstResult = await firstSend;
+    expect(firstResult.replyMessage.content).toBe("First reply");
+
+    const secondResult = await secondSend;
+    expect(secondReplyStarted).toBe(true);
+    expect(secondResult.replyMessage.content).toBe("Second reply");
+  });
+
+  test("loads and updates the wakeup config from the runtime instance file", async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "clog-gateway-wakeup-"));
+    cleanupPaths.push(workspaceRoot);
+
+    const instanceRoot = join(workspaceRoot, "instance");
+    mkdirSync(instanceRoot, { recursive: true });
+    writeFileSync(join(instanceRoot, "wakeup.json"), JSON.stringify({
+      intervalMs: 900_000,
+      message: "Initial wakeup prompt",
+    }, null, 2));
+
+    const store = new InMemoryRuntimeStore();
+    store.setStatus("idle");
+    const monitorLoop = {
+      tick: async (): Promise<MonitoringTickResult> => ({
+        observations: [],
+        integrationHealth: [],
+        findings: [],
+        checkedAt: Date.now(),
+      }),
+    } as MonitoringLoop;
+
+    const gateway = new AgentGateway({
+      env: createEnvironment({
+        storage: {
+          instanceId: "test-instance",
+          instanceRoot,
+          readOnlyDir: join(instanceRoot, "read-only"),
+          workspaceDir: join(instanceRoot, "workspace"),
+          storageDir: join(instanceRoot, "storage"),
+          stateDir: join(instanceRoot, "storage", "state"),
+        },
+      }),
+      bootedAt: 1,
+      brain: {
+        reply: async () => "ok",
+      } as unknown as BrainService,
+      monitorLoop,
+      posthog: {} as PostHogIntegrationClient,
+      posthogServices: createPostHogServices(),
+      notionServices: {
+        getTodoList: async () => ({
+          summary: {
+            title: "Pre Beta To Do",
+            dataSourceId: "todo_1",
+            generatedAt: 1,
+            total: 1,
+            openCount: 1,
+            statusCounts: [{ progress: "Not started", count: 1 }],
+          },
+          items: [],
+          printout: "todo",
+        }),
+      },
+      store,
+    });
+
+    const bootstrap = await gateway.bootstrap();
+    expect(bootstrap.wakeup).toEqual({
+      intervalMs: 900_000,
+      message: "Initial wakeup prompt",
+    });
+
+    const updated = await gateway.updateWakeupConfig({
+      intervalMs: 1_800_000,
+      message: "Updated wakeup prompt",
+    });
+
+    expect(updated.wakeup).toEqual({
+      intervalMs: 1_800_000,
+      message: "Updated wakeup prompt",
+    });
+    expect(JSON.parse(readFileSync(join(instanceRoot, "wakeup.json"), "utf-8"))).toEqual({
+      intervalMs: 1_800_000,
+      message: "Updated wakeup prompt",
+    });
   });
 });

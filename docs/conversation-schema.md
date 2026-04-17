@@ -37,7 +37,7 @@ Recommended future note entries:
 
 ```jsonl
 {"type":"conversation-header","schemaVersion":1,"fileKind":"chat","conversationId":"conversation-2026-03-26T01-32-20-418Z-thread_abc123","threadId":"thread_abc123","channel":"tui","title":"Operator Conversation","createdAt":1774402340418,"updatedAt":1774402400000}
-{"type":"message","conversationId":"conversation-2026-03-26T01-32-20-418Z-thread_abc123","threadId":"thread_abc123","messageId":"msg_01","role":"system","channel":"tui","content":"PostHog Claw is online.","createdAt":1774402340418}
+{"type":"message","conversationId":"conversation-2026-03-26T01-32-20-418Z-thread_abc123","threadId":"thread_abc123","messageId":"msg_01","role":"system","channel":"tui","content":" is online.","createdAt":1774402340418}
 {"type":"message","conversationId":"conversation-2026-03-26T01-32-20-418Z-thread_abc123","threadId":"thread_abc123","messageId":"msg_02","role":"user","channel":"tui","content":"what errors happened today?","createdAt":1774402350000}
 ```
 

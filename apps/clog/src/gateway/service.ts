@@ -1,7 +1,10 @@
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type {
   ActionExecutionRequest,
   ActionExecutionResult,
   AgentRuntimeSummary,
+  RuntimeWakeupConfig,
   SurfaceNotionTodoResponse,
   PostHogEndpointDiffRequest,
   PostHogEndpointRunRequest,
@@ -25,8 +28,11 @@ import type {
   SurfaceSendMessageResponse,
   SurfaceShellCommandResponse,
   SurfaceThreadsResponse,
+  SurfaceUpdateWakeupRequest,
+  SurfaceUpdateWakeupResponse,
 } from "@clog/types";
 import type { AgentEnvironment } from "../config";
+import { normalizeRuntimeWakeupConfig } from "../brain/prompt-loader";
 import type { NotionToolServices } from "../tools/types";
 import type { PostHogIntegrationClient } from "../integrations/posthog/client";
 import { BrainService } from "../brain/service";
@@ -59,8 +65,33 @@ export interface AgentGatewayDependencies {
   readonly store: RuntimeStore;
 }
 
+const resolveWakeupConfigPath = (env: AgentEnvironment): string =>
+  join(env.storage.instanceRoot, "wakeup.json");
+
+const readWakeupConfig = (env: AgentEnvironment): RuntimeWakeupConfig | null => {
+  try {
+    return normalizeRuntimeWakeupConfig(JSON.parse(readFileSync(resolveWakeupConfigPath(env), "utf-8")) as unknown);
+  } catch {
+    return null;
+  }
+};
+
+const writeJsonAtomically = (path: string, value: unknown): void => {
+  mkdirSync(dirname(path), { recursive: true });
+  const temporaryPath = `${path}.${process.pid}.${crypto.randomUUID()}.tmp`;
+
+  try {
+    writeFileSync(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, "utf-8");
+    renameSync(temporaryPath, path);
+  } catch (error) {
+    rmSync(temporaryPath, { force: true });
+    throw error;
+  }
+};
+
 export class AgentGateway implements AgentGatewaySurface {
   private serialQueue: Promise<void> = Promise.resolve();
+  private readonly threadQueues = new Map<string, Promise<void>>();
 
   constructor(private readonly deps: AgentGatewayDependencies) {}
 
@@ -68,6 +99,19 @@ export class AgentGateway implements AgentGatewaySurface {
     const run = this.serialQueue.then(operation, operation);
     this.serialQueue = run.then(() => undefined, () => undefined);
     return run;
+  }
+
+  private runThreadExclusive<T>(threadId: string, operation: () => Promise<T>): Promise<T> {
+    const previous = this.threadQueues.get(threadId) ?? Promise.resolve();
+    const run = previous.catch(() => undefined).then(operation);
+    const queueEntry = run.then(() => undefined, () => undefined);
+    this.threadQueues.set(threadId, queueEntry);
+
+    return run.finally(() => {
+      if (this.threadQueues.get(threadId) === queueEntry) {
+        this.threadQueues.delete(threadId);
+      }
+    });
   }
 
   async bootstrap(): Promise<SurfaceBootstrapResponse> {
@@ -94,6 +138,7 @@ export class AgentGateway implements AgentGatewaySurface {
         createdAt: thread.createdAt,
         updatedAt: thread.updatedAt,
       })),
+      wakeup: readWakeupConfig(this.deps.env),
     };
   }
 
@@ -114,15 +159,15 @@ export class AgentGateway implements AgentGatewaySurface {
   }
 
   async sendMessage(input: SurfaceSendMessageRequest): Promise<SurfaceSendMessageResponse> {
-    return await this.runExclusive(async () => {
-      const thread = input.threadId
-        ? this.deps.store.getThread(input.threadId)
-        : this.deps.store.createThread(input.channel, input.title?.trim() || "Operator Conversation");
+    const thread = input.threadId
+      ? this.deps.store.getThread(input.threadId)
+      : this.deps.store.createThread(input.channel, input.title?.trim() || "Operator Conversation");
 
-      if (!thread) {
-        throw new Error(`Thread not found: ${input.threadId}`);
-      }
+    if (!thread) {
+      throw new Error(`Thread not found: ${input.threadId}`);
+    }
 
+    return await this.runThreadExclusive(thread.id, async () => {
       const userMessage = this.deps.store.createMessage("user", input.channel, input.message);
       const threadWithUserMessage = this.deps.store.appendMessages(thread.id, [userMessage]);
 
@@ -142,6 +187,16 @@ export class AgentGateway implements AgentGatewaySurface {
         recommendedActions,
       };
     });
+  }
+
+  async updateWakeupConfig(input: SurfaceUpdateWakeupRequest): Promise<SurfaceUpdateWakeupResponse> {
+    const wakeup = normalizeRuntimeWakeupConfig(input);
+    if (!wakeup) {
+      throw new Error("Wakeup config requires a numeric intervalMs and a non-empty message");
+    }
+
+    writeJsonAtomically(resolveWakeupConfigPath(this.deps.env), wakeup);
+    return { wakeup };
   }
 
   async acknowledgeFinding(input: SurfaceAcknowledgeFindingRequest): Promise<SurfaceFindingsResponse> {

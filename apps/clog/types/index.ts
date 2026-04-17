@@ -134,6 +134,11 @@ export interface AgentRuntimeSummary {
   readonly activeIntegrations: readonly IntegrationKind[];
 }
 
+export interface RuntimeWakeupConfig {
+  readonly intervalMs: number;
+  readonly message: string;
+}
+
 export interface SurfaceBootstrapResponse {
   readonly runtime: AgentRuntimeSummary;
   readonly capabilities: IntegrationCapabilitySnapshot;
@@ -141,6 +146,7 @@ export interface SurfaceBootstrapResponse {
   readonly channels: readonly SurfaceChannelKind[];
   readonly openFindings: number;
   readonly threads: readonly Pick<ConversationThread, "id" | "title" | "channel" | "createdAt" | "updatedAt">[];
+  readonly wakeup: RuntimeWakeupConfig | null;
 }
 
 export interface SurfaceFindingsResponse {
@@ -162,6 +168,15 @@ export interface SurfaceSendMessageResponse {
   readonly thread: ConversationThread;
   readonly replyMessage: ConversationMessage;
   readonly recommendedActions: readonly ProposedAction[];
+}
+
+export interface SurfaceUpdateWakeupRequest {
+  readonly intervalMs: number;
+  readonly message: string;
+}
+
+export interface SurfaceUpdateWakeupResponse {
+  readonly wakeup: RuntimeWakeupConfig;
 }
 
 export interface SurfaceAcknowledgeFindingRequest {

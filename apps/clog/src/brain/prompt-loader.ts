@@ -1,8 +1,9 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { RuntimeWakeupConfig } from "@clog/types";
 import { resolveRuntimeWakeupPath } from "../../../../tests/runtime-instance-template";
-import type { ToolSummary } from "../schema/tools";
+import type { ToolFamily, ToolSummary } from "../schema/tools";
 
 const brainDir = fileURLToPath(new URL("./", import.meta.url));
 const promptsDir = join(brainDir, "prompts");
@@ -55,11 +56,6 @@ export interface SystemPromptOptions {
   readonly findingsSummary?: string | null;
   readonly runtimeContext?: string | null;
   readonly wakeupPrompt?: string | null;
-}
-
-interface RuntimeWakeupConfig {
-  readonly intervalMs: number;
-  readonly message: string;
 }
 
 export const normalizeRuntimeWakeupConfig = (value: unknown): RuntimeWakeupConfig | null => {
@@ -168,33 +164,63 @@ export const loadAiPromptBundle = (
 const buildToolPrompt = (tools: readonly ToolSummary[]): string => {
   if (tools.length === 0) {
     return [
-      "Enabled tools for this turn:",
-      "- No runtime tools are enabled right now.",
-      "- Do not claim tool access that was not explicitly provided in the runtime payload.",
+      "Tool access:",
+      "- Enabled tools: 0",
+      "- Enabled families: none",
+      "- Approval required: no",
+      "- Read deeper: use runtime knowledge or catalogs when you need more detail.",
     ].join("\n");
   }
 
-  const lines = ["Enabled tools for this turn:"];
+  const familyOrder: readonly ToolFamily[] = [
+    "posthog",
+    "runtime",
+    "notion",
+    "shell",
+    "github",
+    "vercel",
+  ];
+  const familyCounts = new Map<ToolFamily, number>();
+  let approvalRequiredCount = 0;
+
   for (const tool of tools) {
-    lines.push(`- ${tool.name}: ${tool.description}${tool.approvalRequired ? " Approval is required before risky actions." : ""}`);
+    familyCounts.set(tool.integration, (familyCounts.get(tool.integration) ?? 0) + 1);
+    if (tool.approvalRequired) {
+      approvalRequiredCount += 1;
+    }
   }
 
-  return lines.join("\n");
+  const enabledFamilies = familyOrder
+    .filter((family) => (familyCounts.get(family) ?? 0) > 0)
+    .map((family) => {
+      const label = family === "posthog"
+        ? "PostHog"
+        : family[0]!.toUpperCase() + family.slice(1);
+      return `${label} (${familyCounts.get(family)})`;
+    });
+
+  return [
+    "Tool access:",
+    `- Enabled tools: ${tools.length}`,
+    `- Enabled families: ${enabledFamilies.join(", ")}`,
+    `- Approval required: ${approvalRequiredCount > 0 ? "yes" : "no"}`,
+    "- Read deeper: use runtime knowledge or catalogs when you need more detail.",
+  ].join("\n");
 };
 
 export const buildSystemPrompt = (bundle: AiPromptBundle, options: SystemPromptOptions = {}): string => {
   return [
     bundle.systemPrompt,
-    bundle.projectPrompt?.trim() ? `Project context:\n${bundle.projectPrompt}` : "",
+    bundle.projectPrompt?.trim() ? `Project Context:\n${bundle.projectPrompt}` : "",
     options.includeKnowledgePrompt === false || !bundle.knowledgePrompt?.trim()
       ? ""
-      : `Knowledge summaries:\n${bundle.knowledgePrompt}`,
-    options.runtimeContext?.trim() ? `Runtime context:\n${options.runtimeContext}` : "",
+      : `Knowledge Context:\n${bundle.knowledgePrompt}`,
+    options.runtimeContext?.trim() ? `Runtime Context:\n${options.runtimeContext}` : "",
     options.includeModePrompt === false ? "" : bundle.primaryModePrompt,
     buildToolPrompt(options.tools ?? []),
-    options.executionMode ? `Execution mode: ${options.executionMode}` : "",
+    options.executionMode ? `Execution Mode: ${options.executionMode}` : "",
     options.findingsSummary?.trim() ? options.findingsSummary : "",
-    options.wakeupPrompt?.trim() ? `Wakeup guidance:\n${options.wakeupPrompt}` : "",
+    options.wakeupPrompt?.trim() ? `Wakeup Guidance:\n${options.wakeupPrompt}` : "",
   ]
     .filter(Boolean)
     .join("\n\n");

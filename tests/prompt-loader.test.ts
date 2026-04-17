@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { buildSystemPrompt, loadAiPromptBundle, resolveRuntimeWakeupConfigPath } from "../apps/clog/src/brain/prompt-loader";
+import type { ToolSummary } from "../apps/clog/src/schema/tools";
 
 const cleanupPaths: string[] = [];
 
@@ -45,15 +46,26 @@ describe("prompt loader", () => {
     expect(bundle.wakeupPrompt).toContain("Wakeup is the periodic monitoring pass");
     expect(bundle.wakeupPrompt).toContain("Check the latest signals");
     expect(bundle.wakeupPrompt).toContain("60000ms");
-    expect(buildSystemPrompt(bundle)).toContain("Project context:");
-    expect(buildSystemPrompt(bundle)).toContain("Knowledge summaries:");
+    expect(buildSystemPrompt(bundle)).toContain("Project Context:");
+    expect(buildSystemPrompt(bundle)).toContain("Knowledge Context:");
     expect(buildSystemPrompt(bundle)).toContain("4ever.ai");
+    const toolSummary: ToolSummary = {
+      name: "posthog_run_query",
+      title: "PostHog HogQL Query",
+      description: "Run a typed PostHog HogQL query.",
+      integration: "posthog",
+      approvalRequired: false,
+      implemented: true,
+    };
     expect(buildSystemPrompt(bundle, {
       runtimeContext: "PostHog context: 4ever.ai / app.4ever.ai",
-    })).toContain("Runtime context:");
+    })).toContain("Runtime Context:");
     expect(buildSystemPrompt(bundle, {
       runtimeContext: "PostHog context: 4ever.ai / app.4ever.ai",
     })).toContain("4ever.ai / app.4ever.ai");
+    expect(buildSystemPrompt(bundle, { tools: [toolSummary] })).toContain("Tool access:");
+    expect(buildSystemPrompt(bundle, { tools: [toolSummary] })).toContain("Enabled tools: 1");
+    expect(buildSystemPrompt(bundle, { tools: [toolSummary] })).toContain("Enabled families: PostHog (1)");
   });
 
   test("keeps runtime wakeup config optional", () => {

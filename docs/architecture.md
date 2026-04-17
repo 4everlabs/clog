@@ -79,7 +79,7 @@ The transport-agnostic typed surface. This is the layer web, Telegram, and CLI s
 
 `.runtime` now stores only the per-instance runtime contract:
 
-- `read-only/settings.json` – runtime-facing settings kept out of model access, including pinned PostHog context hints.
+- `read-only/settings.json` – runtime-facing settings kept out of model access, including optional pinned PostHog context hints used to scope tool exposure.
 - `read-only/tools.json` – tool visibility and enablement for the model/runtime surface.
 - `wakeup.json` – per-instance wakeup message and frequency in one editable file.
 - `storage/` – per-instance runtime state such as `storage/state/*.json`.

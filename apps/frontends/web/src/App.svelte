@@ -1,13 +1,13 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import type { ConversationThread, SurfaceBootstrapResponse } from "@clog/types";
+  import type { ConversationMessage, ConversationThread, SurfaceBootstrapResponse } from "@clog/types";
   import { ClogApiClient, resolveBackendBaseUrl } from "./clog-api";
   import ChatPanel from "./components/ChatPanel.svelte";
   import ConsolePanel from "./components/ConsolePanel.svelte";
   import SettingsPanel from "./components/SettingsPanel.svelte";
   import Sidebar from "./components/Sidebar.svelte";
 
-  type ConsoleEntryKind = "observation" | "finding" | "health" | "shell" | "info" | "error";
+  type ConsoleEntryKind = "observation" | "finding" | "health" | "info" | "error";
 
   interface ConsoleEntry {
     readonly id: string;
@@ -18,8 +18,29 @@
   }
 
   type MainView = "chat" | "settings";
+  type ThreadSelectionMode = "auto" | "existing" | "new";
+  interface ThreadSnapshot {
+    readonly threads: ConversationThread[];
+    readonly activeThreadId: string | null;
+    readonly selectionMode: ThreadSelectionMode;
+  }
+  interface LoadThreadsOptions {
+    readonly initial?: boolean;
+    readonly reportError?: boolean;
+    readonly skipIfSending?: boolean;
+  }
+  interface WakeupFormInput {
+    readonly intervalMinutes: number;
+    readonly message: string;
+  }
 
-  const { baseUrl }: { readonly baseUrl?: string } = $props();
+  const CHAT_CHANNEL: ConversationThread["channel"] = "web";
+  const CHAT_POLL_INTERVAL_MS = 900;
+
+  const { baseUrl, sessionStartedAt = null }: {
+    readonly baseUrl?: string;
+    readonly sessionStartedAt?: number | null;
+  } = $props();
 
   const client = $derived(
     new ClogApiClient({
@@ -30,14 +51,24 @@
   let bootstrap = $state<SurfaceBootstrapResponse | null>(null);
   let threads = $state<ConversationThread[]>([]);
   let activeThreadId = $state<string | null>(null);
-  let newThreadTitle = $state("");
-  let loadError = $state<string | null>(null);
   let loading = $state(true);
   let refreshBusy = $state(false);
   let monitorBusy = $state(false);
+  let wakeupSaveBusy = $state(false);
   let sending = $state(false);
   let consoleEntries = $state<ConsoleEntry[]>([]);
   let activeView = $state<MainView>("chat");
+  let threadSelectionMode = $state<ThreadSelectionMode>("auto");
+  let threadsError = $state<string | null>(null);
+  let bootstrapError = $state<string | null>(null);
+  let wakeupSaveError = $state<string | null>(null);
+  let sendError = $state<string | null>(null);
+  let threadStateVersion = 0;
+
+  const loadError = $derived.by(() => {
+    const messages = [sendError, threadsError, bootstrapError].filter((value): value is string => value !== null);
+    return messages.length > 0 ? messages.join(" | ") : null;
+  });
   const activeThread = $derived(threads.find((t) => t.id === activeThreadId) ?? null);
 
   function pushConsole(entry: Omit<ConsoleEntry, "id" | "at"> & { readonly id?: string }): void {
@@ -52,45 +83,151 @@
     consoleEntries = [...consoleEntries, row].slice(-200);
   }
 
-  function syncActiveAfterThreads(next: readonly ConversationThread[]): void {
-    const prev = activeThreadId;
-    if (prev && next.some((t) => t.id === prev)) {
-      activeThreadId = prev;
-      return;
-    }
-    activeThreadId = next[0]?.id ?? null;
+  function describeError(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
   }
 
-  async function loadAll(isInitial: boolean): Promise<void> {
-    loadError = null;
-    if (isInitial) {
+  function summarizeThreadTitle(body: string): string {
+    const text = body.replace(/\s+/gu, " ").trim();
+    return text.slice(0, 80) || "New conversation";
+  }
+
+  function createOptimisticMessage(role: ConversationMessage["role"], content: string, createdAt: number): ConversationMessage {
+    return {
+      id: `optimistic-${role}-${crypto.randomUUID()}`,
+      role,
+      channel: CHAT_CHANNEL,
+      content,
+      createdAt,
+    };
+  }
+
+  function resolveActiveThreadId(
+    next: readonly ConversationThread[],
+    preferredThreadId: string | null,
+    selectionMode: ThreadSelectionMode,
+  ): string | null {
+    if (selectionMode === "new") {
+      return null;
+    }
+    if (preferredThreadId && next.some((thread) => thread.id === preferredThreadId)) {
+      return preferredThreadId;
+    }
+    return next[0]?.id ?? null;
+  }
+
+  function setThreadsFromServer(next: readonly ConversationThread[]): void {
+    const nextThreads = [...next];
+    threads = nextThreads;
+    activeThreadId = resolveActiveThreadId(nextThreads, activeThreadId, threadSelectionMode);
+    threadStateVersion += 1;
+  }
+
+  function setLocalThreadState(
+    next: readonly ConversationThread[],
+    nextActiveThreadId: string | null,
+    nextSelectionMode: ThreadSelectionMode = threadSelectionMode,
+  ): void {
+    threads = [...next];
+    activeThreadId = nextActiveThreadId;
+    threadSelectionMode = nextSelectionMode;
+    threadStateVersion += 1;
+  }
+
+  function upsertThread(
+    updated: ConversationThread,
+    replaceThreadId: string | null = null,
+    nextSelectionMode: ThreadSelectionMode = "existing",
+  ): void {
+    const next = threads.slice();
+
+    if (replaceThreadId) {
+      const replaceIndex = next.findIndex((thread) => thread.id === replaceThreadId);
+      if (replaceIndex >= 0) {
+        next[replaceIndex] = updated;
+        setLocalThreadState(next, updated.id, nextSelectionMode);
+        return;
+      }
+    }
+
+    const index = next.findIndex((thread) => thread.id === updated.id);
+    if (index >= 0) {
+      next[index] = updated;
+    } else {
+      next.push(updated);
+    }
+    setLocalThreadState(next, updated.id, nextSelectionMode);
+  }
+
+  async function loadThreads({
+    initial = false,
+    reportError = true,
+    skipIfSending = false,
+  }: LoadThreadsOptions = {}): Promise<boolean> {
+    const requestVersion = threadStateVersion;
+
+    if (initial) {
       loading = true;
     }
+
     try {
-      const [b, t] = await Promise.all([client.bootstrap(), client.listThreads()]);
-      bootstrap = b;
-      threads = [...t.threads];
-      syncActiveAfterThreads(threads);
-      pushConsole({ kind: "info", title: "Loaded bootstrap and threads" });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      loadError = msg;
-      pushConsole({ kind: "error", title: "Load failed", body: msg });
+      const response = await client.listThreads();
+      if ((skipIfSending && sending) || requestVersion !== threadStateVersion) {
+        return false;
+      }
+
+      threadsError = null;
+      setThreadsFromServer(response.threads);
+      return true;
+    } catch (error) {
+      const message = describeError(error);
+      threadsError = message;
+      if (reportError) {
+        pushConsole({ kind: "error", title: "Thread refresh failed", body: message });
+      }
+      return false;
     } finally {
-      if (isInitial) {
+      if (initial) {
         loading = false;
       }
     }
   }
 
+  async function loadBootstrap(reportError = true): Promise<boolean> {
+    try {
+      bootstrap = await client.bootstrap();
+      bootstrapError = null;
+      return true;
+    } catch (error) {
+      const message = describeError(error);
+      bootstrapError = message;
+      if (reportError) {
+        pushConsole({ kind: "error", title: "Bootstrap refresh failed", body: message });
+      }
+      return false;
+    }
+  }
+
   onMount(() => {
-    void loadAll(true);
+    void loadThreads({ initial: true });
+    void loadBootstrap();
+
+    const pollId = window.setInterval(() => {
+      if (activeView !== "chat" || sending || threadSelectionMode === "new") {
+        return;
+      }
+      void loadThreads({ reportError: false, skipIfSending: true });
+    }, CHAT_POLL_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(pollId);
+    };
   });
 
   async function refresh(): Promise<void> {
     refreshBusy = true;
     try {
-      await loadAll(false);
+      await Promise.all([loadThreads({ skipIfSending: true }), loadBootstrap()]);
     } finally {
       refreshBusy = false;
     }
@@ -125,54 +262,119 @@
           body: h.summary,
         });
       }
-      const b = await client.bootstrap();
-      bootstrap = b;
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      pushConsole({ kind: "error", title: "Monitor cycle failed", body: msg });
+      await Promise.all([loadBootstrap(), loadThreads({ skipIfSending: true })]);
+    } catch (error) {
+      const message = describeError(error);
+      pushConsole({ kind: "error", title: "Monitor cycle failed", body: message });
     } finally {
       monitorBusy = false;
     }
   }
 
-  function selectThread(threadId: string | null): void {
-    activeThreadId = threadId;
-  }
+  async function handleWakeupSave(input: WakeupFormInput): Promise<void> {
+    const intervalMinutes = Math.floor(input.intervalMinutes);
+    const message = input.message.trim();
 
-  function mergeThread(updated: ConversationThread): void {
-    const idx = threads.findIndex((t) => t.id === updated.id);
-    if (idx >= 0) {
-      const next = threads.slice();
-      next[idx] = updated;
-      threads = next;
+    if (!Number.isFinite(intervalMinutes) || intervalMinutes < 1 || !message) {
+      wakeupSaveError = "Enter a valid interval and prompt.";
       return;
     }
-    threads = [...threads, updated];
+
+    wakeupSaveBusy = true;
+    wakeupSaveError = null;
+    try {
+      const response = await client.updateWakeupConfig({
+        intervalMs: intervalMinutes * 60_000,
+        message,
+      });
+
+      if (bootstrap) {
+        bootstrap = { ...bootstrap, wakeup: response.wakeup };
+      } else {
+        await loadBootstrap(false);
+      }
+
+      pushConsole({
+        kind: "info",
+        title: "Wakeup updated",
+        body: `Every ${response.wakeup.intervalMs / 60_000} min`,
+      });
+    } catch (error) {
+      const messageText = describeError(error);
+      wakeupSaveError = messageText;
+      pushConsole({ kind: "error", title: "Wakeup save failed", body: messageText });
+    } finally {
+      wakeupSaveBusy = false;
+    }
+  }
+
+  function selectThread(threadId: string | null): void {
+    activeThreadId = threadId;
+    threadSelectionMode = threadId === null ? "new" : "existing";
+    if (threadId !== null) {
+      void loadThreads({ reportError: false, skipIfSending: true });
+    }
   }
 
   async function handleSend(body: string): Promise<void> {
-    if (!body.trim()) {
+    const message = body.trim();
+    if (!message) {
       return;
     }
+
+    const previousState: ThreadSnapshot = {
+      threads: $state.snapshot(threads),
+      activeThreadId,
+      selectionMode: threadSelectionMode,
+    };
+    const currentThread = activeThread;
+    const currentThreadId = activeThreadId;
+    const now = Date.now();
+    const optimisticUserMessage = createOptimisticMessage("user", message, now);
+    const optimisticAgentMessage = createOptimisticMessage("agent", "Thinking...", now + 1);
+    const optimisticThreadId = currentThreadId ?? `optimistic-thread-${crypto.randomUUID()}`;
+    const optimisticThread: ConversationThread = currentThread
+      ? {
+          ...currentThread,
+          title: currentThread.title || summarizeThreadTitle(message),
+          updatedAt: now,
+          messages: [...currentThread.messages, optimisticUserMessage, optimisticAgentMessage],
+        }
+      : {
+          id: optimisticThreadId,
+          title: summarizeThreadTitle(message),
+          channel: CHAT_CHANNEL,
+          createdAt: now,
+          updatedAt: now,
+          messages: [optimisticUserMessage, optimisticAgentMessage],
+        };
+    const optimisticThreads = currentThread
+      ? threads.map((thread) => (thread.id === currentThread.id ? optimisticThread : thread))
+      : [...previousState.threads, optimisticThread];
+
+    sendError = null;
+    setLocalThreadState(optimisticThreads, optimisticThread.id, "existing");
     sending = true;
+
     try {
       const res = await client.sendMessage({
-        channel: "web",
-        threadId: activeThreadId ?? undefined,
-        title: newThreadTitle.trim() || undefined,
-        message: body.trim(),
+        channel: CHAT_CHANNEL,
+        threadId: currentThreadId ?? undefined,
+        message,
       });
-      mergeThread(res.thread);
-      activeThreadId = res.thread.id;
-      newThreadTitle = "";
+
+      sendError = null;
+      upsertThread(res.thread, currentThreadId ? null : optimisticThread.id, "existing");
       pushConsole({
         kind: "info",
         title: "Message sent",
         body: `Thread ${res.thread.id}`,
       });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      pushConsole({ kind: "error", title: "Send failed", body: msg });
+    } catch (error) {
+      const messageText = describeError(error);
+      sendError = messageText;
+      setLocalThreadState(previousState.threads, previousState.activeThreadId, previousState.selectionMode);
+      pushConsole({ kind: "error", title: "Send failed", body: messageText });
     } finally {
       sending = false;
     }
@@ -199,12 +401,18 @@
   <div class="layout">
     <Sidebar
       runtime={bootstrap?.runtime ?? null}
-      integrations={bootstrap?.integrations ?? []}
-      threadCount={threads.length}
+      wakeup={bootstrap?.wakeup ?? null}
+      {sessionStartedAt}
       activeView={activeView}
+      {wakeupSaveBusy}
+      {wakeupSaveError}
       onSelectView={(view: MainView) => {
         activeView = view;
+        if (view === "chat") {
+          void loadThreads({ reportError: false, skipIfSending: true });
+        }
       }}
+      onSaveWakeup={(input: WakeupFormInput) => void handleWakeupSave(input)}
     />
     <main class="main">
       {#if activeView === "chat"}
@@ -214,13 +422,9 @@
               activeThread={activeThread}
               threads={threadRows}
               {activeThreadId}
-              {newThreadTitle}
               {sending}
               onSend={(body) => void handleSend(body)}
               onSelectThread={selectThread}
-              onNewThreadTitleChange={(value: string) => {
-                newThreadTitle = value;
-              }}
             />
           </div>
 
@@ -308,7 +512,7 @@
   }
 
   .layout > :global(.side) {
-    width: 220px;
+    width: 148px;
     flex-shrink: 0;
     background: var(--bg-sidebar);
     border-right: 1px solid var(--border-strong);
@@ -336,7 +540,7 @@
   }
 
   .right {
-    width: 300px;
+    width: min(450px, 50%);
     flex-shrink: 0;
     background: var(--bg-sidebar);
     border-left: 1px solid var(--border-strong);

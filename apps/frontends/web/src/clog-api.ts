@@ -24,6 +24,8 @@ import type {
   SurfaceSendMessageResponse,
   SurfaceShellCommandResponse,
   SurfaceThreadsResponse,
+  SurfaceUpdateWakeupRequest,
+  SurfaceUpdateWakeupResponse,
 } from "@clog/types";
 
 export interface ClogApiClientOptions {
@@ -96,6 +98,13 @@ export class ClogApiClient {
 
   async sendMessage(input: SurfaceSendMessageRequest): Promise<SurfaceSendMessageResponse> {
     return await this.request<SurfaceSendMessageResponse>("/api/chat", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  async updateWakeupConfig(input: SurfaceUpdateWakeupRequest): Promise<SurfaceUpdateWakeupResponse> {
+    return await this.request<SurfaceUpdateWakeupResponse>("/api/wakeup", {
       method: "POST",
       body: JSON.stringify(input),
     });

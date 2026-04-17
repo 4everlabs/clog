@@ -430,7 +430,7 @@ export const loadAgentEnvironment = (env: NodeJS.ProcessEnv = getRuntimeProcessE
   });
 
   return {
-    appName: env.POSTHOG_CLAW_APP_NAME?.trim() || "PostHog Claw",
+    appName: env.POSTHOG_CLAW_APP_NAME?.trim() || "Clog",
     port: Number.isFinite(requestedPort) ? requestedPort : 6900,
     executionMode: readExecutionMode(env.POSTHOG_CLAW_EXECUTION_MODE),
     monitorIntervalMs,

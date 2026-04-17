@@ -7,27 +7,26 @@
     readonly title: string;
   };
 
+  const NEW_CONVERSATION_VALUE = "__new__";
+
   const {
     activeThread,
     threads,
     activeThreadId,
-    newThreadTitle = "",
     sending = false,
     onSend,
     onSelectThread,
-    onNewThreadTitleChange,
   }: {
     readonly activeThread: ConversationThread | null;
     readonly threads: readonly ThreadRow[];
     readonly activeThreadId: string | null;
-    readonly newThreadTitle?: string;
     readonly sending?: boolean;
     readonly onSend: (body: string) => void;
     readonly onSelectThread: (threadId: string | null) => void;
-    readonly onNewThreadTitleChange: (value: string) => void;
   } = $props();
 
   let draft = $state("");
+  let selectedThreadValue = $derived(activeThreadId ?? NEW_CONVERSATION_VALUE);
 
   function submit(): void {
     if (sending) {
@@ -50,42 +49,18 @@
         <select
           id="thread-select"
           class="thread-select"
-          value={activeThreadId ?? "__new__"}
-          onchange={(event) => {
-            const value = (event.currentTarget as HTMLSelectElement).value;
-            onSelectThread(value === "__new__" ? null : value);
+          bind:value={selectedThreadValue}
+          onchange={() => {
+            onSelectThread(selectedThreadValue === NEW_CONVERSATION_VALUE ? null : selectedThreadValue);
           }}
         >
-          <option value="__new__">New conversation</option>
+          <option value={NEW_CONVERSATION_VALUE}>New conversation</option>
           {#each threads as thread (thread.id)}
             <option value={thread.id}>{thread.title || "(untitled)"}</option>
           {/each}
         </select>
       </div>
-
-      <div class="field title-field">
-        <label class="field-label" for="new-thread-title">New conversation title</label>
-        <input
-          id="new-thread-title"
-          class="new-title"
-          type="text"
-          placeholder="Optional"
-          value={newThreadTitle}
-          disabled={activeThreadId !== null}
-          oninput={(event) => {
-            onNewThreadTitleChange((event.currentTarget as HTMLInputElement).value);
-          }}
-        />
-      </div>
     </div>
-
-    {#if activeThread}
-      <h2 class="title">{activeThread.title || "(untitled)"}</h2>
-      <span class="meta">Thread ID {activeThread.id}</span>
-    {:else}
-      <h2 class="title">New conversation</h2>
-      <span class="meta muted">Select an existing thread above or send a message to create one.</span>
-    {/if}
   </header>
 
   <div class="messages">
@@ -141,9 +116,7 @@
 
   .head-top {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 0.75rem;
-    margin-bottom: 0.75rem;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .field {
@@ -157,8 +130,7 @@
     margin-bottom: 0.25rem;
   }
 
-  .thread-select,
-  .new-title {
+  .thread-select {
     width: 100%;
     box-sizing: border-box;
     font: inherit;
@@ -167,30 +139,6 @@
     background: var(--bg-input);
     color: var(--text-primary);
     padding: 0.45rem 0.6rem;
-  }
-
-  .new-title:disabled {
-    background: var(--bg-panel);
-    color: var(--text-subtle);
-  }
-
-  .title {
-    margin: 0;
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--text-primary);
-  }
-
-  .meta {
-    display: block;
-    font-size: 0.75rem;
-    margin-top: 0.15rem;
-    font-family: ui-monospace, monospace;
-    color: var(--text-muted);
-  }
-
-  .muted {
-    color: var(--text-muted);
   }
 
   .messages {
@@ -249,15 +197,7 @@
     cursor: not-allowed;
   }
 
-  .thread-select::placeholder,
-  .new-title::placeholder,
   .input::placeholder {
     color: var(--text-subtle);
-  }
-
-  @media (max-width: 840px) {
-    .head-top {
-      grid-template-columns: 1fr;
-    }
   }
 </style>

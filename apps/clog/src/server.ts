@@ -9,6 +9,7 @@ import type {
   ShellCommandRequest,
   SurfaceAcknowledgeFindingRequest,
   SurfaceSendMessageRequest,
+  SurfaceUpdateWakeupRequest,
 } from "@clog/types";
 import type { RuntimeBootstrap } from "./bootstrap";
 
@@ -136,8 +137,8 @@ export class AgentSurfaceTransport {
     <main>
       <div class="eyebrow">CLOG</div>
       <h1>Runtime is up.</h1>
-      <p>The launcher can open a browser target now, but the real web frontend is not built yet.</p>
-      <p>Use the TUI for the actual interface, or hit <a href="/healthz"><code>/healthz</code></a> and <a href="/api/bootstrap"><code>/api/bootstrap</code></a> for runtime data.</p>
+      <p>The runtime is serving API and websocket endpoints, but no built web bundle was found.</p>
+      <p>Run the launcher and choose the web UI for hot reload, or build the web frontend so this runtime can serve it directly from <code>/</code>.</p>
     </main>
   </body>
 </html>`);
@@ -168,6 +169,10 @@ export class AgentSurfaceTransport {
 
     if (pathname === "/api/chat" && request.method === "POST") {
       return json(await this.runtime.gateway.sendMessage(await parseJson<SurfaceSendMessageRequest>(request)));
+    }
+
+    if (pathname === "/api/wakeup" && request.method === "POST") {
+      return json(await this.runtime.gateway.updateWakeupConfig(await parseJson<SurfaceUpdateWakeupRequest>(request)));
     }
 
     if (pathname === "/api/shell" && request.method === "POST") {
@@ -343,8 +348,4 @@ export const startRuntimeServer = (runtime: RuntimeBootstrap): RuntimeServerInfo
     url: `http://127.0.0.1:${port}`,
     wsUrl: `ws://127.0.0.1:${port}/ws`,
   };
-};
-
-export const createWsManager = (): WebSocketManager => {
-  return new WebSocketManager();
 };

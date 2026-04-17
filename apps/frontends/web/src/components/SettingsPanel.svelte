@@ -6,7 +6,7 @@
     IntegrationKind,
   } from "@clog/types";
 
-  type ConsoleEntryKind = "observation" | "finding" | "health" | "shell" | "info" | "error";
+  type ConsoleEntryKind = "observation" | "finding" | "health" | "info" | "error";
 
   interface ConsoleEntry {
     readonly id: string;
@@ -48,8 +48,6 @@
         return "find";
       case "health":
         return "health";
-      case "shell":
-        return "shell";
       case "info":
         return "info";
       case "error":

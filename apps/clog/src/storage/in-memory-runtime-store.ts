@@ -155,7 +155,7 @@ export class InMemoryRuntimeStore implements RuntimeStore {
     const intro = this.createMessage(
       "system",
       channel,
-      "PostHog Claw is online. This thread will carry operator notifications, follow-up questions, and approval prompts.",
+      "Clogis online. This thread will carry operator notifications, follow-up questions, and approval prompts.",
     );
     return this.appendMessages(thread.id, [intro]);
   }

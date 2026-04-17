@@ -1,6 +1,5 @@
 #!/usr/bin/env bun
 
-import { existsSync } from "node:fs";
 import { emitKeypressEvents } from "readline";
 import { fileURLToPath } from "node:url";
 import { startDefaultRuntimeServer } from "../../clog/src/index.ts";
@@ -28,7 +27,8 @@ interface RuntimeSession {
 }
 
 const WEB_FRONTEND_DIRECTORY = fileURLToPath(new URL("../../frontends/web/", import.meta.url));
-const WEB_FRONTEND_ENTRY = fileURLToPath(new URL("../../frontends/web/dist/index.html", import.meta.url));
+const WEB_DEV_SERVER_URL = "http://127.0.0.1:4173";
+type ChildProcess = ReturnType<typeof Bun.spawn>;
 
 const writeLine = (value = ""): void => {
   process.stdout.write(`${value}\n`);
@@ -69,7 +69,7 @@ const printWelcomeScreen = (session: RuntimeSession): void => {
   writeLine();
   writeLine(colorize("Choose frontend:", ANSI.bold, ANSI.yellow));
   writeLine(`  ${colorize("[1]", ANSI.bgBlue, ANSI.white, ANSI.bold)} ${colorize("TUI", ANSI.bold)}  Full terminal interface`);
-  writeLine(`  ${colorize("[2]", ANSI.bgBlue, ANSI.white, ANSI.bold)} ${colorize("Web", ANSI.bold)}  Open the browser target`);
+  writeLine(`  ${colorize("[2]", ANSI.bgBlue, ANSI.white, ANSI.bold)} ${colorize("Web", ANSI.bold)}  Start browser UI with hot reload`);
   writeLine(`  ${colorize("[q]", ANSI.bgBlue, ANSI.white, ANSI.bold)} ${colorize("Quit", ANSI.bold)} Exit`);
   writeLine();
 };
@@ -142,6 +142,15 @@ const fetchWithTimeout = async (url: string, timeoutMs: number): Promise<Respons
 const runtimeIsReachable = async (baseUrl: string): Promise<boolean> => {
   try {
     const response = await fetchWithTimeout(`${baseUrl}/healthz`, 750);
+    return response.ok;
+  } catch {
+    return false;
+  }
+};
+
+const webDevServerIsReachable = async (): Promise<boolean> => {
+  try {
+    const response = await fetchWithTimeout(`${WEB_DEV_SERVER_URL}/healthz`, 750);
     return response.ok;
   } catch {
     return false;
@@ -222,11 +231,12 @@ const openBrowser = async (url: string): Promise<boolean> => {
   }
 };
 
-const waitForShutdownSignal = async (): Promise<void> => {
+const waitForShutdownSignal = async (onSignal?: () => void): Promise<void> => {
   await new Promise<void>((resolve) => {
     const handle = (): void => {
       process.off("SIGINT", handle);
       process.off("SIGTERM", handle);
+      onSignal?.();
       resolve();
     };
 
@@ -235,40 +245,83 @@ const waitForShutdownSignal = async (): Promise<void> => {
   });
 };
 
-const ensureWebDashboardBuilt = async (): Promise<void> => {
-  if (existsSync(WEB_FRONTEND_ENTRY)) {
-    return;
-  }
-
-  writeLine(colorize("Building Svelte dashboard...", ANSI.dim));
-  const child = Bun.spawn({
-    cmd: ["bun", "run", "build"],
+const startWebDevServer = (session: RuntimeSession): ChildProcess => {
+  return Bun.spawn({
+    cmd: ["bun", "--bun", "vite", "--host", "127.0.0.1", "--port", "4173"],
     cwd: WEB_FRONTEND_DIRECTORY,
     stdout: "inherit",
     stderr: "inherit",
     stdin: "ignore",
+    env: {
+      ...process.env,
+      CLOG_BACKEND_URL: session.baseUrl,
+    },
   });
-  const exitCode = await child.exited;
-  if (exitCode !== 0) {
-    throw new Error("Web dashboard build failed");
+};
+
+const ensureWebDevServer = async (
+  session: RuntimeSession,
+): Promise<{ readonly url: string; readonly child: ChildProcess | null }> => {
+  if (await webDevServerIsReachable()) {
+    return {
+      url: WEB_DEV_SERVER_URL,
+      child: null,
+    };
   }
+
+  writeLine(colorize("Starting web dev server with hot reload...", ANSI.dim));
+  const child = startWebDevServer(session);
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    if (await webDevServerIsReachable()) {
+      return {
+        url: WEB_DEV_SERVER_URL,
+        child,
+      };
+    }
+
+    const maybeExitCode = await Promise.race([
+      child.exited,
+      wait(100).then(() => null),
+    ]);
+    if (maybeExitCode !== null) {
+      throw new Error(`Web dev server exited before becoming ready (exit ${maybeExitCode})`);
+    }
+  }
+
+  child.kill();
+  throw new Error(`Web dev server did not become ready at ${WEB_DEV_SERVER_URL}`);
 };
 
 const launchWeb = async (session: RuntimeSession): Promise<void> => {
-  await ensureWebDashboardBuilt();
-  const opened = await openBrowser(session.baseUrl);
+  const web = await ensureWebDevServer(session);
+  const browserUrl = new URL(web.url);
+  browserUrl.searchParams.set("sessionStartedAt", String(Date.now()));
+
+  const opened = await openBrowser(browserUrl.toString());
   writeLine();
   if (opened) {
-    writeLine(`${colorize("Opened browser dashboard:", ANSI.green, ANSI.bold)} ${session.baseUrl}`);
+    writeLine(`${colorize("Opened browser dashboard:", ANSI.green, ANSI.bold)} ${browserUrl.toString()}`);
   } else {
-    writeErrorLine(`${colorize("Could not open a browser automatically.", ANSI.red, ANSI.bold)} Open ${session.baseUrl} manually.`);
+    writeErrorLine(`${colorize("Could not open a browser automatically.", ANSI.red, ANSI.bold)} Open ${browserUrl.toString()} manually.`);
   }
 
-  if (session.startedByLauncher) {
+  if (session.startedByLauncher && web.child) {
+    writeLine(colorize("Press Ctrl+C to stop the local runtime and web dev server.", ANSI.dim));
+  } else if (session.startedByLauncher) {
     writeLine(colorize("Press Ctrl+C to stop the local runtime.", ANSI.dim));
-    await waitForShutdownSignal();
-    process.exit(0);
+  } else if (web.child) {
+    writeLine(colorize("Press Ctrl+C to stop the web dev server. The connected runtime will keep running.", ANSI.dim));
+  } else {
+    writeLine(colorize("Press Ctrl+C to close the launcher. The connected runtime will keep running.", ANSI.dim));
   }
+
+  await waitForShutdownSignal(() => {
+    if (web.child) {
+      web.child.kill();
+    }
+  });
+  process.exit(0);
 };
 
 const startLauncher = async (): Promise<void> => {
