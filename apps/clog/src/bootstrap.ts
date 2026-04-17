@@ -132,6 +132,7 @@ export const bootstrapRuntime = (): RuntimeBootstrap => {
     listRoutines: (input?: Parameters<RuntimeOrchestrationService["listRoutines"]>[0]) => runtimeOrchestrationService.listRoutines(input),
     runRoutine: async (input: Parameters<RuntimeOrchestrationService["runRoutine"]>[0]) => await runtimeOrchestrationService.runRoutine(input),
     readKnowledge: (input?: Parameters<RuntimeReadService["readKnowledge"]>[0]) => runtimeReadService.readKnowledge(input),
+    readJson: (input: Parameters<RuntimeReadService["readJson"]>[0]) => runtimeReadService.readJson(input),
   };
   toolExecutor = new ToolExecutor({
     capabilities: env.capabilities,

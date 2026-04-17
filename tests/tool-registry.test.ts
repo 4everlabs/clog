@@ -65,6 +65,7 @@ describe("tool registry", () => {
       "runtime_list_routines",
       "runtime_run_routine",
       "runtime_read_knowledge",
+      "runtime_read_json",
       "shell_execute_command",
     ]);
   });
@@ -99,6 +100,7 @@ describe("tool registry", () => {
       "runtime_list_routines",
       "runtime_run_routine",
       "runtime_read_knowledge",
+      "runtime_read_json",
       "shell_execute_command",
     ]);
     expect(tools.every((tool) => tool.type === "function")).toBe(true);

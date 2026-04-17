@@ -125,6 +125,17 @@ const createRuntimeServices = (): RuntimeToolServices => ({
     content: "Knowledge content",
     truncated: false,
   }),
+  readJson: () => ({
+    path: "workspace/posthog-tool-output.json",
+    fieldPath: "operations.dashboardSnapshot",
+    valueType: "object",
+    childKeys: ["history"],
+    childCount: 1,
+    value: {
+      history: [],
+    },
+    truncated: false,
+  }),
 });
 
 describe("ToolExecutor", () => {
@@ -644,6 +655,31 @@ describe("ToolExecutor", () => {
 
     expect(result.ok).toBe(true);
     expect(result.content).toContain("Knowledge content");
+  });
+
+  test("executes the runtime json reader tool", async () => {
+    const executor = new ToolExecutor({
+      capabilities: createCapabilities(),
+      services: {
+        posthog: null,
+        notion: null,
+        runtime: createRuntimeServices(),
+        shell: null,
+        github: null,
+        vercel: null,
+      },
+    });
+
+    const result = await executor.execute("runtime_read_json", {
+      path: "workspace/posthog-tool-output.json",
+      fieldPath: "operations.dashboardSnapshot",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.content).toContain("workspace/posthog-tool-output.json");
+    expect(result.content).toContain("\"fieldPath\": \"operations.dashboardSnapshot\"");
+    expect(result.content).toContain("\"value\": {");
+    expect(result.content).toContain("\"history\": []");
   });
 
   test("executes the generic PostHog MCP catalog tool", async () => {

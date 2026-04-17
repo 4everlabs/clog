@@ -117,6 +117,15 @@ const createRuntimeServices = (): RuntimeToolServices => ({
     content: null,
     truncated: false,
   }),
+  readJson: () => ({
+    path: "workspace/posthog-tool-output.json",
+    fieldPath: null,
+    valueType: "object",
+    childKeys: ["operations"],
+    childCount: 1,
+    value: { operations: {} },
+    truncated: false,
+  }),
 });
 
 describe("BrainService tool loop", () => {
@@ -312,6 +321,7 @@ describe("BrainService tool loop", () => {
       "runtime_list_routines",
       "runtime_run_routine",
       "runtime_read_knowledge",
+      "runtime_read_json",
     ]);
     expect(JSON.stringify(requests[1]?.messages)).toContain("posthog_run_query");
     expect(JSON.stringify(requests[1]?.messages)).toContain("Revenue monitor");

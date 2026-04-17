@@ -85,4 +85,61 @@ describe("RuntimeReadService", () => {
       ],
     }]);
   });
+
+  test("reads a runtime json artifact and supports nested field selection", () => {
+    const instanceRoot = mkdtempSync(join(tmpdir(), "clog-runtime-json-"));
+    cleanupPaths.push(instanceRoot);
+    const storageDir = join(instanceRoot, "storage");
+    const stateDir = join(storageDir, "state");
+    const workspaceDir = join(instanceRoot, "workspace");
+    const readOnlyDir = join(instanceRoot, "read-only");
+    mkdirSync(stateDir, { recursive: true });
+    mkdirSync(workspaceDir, { recursive: true });
+    mkdirSync(readOnlyDir, { recursive: true });
+
+    writeFileSync(join(workspaceDir, "posthog-tool-output.json"), JSON.stringify({
+      updatedAt: 30,
+      operations: {
+        dashboardSnapshot: {
+          history: [
+            { recordedAt: 10, data: { id: 1 } },
+            { recordedAt: 20, data: { id: 2 } },
+          ],
+        },
+      },
+    }, null, 2));
+
+    const service = new RuntimeReadService({
+      storage: {
+        instanceId: "test",
+        instanceRoot,
+        readOnlyDir,
+        workspaceDir,
+        storageDir,
+        stateDir,
+      },
+      store: new InMemoryRuntimeStore(),
+    });
+
+    const root = service.readJson({
+      path: "workspace/posthog-tool-output.json",
+    });
+    expect(root.path).toBe("workspace/posthog-tool-output.json");
+    expect(root.valueType).toBe("object");
+    expect(root.childKeys).toEqual(["updatedAt", "operations"]);
+    expect(root.value).toMatchObject({
+      updatedAt: 30,
+    });
+
+    const nested = service.readJson({
+      path: "workspace/posthog-tool-output.json",
+      fieldPath: "operations.dashboardSnapshot.history.1",
+    });
+    expect(nested.fieldPath).toBe("operations.dashboardSnapshot.history.1");
+    expect(nested.valueType).toBe("object");
+    expect(nested.value).toEqual({
+      recordedAt: 20,
+      data: { id: 2 },
+    });
+  });
 });

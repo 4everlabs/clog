@@ -112,6 +112,7 @@ describe("loadAgentEnvironment", () => {
       "runtime_list_routines",
       "runtime_run_routine",
       "runtime_read_knowledge",
+      "runtime_read_json",
     ]);
   });
 
@@ -139,6 +140,7 @@ describe("loadAgentEnvironment", () => {
       "runtime_list_routines",
       "runtime_run_routine",
       "runtime_read_knowledge",
+      "runtime_read_json",
     ]);
   });
 
@@ -255,6 +257,7 @@ describe("loadAgentEnvironment", () => {
         "runtime_list_routines",
         "runtime_run_routine",
         "runtime_read_knowledge",
+        "runtime_read_json",
       ]);
     } finally {
       process.chdir(previousCwd);
@@ -341,6 +344,7 @@ describe("loadAgentEnvironment", () => {
       "runtime_list_routines",
       "runtime_run_routine",
       "runtime_read_knowledge",
+      "runtime_read_json",
       ]);
       expect(env.capabilities.shell.safeRoots).toEqual([
         env.storage.workspaceDir,

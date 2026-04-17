@@ -111,6 +111,7 @@ export const AgentToolNameSchema = z.enum([
   "runtime_list_routines",
   "runtime_run_routine",
   "runtime_read_knowledge",
+  "runtime_read_json",
   "shell_execute_command",
   "github_read_repository",
   "github_create_pull_request",
@@ -771,6 +772,23 @@ export const RuntimeReadKnowledgeResultSchema = z.object({
   availablePaths: z.array(z.string().min(1)),
   selectedPath: z.string().min(1).nullable(),
   content: z.string().nullable(),
+  truncated: z.boolean(),
+}).strict();
+
+export const RuntimeReadJsonInputSchema = z.object({
+  path: z.string().min(1),
+  fieldPath: z.string().min(1).optional(),
+  maxChars: z.number().int().positive().max(50_000).optional(),
+}).strict();
+
+export const RuntimeReadJsonResultSchema = z.object({
+  path: z.string().min(1),
+  fieldPath: z.string().min(1).nullable(),
+  valueType: z.enum(["object", "array", "string", "number", "boolean", "null"]),
+  childKeys: z.array(z.string()),
+  childCount: z.number().int().nonnegative().nullable(),
+  value: z.unknown().optional(),
+  preview: z.string().optional(),
   truncated: z.boolean(),
 }).strict();
 

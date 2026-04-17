@@ -151,6 +151,20 @@ export interface RuntimeToolServices {
     readonly content: string | null;
     readonly truncated: boolean;
   };
+  readJson(input: {
+    readonly path: string;
+    readonly fieldPath?: string;
+    readonly maxChars?: number;
+  }): {
+    readonly path: string;
+    readonly fieldPath: string | null;
+    readonly valueType: "object" | "array" | "string" | "number" | "boolean" | "null";
+    readonly childKeys: readonly string[];
+    readonly childCount: number | null;
+    readonly value?: unknown;
+    readonly preview?: string;
+    readonly truncated: boolean;
+  };
 }
 
 export interface ToolExecutionServices {

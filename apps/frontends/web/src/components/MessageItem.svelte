@@ -3,6 +3,44 @@
 
   const { message }: { readonly message: ConversationMessage } = $props();
 
+  type MessageSegment = {
+    readonly text: string;
+    readonly bold: boolean;
+  };
+
+  const TELEGRAM_BOLD_PATTERN = /(?<!\*)\*([^\s*](?:[^*\n]*[^\s*])?)\*(?!\*)/g;
+
+  function formatMessageContent(value: string): MessageSegment[] {
+    const segments: MessageSegment[] = [];
+    let lastIndex = 0;
+
+    for (const match of value.matchAll(TELEGRAM_BOLD_PATTERN)) {
+      const index = match.index ?? 0;
+
+      if (index > lastIndex) {
+        segments.push({
+          text: value.slice(lastIndex, index),
+          bold: false,
+        });
+      }
+
+      segments.push({
+        text: match[1] ?? "",
+        bold: true,
+      });
+      lastIndex = index + match[0].length;
+    }
+
+    if (lastIndex < value.length) {
+      segments.push({
+        text: value.slice(lastIndex),
+        bold: false,
+      });
+    }
+
+    return segments;
+  }
+
   const timeLabel = $derived(
     new Date(message.createdAt).toLocaleString(undefined, {
       hour: "2-digit",
@@ -12,6 +50,8 @@
       day: "numeric",
     }),
   );
+
+  const formattedContent = $derived(formatMessageContent(message.content));
 </script>
 
 <div class="msg" data-role={message.role}>
@@ -19,7 +59,7 @@
     <span class="role">{message.role}</span>
     <time class="time">{timeLabel}</time>
   </header>
-  <pre class="body">{message.content}</pre>
+  <pre class="body">{#each formattedContent as segment, index (index)}{#if segment.bold}<strong>{segment.text}</strong>{:else}{segment.text}{/if}{/each}</pre>
   {#if message.role === "agent"}
     <details class="thoughts">
       <summary>Thoughts</summary>

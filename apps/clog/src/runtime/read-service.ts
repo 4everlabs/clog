@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { extname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { RuntimeStorageConfig } from "../config";
 import {
@@ -18,6 +18,8 @@ const DEFAULT_ACTION_RESULT_LIMIT = 5;
 const DEFAULT_LOG_FILE_LIMIT = 2;
 const DEFAULT_LOG_LINE_LIMIT = 80;
 const DEFAULT_KNOWLEDGE_MAX_CHARS = 8_000;
+const DEFAULT_JSON_MAX_CHARS = 12_000;
+const DEFAULT_JSON_CHILD_KEY_LIMIT = 100;
 const DEFAULT_MONITORING_REPORT_LIMIT = 3;
 const DEFAULT_MONITORING_OPERATION_HISTORY_LIMIT = 4;
 
@@ -80,6 +82,57 @@ const clamp = (value: number | undefined, fallback: number, maximum: number): nu
   return Math.max(1, Math.min(maximum, Math.trunc(value as number)));
 };
 
+const isWithinRoot = (candidate: string, root: string): boolean => {
+  const normalizedCandidate = resolve(candidate);
+  const normalizedRoot = resolve(root);
+  return normalizedCandidate === normalizedRoot || normalizedCandidate.startsWith(`${normalizedRoot}${sep}`);
+};
+
+const getJsonValueType = (value: unknown): "object" | "array" | "string" | "number" | "boolean" | "null" => {
+  if (value === null) {
+    return "null";
+  }
+
+  if (Array.isArray(value)) {
+    return "array";
+  }
+
+  switch (typeof value) {
+    case "string":
+      return "string";
+    case "number":
+      return "number";
+    case "boolean":
+      return "boolean";
+    default:
+      return "object";
+  }
+};
+
+const getJsonChildKeys = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value.slice(0, DEFAULT_JSON_CHILD_KEY_LIMIT).map((_, index) => String(index));
+  }
+
+  if (value && typeof value === "object") {
+    return Object.keys(value as Record<string, unknown>).slice(0, DEFAULT_JSON_CHILD_KEY_LIMIT);
+  }
+
+  return [];
+};
+
+const getJsonChildCount = (value: unknown): number | null => {
+  if (Array.isArray(value)) {
+    return value.length;
+  }
+
+  if (value && typeof value === "object") {
+    return Object.keys(value as Record<string, unknown>).length;
+  }
+
+  return null;
+};
+
 const runtimeDir = fileURLToPath(new URL("../", import.meta.url));
 const defaultKnowledgeDir = join(runtimeDir, "brain", "knowledge");
 
@@ -108,6 +161,12 @@ export interface RuntimeRecentLogsInput {
 
 export interface RuntimeReadKnowledgeInput {
   readonly path?: string;
+  readonly maxChars?: number;
+}
+
+export interface RuntimeReadJsonInput {
+  readonly path: string;
+  readonly fieldPath?: string;
   readonly maxChars?: number;
 }
 
@@ -257,6 +316,53 @@ export class RuntimeReadService {
     };
   }
 
+  readJson(input: RuntimeReadJsonInput) {
+    const maxChars = clamp(input.maxChars, DEFAULT_JSON_MAX_CHARS, 50_000);
+    const requestedPath = input.path.trim();
+    if (!requestedPath) {
+      throw new Error("JSON path is required");
+    }
+
+    const resolvedPath = resolve(this.storage.instanceRoot, requestedPath);
+    if (!isWithinRoot(resolvedPath, this.storage.instanceRoot)) {
+      throw new Error(`JSON path must stay inside ${this.storage.instanceRoot}`);
+    }
+
+    if (extname(resolvedPath).toLowerCase() !== ".json") {
+      throw new Error(`JSON path must point to a .json file. Received: ${requestedPath}`);
+    }
+
+    const rawContent = readTextIfExists(resolvedPath);
+    if (rawContent === null) {
+      throw new Error(`JSON path not found: ${requestedPath}`);
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawContent) as unknown;
+    } catch {
+      throw new Error(`JSON file could not be parsed: ${requestedPath}`);
+    }
+
+    const fieldPath = input.fieldPath?.trim() || null;
+    const selectedValue = this.selectJsonValue(parsed, fieldPath);
+    const serialized = JSON.stringify(selectedValue, null, 2);
+    const truncatedContent = truncateContent(serialized, maxChars);
+    const childKeys = getJsonChildKeys(selectedValue);
+
+    return {
+      path: relative(this.storage.instanceRoot, resolvedPath).replaceAll(sep, "/"),
+      fieldPath,
+      valueType: getJsonValueType(selectedValue),
+      childKeys,
+      childCount: getJsonChildCount(selectedValue),
+      ...(truncatedContent.truncated
+        ? { preview: truncatedContent.content }
+        : { value: selectedValue }),
+      truncated: truncatedContent.truncated,
+    };
+  }
+
   getMonitoringSnapshot(input: RuntimeMonitoringSnapshotInput = {}) {
     const reportLimit = clamp(input.reportLimit, DEFAULT_MONITORING_REPORT_LIMIT, 10);
     const operationHistoryLimit = clamp(
@@ -350,5 +456,32 @@ export class RuntimeReadService {
     }
 
     return this.wakeupPath;
+  }
+
+  private selectJsonValue(value: unknown, fieldPath: string | null): unknown {
+    if (!fieldPath) {
+      return value;
+    }
+
+    let current = value;
+    for (const segment of fieldPath.split(".").map((entry) => entry.trim()).filter(Boolean)) {
+      if (Array.isArray(current)) {
+        const index = Number.parseInt(segment, 10);
+        if (!Number.isInteger(index) || index < 0 || index >= current.length) {
+          throw new Error(`Field path "${fieldPath}" is invalid at array segment "${segment}"`);
+        }
+        current = current[index];
+        continue;
+      }
+
+      if (current && typeof current === "object" && segment in (current as Record<string, unknown>)) {
+        current = (current as Record<string, unknown>)[segment];
+        continue;
+      }
+
+      throw new Error(`Field path "${fieldPath}" is invalid at segment "${segment}"`);
+    }
+
+    return current;
   }
 }

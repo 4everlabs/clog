@@ -15,6 +15,8 @@ import {
   RuntimeGetStateSnapshotResultSchema,
   RuntimeReadKnowledgeInputSchema,
   RuntimeReadKnowledgeResultSchema,
+  RuntimeReadJsonInputSchema,
+  RuntimeReadJsonResultSchema,
 } from "../../schema/tools";
 import type { RegisteredTool } from "../types";
 
@@ -177,6 +179,26 @@ export const runtimeTools = [
       }
 
       return services.runtime.readKnowledge(input);
+    },
+  },
+  {
+    name: "runtime_read_json",
+    title: "Runtime JSON Reader",
+    description: "Read a JSON artifact inside the current runtime instance using a direct relative path like workspace/posthog-tool-output.json, with optional dot-path field selection for deeper inspection.",
+    integration: "runtime",
+    approvalRequired: false,
+    implemented: true,
+    inputSchema: RuntimeReadJsonInputSchema,
+    outputSchema: RuntimeReadJsonResultSchema,
+    isEnabled() {
+      return true;
+    },
+    execute(services, input) {
+      if (!services.runtime) {
+        throw new Error("Runtime read services are unavailable");
+      }
+
+      return services.runtime.readJson(input);
     },
   },
 ] as const satisfies readonly RegisteredTool[];
