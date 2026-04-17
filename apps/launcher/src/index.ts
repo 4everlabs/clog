@@ -27,6 +27,7 @@ interface RuntimeSession {
 }
 
 const WEB_FRONTEND_DIRECTORY = fileURLToPath(new URL("../../frontends/web/", import.meta.url));
+const WEB_DEV_SERVER_URL = "http://127.0.0.1:4173";
 type ChildProcess = ReturnType<typeof Bun.spawn>;
 
 const writeLine = (value = ""): void => {
@@ -147,6 +148,15 @@ const runtimeIsReachable = async (baseUrl: string): Promise<boolean> => {
   }
 };
 
+const webDevServerIsReachable = async (): Promise<boolean> => {
+  try {
+    const response = await fetchWithTimeout(`${WEB_DEV_SERVER_URL}/healthz`, 750);
+    return response.ok;
+  } catch {
+    return false;
+  }
+};
+
 const ensureRuntime = async (): Promise<RuntimeSession> => {
   const requestedBaseUrl = resolveBackendBaseUrl();
   if (await runtimeIsReachable(requestedBaseUrl)) {
@@ -235,53 +245,81 @@ const waitForShutdownSignal = async (onSignal?: () => void): Promise<void> => {
   });
 };
 
-const startWebBuildWatcher = (): ChildProcess => {
+const startWebDevServer = (session: RuntimeSession): ChildProcess => {
   return Bun.spawn({
-    cmd: ["bun", "run", "dev"],
+    cmd: ["bun", "--bun", "vite", "--host", "127.0.0.1", "--port", "4173"],
     cwd: WEB_FRONTEND_DIRECTORY,
     stdout: "inherit",
     stderr: "inherit",
     stdin: "ignore",
+    env: {
+      ...process.env,
+      CLOG_BACKEND_URL: session.baseUrl,
+    },
   });
 };
 
-const buildWebFrontend = async (): Promise<void> => {
-  writeLine(colorize("Building web frontend for runtime serving...", ANSI.dim));
-  const child = Bun.spawn({
-    cmd: ["bun", "run", "build"],
-    cwd: WEB_FRONTEND_DIRECTORY,
-    stdout: "inherit",
-    stderr: "inherit",
-    stdin: "ignore",
-  });
-  const exitCode = await child.exited;
-  if (exitCode !== 0) {
-    throw new Error(`Web frontend build failed with exit ${exitCode}`);
+const ensureWebDevServer = async (
+  session: RuntimeSession,
+): Promise<{ readonly url: string; readonly child: ChildProcess | null }> => {
+  if (await webDevServerIsReachable()) {
+    return {
+      url: WEB_DEV_SERVER_URL,
+      child: null,
+    };
   }
+
+  writeLine(colorize("Starting separate web frontend on 4173...", ANSI.dim));
+  const child = startWebDevServer(session);
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    if (await webDevServerIsReachable()) {
+      return {
+        url: WEB_DEV_SERVER_URL,
+        child,
+      };
+    }
+
+    const maybeExitCode = await Promise.race([
+      child.exited,
+      wait(100).then(() => null),
+    ]);
+    if (maybeExitCode !== null) {
+      throw new Error(`Web frontend exited before becoming ready (exit ${maybeExitCode})`);
+    }
+  }
+
+  child.kill();
+  throw new Error(`Web frontend did not become ready at ${WEB_DEV_SERVER_URL}`);
 };
 
 const launchWeb = async (session: RuntimeSession): Promise<void> => {
-  await buildWebFrontend();
-  const webWatcher = startWebBuildWatcher();
-  const browserUrl = new URL(session.baseUrl);
+  const web = await ensureWebDevServer(session);
+  const browserUrl = new URL(web.url);
   browserUrl.searchParams.set("sessionStartedAt", String(Date.now()));
 
   const opened = await openBrowser(browserUrl.toString());
   writeLine();
   if (opened) {
-      writeLine(`${colorize("Opened browser dashboard:", ANSI.green, ANSI.bold)} ${browserUrl.toString()}`);
+    writeLine(`${colorize("Opened browser dashboard:", ANSI.green, ANSI.bold)} ${browserUrl.toString()}`);
   } else {
     writeErrorLine(`${colorize("Could not open a browser automatically.", ANSI.red, ANSI.bold)} Open ${browserUrl.toString()} manually.`);
   }
 
-  if (session.startedByLauncher) {
+  if (session.startedByLauncher && web.child) {
+    writeLine(colorize("Press Ctrl+C to stop the local runtime and frontend dev server.", ANSI.dim));
+  } else if (session.startedByLauncher) {
     writeLine(colorize("Press Ctrl+C to stop the local runtime.", ANSI.dim));
+  } else if (web.child) {
+    writeLine(colorize("Press Ctrl+C to stop the frontend dev server. The connected runtime will keep running.", ANSI.dim));
   } else {
-    writeLine(colorize("Press Ctrl+C to stop the web build watcher. The connected runtime will keep running.", ANSI.dim));
+    writeLine(colorize("Press Ctrl+C to close the launcher. The connected runtime and frontend will keep running.", ANSI.dim));
   }
 
   await waitForShutdownSignal(() => {
-    webWatcher.kill();
+    if (web.child) {
+      web.child.kill();
+    }
   });
   process.exit(0);
 };

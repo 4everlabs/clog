@@ -1,6 +1,3 @@
-import { existsSync } from "node:fs";
-import { extname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import type {
   ActionExecutionRequest,
   PostHogEndpointDiffRequest,
@@ -13,9 +10,6 @@ import type {
 } from "@clog/types";
 import type { RuntimeBootstrap } from "./bootstrap";
 
-const WEB_DIST_ROOT = fileURLToPath(new URL("../../frontends/web/dist/", import.meta.url));
-const WEB_DIST_INDEX = join(WEB_DIST_ROOT, "index.html");
-
 const json = (payload: unknown, status = 200): Response =>
   new Response(JSON.stringify(payload, null, 2), {
     status,
@@ -24,55 +18,8 @@ const json = (payload: unknown, status = 200): Response =>
     },
   });
 
-const html = (payload: string, status = 200): Response =>
-  new Response(payload, {
-    status,
-    headers: {
-      "content-type": "text/html; charset=utf-8",
-    },
-  });
-
 const parseJson = async <T>(request: Request): Promise<T> => {
   return await request.json() as T;
-};
-
-const responseFromFile = (file: ReturnType<typeof Bun.file>): Response =>
-  new Response(file, {
-    headers: file.type ? { "content-type": file.type } : undefined,
-  });
-
-const sanitizeWebAssetPath = (pathname: string): string | null => {
-  const segments = pathname.split("/").filter(Boolean);
-  if (segments.some((segment) => segment === "." || segment === "..")) {
-    return null;
-  }
-  return segments.join("/");
-};
-
-const serveBuiltWebDashboard = async (pathname: string): Promise<Response | null> => {
-  if (!existsSync(WEB_DIST_INDEX)) {
-    return null;
-  }
-
-  if (pathname === "/") {
-    return responseFromFile(Bun.file(WEB_DIST_INDEX));
-  }
-
-  const relativePath = sanitizeWebAssetPath(pathname);
-  if (!relativePath) {
-    return responseFromFile(Bun.file(WEB_DIST_INDEX));
-  }
-
-  const requestedFile = Bun.file(join(WEB_DIST_ROOT, relativePath));
-  if (await requestedFile.exists()) {
-    return responseFromFile(requestedFile);
-  }
-
-  if (!extname(pathname)) {
-    return responseFromFile(Bun.file(WEB_DIST_INDEX));
-  }
-
-  return null;
 };
 
 export class AgentSurfaceTransport {
@@ -82,66 +29,15 @@ export class AgentSurfaceTransport {
     const url = new URL(request.url);
     const { pathname } = url;
 
-    if (
-      request.method === "GET"
-      && pathname !== "/healthz"
-      && !pathname.startsWith("/api/")
-    ) {
-      const dashboardResponse = await serveBuiltWebDashboard(pathname);
-      if (dashboardResponse) {
-        return dashboardResponse;
-      }
-    }
-
     if (pathname === "/" && request.method === "GET") {
-      return html(`<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>CLOG Runtime</title>
-    <style>
-      :root { color-scheme: dark; }
-      body {
-        margin: 0;
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-        background: #0b1020;
-        color: #eef2ff;
-      }
-      main {
-        max-width: 760px;
-        margin: 0 auto;
-        padding: 56px 24px;
-      }
-      .eyebrow {
-        color: #7dd3fc;
-        text-transform: uppercase;
-        letter-spacing: 0.12em;
-        font-size: 12px;
-        font-weight: 700;
-      }
-      h1 {
-        margin: 12px 0 16px;
-        font-size: 40px;
-      }
-      p {
-        color: #cbd5e1;
-        line-height: 1.6;
-      }
-      code, a {
-        color: #93c5fd;
-      }
-    </style>
-  </head>
-  <body>
-    <main>
-      <div class="eyebrow">CLOG</div>
-      <h1>Runtime is up.</h1>
-      <p>The runtime is serving API and websocket endpoints, but no built web bundle was found.</p>
-      <p>Run the launcher and choose the web UI for hot reload, or build the web frontend so this runtime can serve it directly from <code>/</code>.</p>
-    </main>
-  </body>
-</html>`);
+      return json({
+        ok: true,
+        name: this.runtime.runtimeSummary.name,
+        message: "CLOG runtime API is running. The web UI is served separately.",
+        healthz: "/healthz",
+        apiPrefix: "/api",
+        websocket: "/ws",
+      });
     }
 
     if (pathname === "/healthz" && request.method === "GET") {
