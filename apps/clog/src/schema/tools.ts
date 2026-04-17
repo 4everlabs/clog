@@ -78,6 +78,9 @@ export const AgentToolNameSchema = z.enum([
   "posthog_list_errors",
   "posthog_run_query",
   "posthog_get_dashboard_snapshot",
+  "posthog_get_health_summary",
+  "posthog_get_asset_summary",
+  "posthog_get_release_summary",
   "posthog_get_documented_tool_catalog",
   "posthog_list_dashboards",
   "posthog_get_dashboard",
@@ -104,6 +107,9 @@ export const AgentToolNameSchema = z.enum([
   "posthog_run_endpoint",
   "notion_get_todo_list",
   "runtime_get_state_snapshot",
+  "runtime_list_conversations",
+  "runtime_get_conversation",
+  "runtime_search_messages",
   "runtime_get_recent_logs",
   "runtime_get_monitoring_snapshot",
   "runtime_list_actions",
@@ -280,6 +286,135 @@ export const PostHogGetDashboardSnapshotResultSchema = z.object({
   lcp: z.array(PostHogDashboardPerformanceRowSchema),
   inp: z.array(PostHogDashboardPerformanceRowSchema),
   anomalies: z.array(PostHogDashboardAnomalySchema),
+}).strict();
+
+const PostHogHealthSummaryAnomalySchema = z.object({
+  title: z.string().min(1),
+  severity: z.enum(["warning", "critical"]),
+}).strict();
+
+export const PostHogGetHealthSummaryInputSchema = z.object({
+  windowMinutes: z.number().int().positive().max(1_440).optional(),
+  topPathsLimit: z.number().int().positive().max(20).optional(),
+  reportLimit: z.number().int().positive().max(10).optional(),
+  operationHistoryLimit: z.number().int().positive().max(20).optional(),
+}).strict();
+
+export const PostHogGetHealthSummaryResultSchema = z.object({
+  generatedAt: z.number().int().nonnegative(),
+  dashboard: z.object({
+    windowMinutes: z.number().int().positive(),
+    productionReadinessScore: z.number().int().min(0).max(100),
+    anomalyCount: z.number().int().nonnegative(),
+    pageviews: z.number().int().nonnegative(),
+    uniqueVisitors: z.number().int().nonnegative(),
+    errorRatePer1kPageviews: z.number(),
+    pageviewsDeltaPercent: z.number().nullable(),
+    topAnomalies: z.array(PostHogHealthSummaryAnomalySchema),
+  }).strict(),
+  monitoring: z.object({
+    latestProductionReadinessScore: z.number().nullable(),
+    operations: z.array(z.object({
+      operation: z.string().min(1),
+      lastRecordedAt: z.number().int().nonnegative(),
+    }).strict()),
+  }).strict(),
+  printout: z.string().min(1),
+}).strict();
+
+export const PostHogGetAssetSummaryInputSchema = z.object({
+  dashboardLimit: z.number().int().positive().max(40).optional(),
+  insightLimit: z.number().int().positive().max(40).optional(),
+  entitySearchQuery: z.string().min(1).optional(),
+  entitySearchLimit: z.number().int().positive().max(40).optional(),
+  schemaSearch: z.string().min(1).optional(),
+  schemaLimit: z.number().int().positive().max(60).optional(),
+}).strict();
+
+const PostHogAssetDashboardRowSchema = z.object({
+  id: z.string().nullable(),
+  name: z.string().nullable(),
+}).strict();
+
+const PostHogAssetInsightRowSchema = z.object({
+  id: z.string().nullable(),
+  name: z.string().nullable(),
+}).strict();
+
+const PostHogAssetEntityHitSchema = z.object({
+  id: z.string().nullable(),
+  type: z.string().nullable(),
+  name: z.string().nullable(),
+}).strict();
+
+const PostHogAssetSchemaRowSchema = z.object({
+  name: z.string().min(1),
+  kind: z.string().nullable(),
+}).strict();
+
+export const PostHogGetAssetSummaryResultSchema = z.object({
+  generatedAt: z.number().int().nonnegative(),
+  dashboards: z.array(PostHogAssetDashboardRowSchema),
+  insights: z.array(PostHogAssetInsightRowSchema),
+  entityHits: z.array(PostHogAssetEntityHitSchema),
+  schemaEntities: z.array(PostHogAssetSchemaRowSchema),
+  totals: z.object({
+    dashboardsListed: z.number().int().nonnegative(),
+    insightsListed: z.number().int().nonnegative(),
+    entityHits: z.number().int().nonnegative(),
+    schemaEntities: z.number().int().nonnegative(),
+  }).strict(),
+  printout: z.string().min(1),
+}).strict();
+
+export const PostHogGetReleaseSummaryInputSchema = z.object({
+  flagLimit: z.number().int().positive().max(80).optional(),
+  experimentLimit: z.number().int().positive().max(80).optional(),
+  includeErrorObservations: z.boolean().optional(),
+  observationLimit: z.number().int().positive().max(40).optional(),
+  includeLogAttributes: z.boolean().optional(),
+  logAttributeLimit: z.number().int().positive().max(40).optional(),
+}).strict();
+
+const PostHogReleaseFlagSummarySchema = z.object({
+  key: z.string().nullable(),
+  name: z.string().nullable(),
+  active: z.boolean().nullable(),
+  rolloutPercentage: z.number().nullable(),
+  status: z.string().nullable(),
+}).strict();
+
+const PostHogReleaseExperimentSummarySchema = z.object({
+  id: z.string().nullable(),
+  name: z.string().nullable(),
+  status: z.string().nullable(),
+  featureFlagKey: z.string().nullable(),
+}).strict();
+
+const PostHogReleaseObservationSummarySchema = z.object({
+  id: z.string(),
+  severity: z.enum(["info", "warning", "critical"]),
+  summary: z.string(),
+}).strict();
+
+const PostHogReleaseLogAttributeSummarySchema = z.object({
+  key: z.string().min(1),
+  type: z.string().nullable(),
+}).strict();
+
+export const PostHogGetReleaseSummaryResultSchema = z.object({
+  generatedAt: z.number().int().nonnegative(),
+  flags: z.array(PostHogReleaseFlagSummarySchema),
+  experiments: z.array(PostHogReleaseExperimentSummarySchema),
+  errorObservations: z.array(PostHogReleaseObservationSummarySchema),
+  logAttributes: z.array(PostHogReleaseLogAttributeSummarySchema),
+  totals: z.object({
+    flags: z.number().int().nonnegative(),
+    experiments: z.number().int().nonnegative(),
+    errorObservations: z.number().int().nonnegative(),
+    logAttributes: z.number().int().nonnegative(),
+  }).strict(),
+  printout: z.string().min(1),
 }).strict();
 
 const PostHogDocumentedToolSchema = z.object({
@@ -761,6 +896,76 @@ export const RuntimeGetMonitoringSnapshotResultSchema = z.object({
   latestPerformanceReport: z.unknown().nullable(),
   recentPerformanceReports: z.array(RuntimeMonitoringReportSchema),
   recentPostHogOperations: z.array(RuntimeMonitoringOperationSchema),
+}).strict();
+
+export const RuntimeListConversationsInputSchema = z.object({
+  limit: z.number().int().positive().max(100).optional(),
+  channel: z.enum(["web", "telegram", "tui", "system"]).optional(),
+  titleContains: z.string().min(1).optional(),
+}).strict();
+
+export const RuntimeListConversationsResultSchema = z.object({
+  generatedAt: z.number().int().nonnegative(),
+  conversations: z.array(z.object({
+    id: z.string().min(1),
+    title: z.string().min(1),
+    channel: z.enum(["web", "telegram", "tui", "system"]),
+    createdAt: z.number().int().nonnegative(),
+    updatedAt: z.number().int().nonnegative(),
+    messageCount: z.number().int().nonnegative(),
+  }).strict()),
+}).strict();
+
+export const RuntimeGetConversationInputSchema = z.object({
+  threadId: z.string().min(1),
+  messageOffset: z.number().int().nonnegative().optional(),
+  messageLimit: z.number().int().positive().max(500).optional(),
+}).strict();
+
+export const RuntimeConversationMessageSchema = z.object({
+  id: z.string().min(1),
+  role: z.enum(["system", "user", "agent"]),
+  channel: z.enum(["web", "telegram", "tui", "system"]),
+  content: z.string(),
+  createdAt: z.number().int().nonnegative(),
+}).strict();
+
+export const RuntimeGetConversationResultSchema = z.object({
+  generatedAt: z.number().int().nonnegative(),
+  thread: z.object({
+    id: z.string().min(1),
+    title: z.string().min(1),
+    channel: z.enum(["web", "telegram", "tui", "system"]),
+    createdAt: z.number().int().nonnegative(),
+    updatedAt: z.number().int().nonnegative(),
+  }).strict(),
+  messages: z.array(RuntimeConversationMessageSchema),
+  totalMessages: z.number().int().nonnegative(),
+  messageOffset: z.number().int().nonnegative(),
+  messageLimit: z.number().int().positive(),
+  hasMoreMessages: z.boolean(),
+}).strict();
+
+export const RuntimeSearchMessagesInputSchema = z.object({
+  query: z.string().min(1),
+  threadId: z.string().min(1).optional(),
+  channel: z.enum(["web", "telegram", "tui", "system"]).optional(),
+  limit: z.number().int().positive().max(100).optional(),
+  caseSensitive: z.boolean().optional(),
+}).strict();
+
+export const RuntimeSearchMessagesResultSchema = z.object({
+  generatedAt: z.number().int().nonnegative(),
+  matches: z.array(z.object({
+    threadId: z.string().min(1),
+    threadTitle: z.string().min(1),
+    channel: z.enum(["web", "telegram", "tui", "system"]),
+    messageId: z.string().min(1),
+    role: z.enum(["system", "user", "agent"]),
+    createdAt: z.number().int().nonnegative(),
+    contentSnippet: z.string().min(1),
+  }).strict()),
+  truncated: z.boolean(),
 }).strict();
 
 export const RuntimeReadKnowledgeInputSchema = z.object({

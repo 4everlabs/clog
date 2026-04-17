@@ -165,6 +165,38 @@ export interface RuntimeToolServices {
     readonly preview?: string;
     readonly truncated: boolean;
   };
+  listConversations(input?: {
+    readonly limit?: number;
+    readonly channel?: "web" | "telegram" | "tui" | "system";
+    readonly titleContains?: string;
+  }): {
+    readonly generatedAt: number;
+    readonly conversations: readonly unknown[];
+  };
+  getConversation(input: {
+    readonly threadId: string;
+    readonly messageOffset?: number;
+    readonly messageLimit?: number;
+  }): {
+    readonly generatedAt: number;
+    readonly thread: unknown;
+    readonly messages: readonly unknown[];
+    readonly totalMessages: number;
+    readonly messageOffset: number;
+    readonly messageLimit: number;
+    readonly hasMoreMessages: boolean;
+  };
+  searchMessages(input: {
+    readonly query: string;
+    readonly threadId?: string;
+    readonly channel?: "web" | "telegram" | "tui" | "system";
+    readonly limit?: number;
+    readonly caseSensitive?: boolean;
+  }): {
+    readonly generatedAt: number;
+    readonly matches: readonly unknown[];
+    readonly truncated: boolean;
+  };
 }
 
 export interface ToolExecutionServices {

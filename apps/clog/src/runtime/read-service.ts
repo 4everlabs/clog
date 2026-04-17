@@ -8,6 +8,7 @@ import {
 import {
   POSTHOG_WORKSPACE_SNAPSHOT_FILE_NAME,
 } from "../integrations/posthog/workspace-reporter";
+import type { SurfaceChannelKind } from "@clog/types";
 import type { RuntimeStore } from "../storage/chat";
 
 const DEFAULT_THREAD_LIMIT = 3;
@@ -22,6 +23,10 @@ const DEFAULT_JSON_MAX_CHARS = 12_000;
 const DEFAULT_JSON_CHILD_KEY_LIMIT = 100;
 const DEFAULT_MONITORING_REPORT_LIMIT = 3;
 const DEFAULT_MONITORING_OPERATION_HISTORY_LIMIT = 4;
+const DEFAULT_CONVERSATION_LIST_LIMIT = 50;
+const DEFAULT_CONVERSATION_MESSAGE_LIMIT = 100;
+const DEFAULT_MESSAGE_SEARCH_LIMIT = 30;
+const MESSAGE_SNIPPET_MAX_CHARS = 280;
 
 const readTextIfExists = (path: string): string | null => {
   if (!existsSync(path)) {
@@ -173,6 +178,26 @@ export interface RuntimeReadJsonInput {
 export interface RuntimeMonitoringSnapshotInput {
   readonly reportLimit?: number;
   readonly operationHistoryLimit?: number;
+}
+
+export interface RuntimeListConversationsInput {
+  readonly limit?: number;
+  readonly channel?: SurfaceChannelKind;
+  readonly titleContains?: string;
+}
+
+export interface RuntimeGetConversationInput {
+  readonly threadId: string;
+  readonly messageOffset?: number;
+  readonly messageLimit?: number;
+}
+
+export interface RuntimeSearchMessagesInput {
+  readonly query: string;
+  readonly threadId?: string;
+  readonly channel?: SurfaceChannelKind;
+  readonly limit?: number;
+  readonly caseSensitive?: boolean;
 }
 
 interface WorkspaceOperationHistoryEntry {
@@ -360,6 +385,126 @@ export class RuntimeReadService {
         ? { preview: truncatedContent.content }
         : { value: selectedValue }),
       truncated: truncatedContent.truncated,
+    };
+  }
+
+  listConversations(input: RuntimeListConversationsInput = {}) {
+    const limit = clamp(input.limit, DEFAULT_CONVERSATION_LIST_LIMIT, 100);
+    const titleNeedle = input.titleContains?.trim().toLowerCase() ?? "";
+    let threads = this.store.listThreads();
+    if (input.channel) {
+      threads = threads.filter((thread) => thread.channel === input.channel);
+    }
+
+    if (titleNeedle.length > 0) {
+      threads = threads.filter((thread) => thread.title.toLowerCase().includes(titleNeedle));
+    }
+
+    return {
+      generatedAt: Date.now(),
+      conversations: threads.slice(0, limit).map((thread) => ({
+        id: thread.id,
+        title: thread.title,
+        channel: thread.channel,
+        createdAt: thread.createdAt,
+        updatedAt: thread.updatedAt,
+        messageCount: thread.messages.length,
+      })),
+    };
+  }
+
+  getConversation(input: RuntimeGetConversationInput) {
+    const thread = this.store.getThread(input.threadId.trim());
+    if (!thread) {
+      throw new Error(`Conversation not found: ${input.threadId}`);
+    }
+
+    const totalMessages = thread.messages.length;
+    const messageOffset = Math.max(0, Math.trunc(input.messageOffset ?? 0));
+    const messageLimit = clamp(input.messageLimit, DEFAULT_CONVERSATION_MESSAGE_LIMIT, 500);
+    const slice = thread.messages.slice(messageOffset, messageOffset + messageLimit);
+
+    return {
+      generatedAt: Date.now(),
+      thread: {
+        id: thread.id,
+        title: thread.title,
+        channel: thread.channel,
+        createdAt: thread.createdAt,
+        updatedAt: thread.updatedAt,
+      },
+      messages: slice.map((message) => ({
+        id: message.id,
+        role: message.role,
+        channel: message.channel,
+        content: message.content,
+        createdAt: message.createdAt,
+      })),
+      totalMessages,
+      messageOffset,
+      messageLimit,
+      hasMoreMessages: messageOffset + slice.length < totalMessages,
+    };
+  }
+
+  searchMessages(input: RuntimeSearchMessagesInput) {
+    const limit = clamp(input.limit, DEFAULT_MESSAGE_SEARCH_LIMIT, 100);
+    const queryRaw = input.query.trim();
+    const caseSensitive = Boolean(input.caseSensitive);
+    const needle = caseSensitive ? queryRaw : queryRaw.toLowerCase();
+
+    const threads = input.threadId
+      ? [this.store.getThread(input.threadId.trim())].filter((thread): thread is NonNullable<typeof thread> => Boolean(thread))
+      : this.store.listThreads();
+
+    const filteredThreads = input.channel
+      ? threads.filter((thread) => thread.channel === input.channel)
+      : threads;
+
+    const matches: Array<{
+      threadId: string;
+      threadTitle: string;
+      channel: SurfaceChannelKind;
+      messageId: string;
+      role: "system" | "user" | "agent";
+      createdAt: number;
+      contentSnippet: string;
+    }> = [];
+
+    let truncated = false;
+
+    outer: for (const thread of filteredThreads) {
+      for (const message of thread.messages) {
+        const haystack = caseSensitive ? message.content : message.content.toLowerCase();
+        if (!haystack.includes(needle)) {
+          continue;
+        }
+
+        const snippet = message.content.length <= MESSAGE_SNIPPET_MAX_CHARS
+          ? (message.content.length > 0 ? message.content : "(empty)")
+          : `${message.content.slice(0, MESSAGE_SNIPPET_MAX_CHARS)}…`;
+
+        matches.push({
+          threadId: thread.id,
+          threadTitle: thread.title,
+          channel: thread.channel,
+          messageId: message.id,
+          role: message.role,
+          createdAt: message.createdAt,
+          contentSnippet: snippet,
+        });
+
+        if (matches.length >= limit) {
+          truncated = true;
+          break outer;
+        }
+      }
+    }
+
+    return {
+      generatedAt: Date.now(),
+      matches,
+      truncated,
     };
   }
 

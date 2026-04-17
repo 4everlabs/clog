@@ -125,6 +125,9 @@ export const bootstrapRuntime = (): RuntimeBootstrap => {
   });
   const runtimeServices = {
     getStateSnapshot: (input?: Parameters<RuntimeReadService["getStateSnapshot"]>[0]) => runtimeReadService.getStateSnapshot(input),
+    listConversations: (input?: Parameters<RuntimeReadService["listConversations"]>[0]) => runtimeReadService.listConversations(input),
+    getConversation: (input: Parameters<RuntimeReadService["getConversation"]>[0]) => runtimeReadService.getConversation(input),
+    searchMessages: (input: Parameters<RuntimeReadService["searchMessages"]>[0]) => runtimeReadService.searchMessages(input),
     getRecentLogs: (input?: Parameters<RuntimeReadService["getRecentLogs"]>[0]) => runtimeReadService.getRecentLogs(input),
     getMonitoringSnapshot: (input?: Parameters<RuntimeReadService["getMonitoringSnapshot"]>[0]) => runtimeReadService.getMonitoringSnapshot(input),
     listActions: (input?: Parameters<RuntimeOrchestrationService["listActions"]>[0]) => runtimeOrchestrationService.listActions(input),

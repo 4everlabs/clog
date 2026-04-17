@@ -126,6 +126,30 @@ const createRuntimeServices = (): RuntimeToolServices => ({
     value: { operations: {} },
     truncated: false,
   }),
+  listConversations: () => ({
+    generatedAt: 1,
+    conversations: [],
+  }),
+  getConversation: () => ({
+    generatedAt: 1,
+    thread: {
+      id: "thread_stub",
+      title: "Stub",
+      channel: "tui",
+      createdAt: 1,
+      updatedAt: 1,
+    },
+    messages: [],
+    totalMessages: 0,
+    messageOffset: 0,
+    messageLimit: 100,
+    hasMoreMessages: false,
+  }),
+  searchMessages: () => ({
+    generatedAt: 1,
+    matches: [],
+    truncated: false,
+  }),
 });
 
 describe("BrainService tool loop", () => {
@@ -304,6 +328,9 @@ describe("BrainService tool loop", () => {
       "posthog_call_mcp_tool",
       "posthog_run_query",
       "posthog_get_dashboard_snapshot",
+      "posthog_get_health_summary",
+      "posthog_get_asset_summary",
+      "posthog_get_release_summary",
       "posthog_list_dashboards",
       "posthog_get_dashboard",
       "posthog_list_insights",
@@ -314,6 +341,9 @@ describe("BrainService tool loop", () => {
       "posthog_execute_sql",
       "posthog_search_docs",
       "runtime_get_state_snapshot",
+      "runtime_list_conversations",
+      "runtime_get_conversation",
+      "runtime_search_messages",
       "runtime_get_recent_logs",
       "runtime_get_monitoring_snapshot",
       "runtime_list_actions",

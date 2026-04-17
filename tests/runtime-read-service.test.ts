@@ -148,4 +148,66 @@ describe("RuntimeReadService", () => {
       data: { id: 2 },
     });
   });
+
+  test("lists conversations, reads paginated messages, and searches message bodies", () => {
+    const instanceRoot = mkdtempSync(join(tmpdir(), "clog-runtime-conv-"));
+    cleanupPaths.push(instanceRoot);
+    const storageDir = join(instanceRoot, "storage");
+    const stateDir = join(storageDir, "state");
+    const workspaceDir = join(instanceRoot, "workspace");
+    const readOnlyDir = join(instanceRoot, "read-only");
+    mkdirSync(stateDir, { recursive: true });
+    mkdirSync(workspaceDir, { recursive: true });
+    mkdirSync(readOnlyDir, { recursive: true });
+
+    const store = new InMemoryRuntimeStore();
+    const alpha = store.createThread("tui", "Alpha checkout thread");
+    store.appendMessages(alpha.id, [
+      store.createMessage("user", "tui", "Need help with BANANA pricing"),
+      store.createMessage("agent", "tui", "Banana pricing is fixed"),
+    ]);
+    const beta = store.createThread("web", "Beta web");
+    store.appendMessages(beta.id, [
+      store.createMessage("user", "web", "No banana issues here"),
+    ]);
+
+    const service = new RuntimeReadService({
+      storage: {
+        instanceId: "test",
+        instanceRoot,
+        readOnlyDir,
+        workspaceDir,
+        storageDir,
+        stateDir,
+      },
+      store,
+    });
+
+    const listed = service.listConversations({ titleContains: "checkout", limit: 10 });
+    expect(listed.conversations).toHaveLength(1);
+    expect(listed.conversations[0]?.id).toBe(alpha.id);
+
+    const page = service.getConversation({
+      threadId: alpha.id,
+      messageOffset: 0,
+      messageLimit: 1,
+    });
+    expect(page.totalMessages).toBe(2);
+    expect(page.messages).toHaveLength(1);
+    expect(page.hasMoreMessages).toBe(true);
+
+    const hits = service.searchMessages({ query: "banana", limit: 10 });
+    expect(hits.matches.length).toBe(3);
+    expect(hits.truncated).toBe(false);
+
+    const scoped = service.searchMessages({ query: "banana", threadId: beta.id, limit: 10 });
+    expect(scoped.matches).toHaveLength(1);
+
+    for (let index = 0; index < 5; index += 1) {
+      store.appendMessages(alpha.id, [store.createMessage("user", "tui", `token-${index}`)]);
+    }
+    const capped = service.searchMessages({ query: "token-", threadId: alpha.id, limit: 3 });
+    expect(capped.matches).toHaveLength(3);
+    expect(capped.truncated).toBe(true);
+  });
 });

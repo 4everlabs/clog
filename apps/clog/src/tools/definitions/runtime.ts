@@ -1,16 +1,22 @@
 import {
+  RuntimeGetConversationInputSchema,
+  RuntimeGetConversationResultSchema,
   RuntimeGetMonitoringSnapshotInputSchema,
   RuntimeGetMonitoringSnapshotResultSchema,
   RuntimeGetRecentLogsInputSchema,
   RuntimeGetRecentLogsResultSchema,
   RuntimeListActionsInputSchema,
   RuntimeListActionsResultSchema,
+  RuntimeListConversationsInputSchema,
+  RuntimeListConversationsResultSchema,
   RuntimeListRoutinesInputSchema,
   RuntimeListRoutinesResultSchema,
   RuntimeRunActionInputSchema,
   RuntimeRunActionResultSchema,
   RuntimeRunRoutineInputSchema,
   RuntimeRunRoutineResultSchema,
+  RuntimeSearchMessagesInputSchema,
+  RuntimeSearchMessagesResultSchema,
   RuntimeGetStateSnapshotInputSchema,
   RuntimeGetStateSnapshotResultSchema,
   RuntimeReadKnowledgeInputSchema,
@@ -39,6 +45,66 @@ export const runtimeTools = [
       }
 
       return services.runtime.getStateSnapshot(input);
+    },
+  },
+  {
+    name: "runtime_list_conversations",
+    title: "Runtime Conversation List",
+    description: "List conversation threads from the runtime store with optional channel and title filters plus recency ordering.",
+    integration: "runtime",
+    approvalRequired: false,
+    implemented: true,
+    inputSchema: RuntimeListConversationsInputSchema,
+    outputSchema: RuntimeListConversationsResultSchema,
+    isEnabled() {
+      return true;
+    },
+    execute(services, input) {
+      if (!services.runtime) {
+        throw new Error("Runtime read services are unavailable");
+      }
+
+      return services.runtime.listConversations(input);
+    },
+  },
+  {
+    name: "runtime_get_conversation",
+    title: "Runtime Conversation Read",
+    description: "Read a full conversation thread from the runtime store by threadId with optional message pagination.",
+    integration: "runtime",
+    approvalRequired: false,
+    implemented: true,
+    inputSchema: RuntimeGetConversationInputSchema,
+    outputSchema: RuntimeGetConversationResultSchema,
+    isEnabled() {
+      return true;
+    },
+    execute(services, input) {
+      if (!services.runtime) {
+        throw new Error("Runtime read services are unavailable");
+      }
+
+      return services.runtime.getConversation(input);
+    },
+  },
+  {
+    name: "runtime_search_messages",
+    title: "Runtime Message Search",
+    description: "Keyword search across runtime conversation messages with optional thread and channel filters.",
+    integration: "runtime",
+    approvalRequired: false,
+    implemented: true,
+    inputSchema: RuntimeSearchMessagesInputSchema,
+    outputSchema: RuntimeSearchMessagesResultSchema,
+    isEnabled() {
+      return true;
+    },
+    execute(services, input) {
+      if (!services.runtime) {
+        throw new Error("Runtime read services are unavailable");
+      }
+
+      return services.runtime.searchMessages(input);
     },
   },
   {

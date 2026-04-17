@@ -136,6 +136,30 @@ const createRuntimeServices = (): RuntimeToolServices => ({
     },
     truncated: false,
   }),
+  listConversations: () => ({
+    generatedAt: 1,
+    conversations: [],
+  }),
+  getConversation: () => ({
+    generatedAt: 1,
+    thread: {
+      id: "thread_stub",
+      title: "Stub",
+      channel: "tui",
+      createdAt: 1,
+      updatedAt: 1,
+    },
+    messages: [],
+    totalMessages: 0,
+    messageOffset: 0,
+    messageLimit: 100,
+    hasMoreMessages: false,
+  }),
+  searchMessages: () => ({
+    generatedAt: 1,
+    matches: [],
+    truncated: false,
+  }),
 });
 
 describe("ToolExecutor", () => {

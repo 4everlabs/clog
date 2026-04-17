@@ -6,6 +6,12 @@ import {
   PostHogEndpointRunInputSchema,
   PostHogGetDashboardSnapshotInputSchema,
   PostHogGetDashboardSnapshotResultSchema,
+  PostHogGetHealthSummaryInputSchema,
+  PostHogGetHealthSummaryResultSchema,
+  PostHogGetAssetSummaryInputSchema,
+  PostHogGetAssetSummaryResultSchema,
+  PostHogGetReleaseSummaryInputSchema,
+  PostHogGetReleaseSummaryResultSchema,
   PostHogGetDashboardInputSchema,
   PostHogGetDashboardResultSchema,
   PostHogGetDocumentedToolCatalogInputSchema,
@@ -74,7 +80,17 @@ import {
   normalizePostHogSchemaEntities,
   normalizePostHogSqlResult,
   normalizePostHogEntityList,
+  normalizePostHogExperiments,
+  normalizePostHogFeatureFlags,
+  normalizePostHogLogAttributes,
+  normalizePostHogSchemaEntities,
 } from "../../integrations/posthog/native-tool-normalizers";
+import {
+  buildPostHogAssetSummary,
+  buildPostHogHealthSummary,
+  buildPostHogReleaseSummary,
+} from "../../integrations/posthog/summary-builders";
+import type { RuntimeObservation } from "@clog/types";
 import type { RegisteredTool } from "../types";
 
 const toRecord = (entries: readonly { key: string; value: string }[] | undefined): Record<string, string> | undefined => {
@@ -248,6 +264,247 @@ export const posthogTools = [
       }
 
       return await services.posthog.getDashboardSnapshot(input);
+    },
+  },
+  {
+    name: "posthog_get_health_summary",
+    title: "PostHog Health Summary",
+    description: "Compact product and reliability summary combining the dashboard snapshot with retained runtime monitoring artifacts.",
+    integration: "posthog",
+    approvalRequired: false,
+    implemented: true,
+    inputSchema: PostHogGetHealthSummaryInputSchema,
+    outputSchema: PostHogGetHealthSummaryResultSchema,
+    isEnabled(capabilities) {
+      return capabilities.posthog.canReadInsights;
+    },
+    async execute(services, input) {
+      if (!services.posthog) {
+        throw new Error("PostHog services are unavailable");
+      }
+
+      if (!services.runtime) {
+        throw new Error("Runtime services are unavailable");
+      }
+
+      const [dashboard, monitoring] = await Promise.all([
+        services.posthog.getDashboardSnapshot({
+          windowMinutes: input.windowMinutes,
+          topPathsLimit: input.topPathsLimit,
+        }),
+        Promise.resolve(services.runtime.getMonitoringSnapshot({
+          reportLimit: input.reportLimit,
+          operationHistoryLimit: input.operationHistoryLimit,
+        })),
+      ]);
+
+      return buildPostHogHealthSummary(dashboard, {
+        latestPerformanceReport: monitoring.latestPerformanceReport,
+        recentPostHogOperations: monitoring.recentPostHogOperations,
+      });
+    },
+  },
+  {
+    name: "posthog_get_asset_summary",
+    title: "PostHog Asset Summary",
+    description: "Condensed view of dashboards, insights, optional entity search hits, and optional data schema matches.",
+    integration: "posthog",
+    approvalRequired: false,
+    implemented: true,
+    inputSchema: PostHogGetAssetSummaryInputSchema,
+    outputSchema: PostHogGetAssetSummaryResultSchema,
+    isEnabled(capabilities) {
+      return capabilities.posthog.canReadInsights;
+    },
+    async execute(services, input) {
+      if (!services.posthog) {
+        throw new Error("PostHog services are unavailable");
+      }
+
+      const dashboardLimit = input.dashboardLimit ?? 12;
+      const insightLimit = input.insightLimit ?? 12;
+      const generatedAt = Date.now();
+
+      let dashboardList = normalizePostHogDashboardList({
+        text: "",
+        structuredContent: { dashboards: [] },
+      });
+      try {
+        dashboardList = normalizePostHogDashboardList(await services.posthog.callMcpTool("dashboards-get-all", {
+          limit: dashboardLimit,
+          offset: 0,
+        }));
+      } catch {
+        dashboardList = { total: 0, dashboards: [], text: undefined };
+      }
+
+      let insightList = normalizePostHogInsightList({
+        text: "",
+        structuredContent: { insights: [] },
+      });
+      try {
+        insightList = normalizePostHogInsightList(await services.posthog.callMcpTool("insights-get-all", {
+          limit: insightLimit,
+          offset: 0,
+        }));
+      } catch {
+        insightList = { total: 0, insights: [], text: undefined };
+      }
+
+      let entityHits = normalizePostHogEntityList({ text: "", structuredContent: { results: [] } }, ["results"]);
+      if (input.entitySearchQuery) {
+        try {
+          entityHits = normalizePostHogEntityList(await services.posthog.callMcpTool("entity-search", {
+            query: input.entitySearchQuery,
+            limit: input.entitySearchLimit ?? 12,
+          }), ["results", "entities", "items", "data"]);
+        } catch {
+          entityHits = { total: 0, entities: [], text: undefined };
+        }
+      } else {
+        entityHits = { total: 0, entities: [], text: undefined };
+      }
+
+      let schemaEntities = normalizePostHogSchemaEntities({ text: "", structuredContent: {} }, ["events"]);
+      if (input.schemaSearch) {
+        try {
+          schemaEntities = normalizePostHogSchemaEntities(await services.posthog.callMcpTool("read-data-schema", {
+            search: input.schemaSearch,
+            limit: input.schemaLimit ?? 20,
+          }), ["events", "actions", "properties", "results", "items"]);
+        } catch {
+          schemaEntities = { total: 0, entities: [], text: undefined, raw: undefined };
+        }
+      } else {
+        schemaEntities = { total: 0, entities: [], text: undefined, raw: undefined };
+      }
+
+      return buildPostHogAssetSummary({
+        dashboards: dashboardList.dashboards.map((dashboard) => ({
+          id: dashboard.id,
+          name: dashboard.name,
+        })),
+        insights: insightList.insights.map((insight) => ({
+          id: insight.id,
+          name: insight.name,
+        })),
+        entityHits: entityHits.entities.map((entity) => ({
+          id: entity.id,
+          type: entity.type,
+          name: entity.name,
+        })),
+        schemaEntities: schemaEntities.entities.map((entity) => ({
+          name: entity.name,
+          kind: entity.kind,
+        })),
+        totals: {
+          dashboardsListed: dashboardList.total,
+          insightsListed: insightList.total,
+          entityHits: entityHits.total,
+          schemaEntities: schemaEntities.total,
+        },
+      }, generatedAt);
+    },
+  },
+  {
+    name: "posthog_get_release_summary",
+    title: "PostHog Release Summary",
+    description: "Compact flags, experiments, and optional error or log-attribute context for release and rollout reviews.",
+    integration: "posthog",
+    approvalRequired: false,
+    implemented: true,
+    inputSchema: PostHogGetReleaseSummaryInputSchema,
+    outputSchema: PostHogGetReleaseSummaryResultSchema,
+    isEnabled(capabilities) {
+      return capabilities.posthog.canReadInsights;
+    },
+    async execute(services, input) {
+      if (!services.posthog) {
+        throw new Error("PostHog services are unavailable");
+      }
+
+      const flagLimit = input.flagLimit ?? 30;
+      const experimentLimit = input.experimentLimit ?? 30;
+      const observationLimit = input.observationLimit ?? 10;
+      const logAttributeLimit = input.logAttributeLimit ?? 15;
+      const generatedAt = Date.now();
+
+      let flags = normalizePostHogFeatureFlags({ text: "", structuredContent: { flags: [] } });
+      try {
+        flags = normalizePostHogFeatureFlags(await services.posthog.callMcpTool("feature-flag-get-all", {
+          limit: flagLimit,
+          offset: 0,
+        }));
+      } catch {
+        flags = { total: 0, flags: [], text: undefined };
+      }
+
+      let experiments = normalizePostHogExperiments({ text: "", structuredContent: { experiments: [] } });
+      try {
+        experiments = normalizePostHogExperiments(await services.posthog.callMcpTool("experiment-get-all", {
+          limit: experimentLimit,
+          offset: 0,
+        }));
+      } catch {
+        experiments = { total: 0, experiments: [], text: undefined };
+      }
+
+      let observations: readonly RuntimeObservation[] = [];
+      if (input.includeErrorObservations) {
+        try {
+          observations = await services.posthog.listErrors();
+        } catch {
+          observations = [];
+        }
+      }
+
+      let logAttributes = normalizePostHogLogAttributes({ text: "", structuredContent: { attributes: [] } });
+      if (input.includeLogAttributes) {
+        try {
+          logAttributes = normalizePostHogLogAttributes(await services.posthog.callMcpTool("logs-list-attributes", {}));
+        } catch {
+          logAttributes = { total: 0, attributes: [], text: undefined };
+        }
+      }
+
+      const errorObservations = (input.includeErrorObservations ? observations : [])
+        .slice(0, observationLimit)
+        .map((observation, index) => ({
+          id: observation.id.trim().length > 0 ? observation.id : `observation_${index}`,
+          severity: observation.severity,
+          summary: observation.summary,
+        }));
+
+      const logAttributeRows = (input.includeLogAttributes ? logAttributes.attributes : [])
+        .slice(0, logAttributeLimit)
+        .map((attribute) => ({
+          key: attribute.key,
+          type: attribute.type,
+        }));
+
+      return buildPostHogReleaseSummary({
+        flags: flags.flags.map((flag) => ({
+          key: flag.key,
+          name: flag.name,
+          active: flag.active,
+          rolloutPercentage: flag.rolloutPercentage,
+          status: flag.status,
+        })),
+        experiments: experiments.experiments.map((experiment) => ({
+          id: experiment.id,
+          name: experiment.name,
+          status: experiment.status,
+          featureFlagKey: experiment.featureFlagKey,
+        })),
+        errorObservations,
+        logAttributes: logAttributeRows,
+        totals: {
+          flags: flags.total,
+          experiments: experiments.total,
+          errorObservations: input.includeErrorObservations ? observations.length : 0,
+          logAttributes: input.includeLogAttributes ? logAttributes.total : 0,
+        },
+      }, generatedAt);
     },
   },
   {
