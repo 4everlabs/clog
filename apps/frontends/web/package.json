@@ -6,9 +6,9 @@
   "main": "./src/index.ts",
   "module": "./src/index.ts",
   "scripts": {
-    "dev": "bun --bun vite --host 127.0.0.1 --port 4173",
+    "dev": "bun --bun vite build --watch",
     "build": "bun --bun vite build",
-    "preview": "bun --bun vite preview --host 127.0.0.1 --port 4173",
+    "preview": "bun run build",
     "typecheck": "bun --bun svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {

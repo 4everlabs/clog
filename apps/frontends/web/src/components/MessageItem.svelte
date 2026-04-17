@@ -8,7 +8,8 @@
     readonly bold: boolean;
   };
 
-  const TELEGRAM_BOLD_PATTERN = /(?<!\*)\*([^\s*](?:[^*\n]*[^\s*])?)\*(?!\*)/g;
+  const TELEGRAM_BOLD_PATTERN =
+    /\*\*([^\s*](?:[^*\n]*[^\s*])?)\*\*|(?<!\*)\*([^\s*](?:[^*\n]*[^\s*])?)\*(?!\*)/g;
 
   function formatMessageContent(value: string): MessageSegment[] {
     const segments: MessageSegment[] = [];
@@ -25,7 +26,7 @@
       }
 
       segments.push({
-        text: match[1] ?? "",
+        text: match[1] ?? match[2] ?? "",
         bold: true,
       });
       lastIndex = index + match[0].length;

@@ -20,22 +20,13 @@
 
   const DEFAULT_WAKEUP_INTERVAL_MINUTES = 15;
 
-  let {
-    runtime,
-    wakeup = null,
-    sessionStartedAt = null,
-    activeView,
-    wakeupSaveBusy = false,
-    wakeupSaveError = null,
-    onSelectView,
-    onSaveWakeup,
-  }: Props = $props();
+  const props: Props = $props();
 
   const now = new SvelteDate();
 
-  const startedAt = $derived(sessionStartedAt ?? runtime?.bootedAt ?? null);
-  const wakeupIntervalMinutes = $derived(resolveWakeupIntervalMinutes(wakeup));
-  const wakeupMessage = $derived(wakeup?.message ?? "");
+  const startedAt = $derived(props.sessionStartedAt ?? props.runtime?.bootedAt ?? null);
+  const wakeupIntervalMinutes = $derived(resolveWakeupIntervalMinutes(props.wakeup ?? null));
+  const wakeupMessage = $derived(props.wakeup?.message ?? "");
   const wakeupSourceKey = $derived(createWakeupSignature(wakeupIntervalMinutes, wakeupMessage));
   const sessionStartedLabel = $derived.by(() => {
     if (startedAt === null) {
@@ -93,7 +84,7 @@
       draftMessage.trim().length > 0,
   );
   const wakeupDirty = $derived(createWakeupSignature(draftIntervalMinutes, draftMessage) !== wakeupSourceKey);
-  const wakeupSaveDisabled = $derived(wakeupSaveBusy || !wakeupValid || !wakeupDirty);
+  const wakeupSaveDisabled = $derived((props.wakeupSaveBusy ?? false) || !wakeupValid || !wakeupDirty);
 
   function formatDuration(durationMs: number): string {
     const totalSeconds = Math.max(0, Math.floor(durationMs / 1000));
@@ -140,7 +131,7 @@
       return;
     }
 
-    void onSaveWakeup({
+    void props.onSaveWakeup({
       intervalMinutes: draftIntervalMinutes,
       message: draftMessage,
     });
@@ -165,16 +156,16 @@
     <button
       type="button"
       class="tab"
-      data-active={activeView === "chat"}
-      onclick={() => onSelectView("chat")}
+      data-active={props.activeView === "chat"}
+      onclick={() => props.onSelectView("chat")}
     >
       Chat
     </button>
     <button
       type="button"
       class="tab"
-      data-active={activeView === "settings"}
-      onclick={() => onSelectView("settings")}
+      data-active={props.activeView === "settings"}
+      onclick={() => props.onSelectView("settings")}
     >
       Settings
     </button>
@@ -197,12 +188,12 @@
         <textarea bind:value={draftMessage} rows="5" placeholder="Wakeup prompt"></textarea>
       </label>
 
-      {#if wakeupSaveError}
-        <p class="error-text" role="alert">{wakeupSaveError}</p>
+      {#if props.wakeupSaveError}
+        <p class="error-text" role="alert">{props.wakeupSaveError}</p>
       {/if}
 
       <button class="save-button" type="submit" disabled={wakeupSaveDisabled}>
-        {wakeupSaveBusy ? "Saving..." : "Save"}
+        {props.wakeupSaveBusy ? "Saving..." : "Save"}
       </button>
     </form>
   </section>

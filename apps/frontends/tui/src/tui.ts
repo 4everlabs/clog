@@ -8,7 +8,6 @@ import {
   InputRenderableEvents,
   TextRenderable,
   createCliRenderer,
-  type CliRenderer,
 } from "@opentui/core";
 import type { AgentRuntimeSummary } from "@clog/types";
 import { ClogApiClient } from "./clog-api";

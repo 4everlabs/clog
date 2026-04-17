@@ -6,5 +6,4 @@ const response = await fetch('https://api.vercel.com/v1/projects/projectId/deplo
     },
   });
   
-  const data = await response.json();
-  console.log(data);
+await response.json();

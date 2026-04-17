@@ -316,6 +316,13 @@
     }
   }
 
+  function handleSelectView(view: MainView): void {
+    activeView = view;
+    if (view === "chat") {
+      void loadThreads({ reportError: false, skipIfSending: true });
+    }
+  }
+
   async function handleSend(body: string): Promise<void> {
     const message = body.trim();
     if (!message) {
@@ -395,7 +402,7 @@
     <div class="loading" role="status">Loading…</div>
   {/if}
   {#if loadError}
-    <div class="banner error" role="alert">{loadError}</div>
+    <div class="load-error-banner" role="alert">{loadError}</div>
   {/if}
 
   <div class="layout">
@@ -406,12 +413,7 @@
       activeView={activeView}
       {wakeupSaveBusy}
       {wakeupSaveError}
-      onSelectView={(view: MainView) => {
-        activeView = view;
-        if (view === "chat") {
-          void loadThreads({ reportError: false, skipIfSending: true });
-        }
-      }}
+      onSelectView={handleSelectView}
       onSaveWakeup={(input: WakeupFormInput) => void handleWakeupSave(input)}
     />
     <main class="main">
@@ -493,13 +495,18 @@
     border-bottom: 1px solid var(--border);
   }
 
-  .banner {
+  .load-error-banner {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 0.75rem);
+    left: 50%;
+    z-index: 1000;
+    width: min(48rem, calc(100vw - 1.5rem));
+    transform: translateX(-50%);
     padding: 0.35rem 0.6rem;
     font-size: 0.85rem;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .banner.error {
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    box-shadow: 0 10px 24px rgb(17 17 17 / 12%);
     background: #f3dcdf;
     color: #5f1f27;
   }

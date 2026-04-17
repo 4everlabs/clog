@@ -2,7 +2,7 @@ const deploymentId = process.env.VERCEL_DEPLOYMENT_ID?.trim();
 const token = process.env.VERCEL_TOKEN?.trim();
 
 if (!deploymentId || !token) {
-  console.error("Set VERCEL_DEPLOYMENT_ID and VERCEL_TOKEN before running this example.");
+  process.stderr.write("Set VERCEL_DEPLOYMENT_ID and VERCEL_TOKEN before running this example.\n");
   process.exitCode = 1;
 } else {
   const response = await fetch(
@@ -16,5 +16,5 @@ if (!deploymentId || !token) {
   );
 
   const body = await response.text();
-  console.log(body);
+  process.stdout.write(`${body}\n`);
 }

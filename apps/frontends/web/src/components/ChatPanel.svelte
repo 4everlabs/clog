@@ -26,7 +26,12 @@
   } = $props();
 
   let draft = $state("");
-  let selectedThreadValue = $derived(activeThreadId ?? NEW_CONVERSATION_VALUE);
+  const selectedThreadValue = $derived(activeThreadId ?? NEW_CONVERSATION_VALUE);
+
+  function handleThreadChange(event: Event): void {
+    const nextValue = (event.currentTarget as HTMLSelectElement).value;
+    onSelectThread(nextValue === NEW_CONVERSATION_VALUE ? null : nextValue);
+  }
 
   function submit(): void {
     if (sending) {
@@ -49,10 +54,8 @@
         <select
           id="thread-select"
           class="thread-select"
-          bind:value={selectedThreadValue}
-          onchange={() => {
-            onSelectThread(selectedThreadValue === NEW_CONVERSATION_VALUE ? null : selectedThreadValue);
-          }}
+          value={selectedThreadValue}
+          onchange={handleThreadChange}
         >
           <option value={NEW_CONVERSATION_VALUE}>New conversation</option>
           {#each threads as thread (thread.id)}

@@ -127,6 +127,9 @@ describe("RuntimeReadService", () => {
     expect(root.path).toBe("workspace/posthog-tool-output.json");
     expect(root.valueType).toBe("object");
     expect(root.childKeys).toEqual(["updatedAt", "operations"]);
+    if (!("value" in root)) {
+      throw new Error("Expected untruncated root JSON read to include a value.");
+    }
     expect(root.value).toMatchObject({
       updatedAt: 30,
     });
@@ -137,6 +140,9 @@ describe("RuntimeReadService", () => {
     });
     expect(nested.fieldPath).toBe("operations.dashboardSnapshot.history.1");
     expect(nested.valueType).toBe("object");
+    if (!("value" in nested)) {
+      throw new Error("Expected untruncated nested JSON read to include a value.");
+    }
     expect(nested.value).toEqual({
       recordedAt: 20,
       data: { id: 2 },
