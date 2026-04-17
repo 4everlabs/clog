@@ -149,13 +149,17 @@ export const bootstrapRuntime = (): RuntimeBootstrap => {
       vercel: null,
     },
   });
-  const registeredTools = resolveEnabledTools(env.capabilities);
+  const toolVisibility = {
+    hidePosthogContextTools: env.hidePosthogContextTools,
+  };
+  const registeredTools = resolveEnabledTools(env.capabilities, toolVisibility);
   const brain = new BrainService({
     aiConfig: env.ai,
     executionMode: env.executionMode,
     availableTools: env.availableTools,
+    runtimeContext: env.runtimeContext,
     registeredTools,
-    providerTools: buildProviderTools(env.capabilities),
+    providerTools: buildProviderTools(env.capabilities, toolVisibility),
     toolExecutor,
   });
   const github = new GitHubIntegrationClient();

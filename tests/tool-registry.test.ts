@@ -103,4 +103,18 @@ describe("tool registry", () => {
     ]);
     expect(tools.every((tool) => tool.type === "function")).toBe(true);
   });
+
+  test("hides PostHog organization discovery tools when context is pinned", () => {
+    const summaries = summarizeEnabledTools(createCapabilities(), {
+      hidePosthogContextTools: true,
+    });
+    const tools = buildProviderTools(createCapabilities(), {
+      hidePosthogContextTools: true,
+    });
+
+    expect(summaries.map((tool) => tool.name)).not.toContain("posthog_get_organizations");
+    expect(summaries.map((tool) => tool.name)).not.toContain("posthog_get_projects");
+    expect(tools.map((tool) => tool.function.name)).not.toContain("posthog_get_organizations");
+    expect(tools.map((tool) => tool.function.name)).not.toContain("posthog_get_projects");
+  });
 });

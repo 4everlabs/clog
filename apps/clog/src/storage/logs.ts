@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { format } from "node:util";
 import { resolveRuntimeStorageRoot } from "../../../../tests/runtime-instance-template";
+import { RuntimeTerminalOutputFormatter, type RuntimeTerminalStreamName } from "./runtime-terminal-output";
 
 const LOG_DIRECTORY_NAME = "logs";
 const LOG_FILE_BUFFER_SIZE = 1024 * 1024;
@@ -30,6 +31,7 @@ export interface RuntimeLogSession {
 
 interface RuntimeLogCapture extends RuntimeLogSession {
   readonly sink: Bun.FileSink;
+  readonly terminalFormatter: RuntimeTerminalOutputFormatter;
   readonly originalStdoutWrite: WriteMethod;
   readonly originalStderrWrite: WriteMethod;
   readonly originalConsoleMethods: ConsoleMethodSet;
@@ -100,6 +102,14 @@ const closeRuntimeLogCapture = (): void => {
 
   capture.closed = true;
   clearInterval(capture.flushTimer);
+  const remainingStdout = capture.terminalFormatter.flush("stdout");
+  if (remainingStdout.length > 0) {
+    capture.originalStdoutWrite.call(process.stdout, remainingStdout);
+  }
+  const remainingStderr = capture.terminalFormatter.flush("stderr");
+  if (remainingStderr.length > 0) {
+    capture.originalStderrWrite.call(process.stderr, remainingStderr);
+  }
   process.stdout.write = capture.originalStdoutWrite;
   process.stderr.write = capture.originalStderrWrite;
   runtimeConsole.debug = capture.originalConsoleMethods.debug;
@@ -131,12 +141,20 @@ const registerCloseHooks = (): void => {
 const createPatchedWrite = (
   originalWrite: WriteMethod,
   stream: NodeJS.WriteStream,
+  streamName: RuntimeTerminalStreamName,
+  terminalFormatter: RuntimeTerminalOutputFormatter,
 ): WriteMethod => {
   return ((chunk: string | Uint8Array, encoding?: BufferEncoding | WriteCallback, callback?: WriteCallback): boolean => {
     if (mirroredConsoleDepth === 0) {
       writeToSink(chunk);
     }
-    return originalWrite.call(stream, chunk, encoding as BufferEncoding, callback);
+    const resolvedCallback = typeof encoding === "function" ? encoding : callback;
+    const rendered = terminalFormatter.formatChunk(streamName, chunk);
+    if (rendered.length === 0) {
+      resolvedCallback?.();
+      return true;
+    }
+    return originalWrite.call(stream, rendered, "utf8", resolvedCallback);
   }) as WriteMethod;
 };
 
@@ -174,6 +192,7 @@ export const initializeRuntimeLogCapture = (
   const startedAt = Date.now();
   const filePath = join(logsDirectory, toLogFileName(startedAt));
   const sink = Bun.file(filePath).writer({ highWaterMark: LOG_FILE_BUFFER_SIZE });
+  const terminalFormatter = new RuntimeTerminalOutputFormatter(startedAt);
   const originalStdoutWrite = process.stdout.write.bind(process.stdout) as WriteMethod;
   const originalStderrWrite = process.stderr.write.bind(process.stderr) as WriteMethod;
   const originalConsoleMethods: ConsoleMethodSet = {
@@ -184,8 +203,8 @@ export const initializeRuntimeLogCapture = (
     trace: runtimeConsole.trace.bind(runtimeConsole),
     warn: runtimeConsole.warn.bind(runtimeConsole),
   };
-  const stdoutWrite = createPatchedWrite(originalStdoutWrite, process.stdout);
-  const stderrWrite = createPatchedWrite(originalStderrWrite, process.stderr);
+  const stdoutWrite = createPatchedWrite(originalStdoutWrite, process.stdout, "stdout", terminalFormatter);
+  const stderrWrite = createPatchedWrite(originalStderrWrite, process.stderr, "stderr", terminalFormatter);
   const flushTimer = setInterval(flushSink, LOG_FLUSH_INTERVAL_MS);
   flushTimer.unref?.();
 
@@ -194,6 +213,7 @@ export const initializeRuntimeLogCapture = (
     startedAtIso: new Date(startedAt).toISOString(),
     filePath,
     sink,
+    terminalFormatter,
     originalStdoutWrite,
     originalStderrWrite,
     originalConsoleMethods,

@@ -21,6 +21,7 @@ export interface BrainServiceConfig {
   readonly aiConfig?: AiRuntimeConfig;
   readonly executionMode?: AgentExecutionMode;
   readonly availableTools?: readonly ToolSummary[];
+  readonly runtimeContext?: string | null;
   readonly registeredTools?: readonly AnyRegisteredTool[];
   readonly providerTools?: readonly ProviderFunctionTool[];
   readonly toolExecutor?: ToolExecutor | null;
@@ -58,6 +59,7 @@ export class BrainService {
   private readonly aiConfig: AiRuntimeConfig | null;
   private readonly executionMode: AgentExecutionMode;
   private readonly availableTools: readonly ToolSummary[];
+  private readonly runtimeContext: string | null;
   private readonly registeredTools: readonly AnyRegisteredTool[];
   private readonly providerTools: readonly ProviderFunctionTool[];
   private readonly toolExecutor: ToolExecutor | null;
@@ -75,6 +77,7 @@ export class BrainService {
     this.baseUrl = config.baseUrl ?? aiConfig?.baseUrl ?? "https://api.openai.com/v1";
     this.executionMode = config.executionMode ?? "propose";
     this.availableTools = config.availableTools ?? [];
+    this.runtimeContext = config.runtimeContext ?? null;
     this.registeredTools = config.registeredTools ?? [];
     this.providerTools = config.providerTools ?? [];
     this.toolExecutor = config.toolExecutor ?? null;
@@ -104,6 +107,7 @@ export class BrainService {
       includeKnowledgePrompt: false,
       executionMode: this.executionMode,
       findingsSummary: this.buildFindingsSummary(findings),
+      runtimeContext: this.runtimeContext,
       wakeupPrompt: promptBundle.wakeupPrompt,
     });
 

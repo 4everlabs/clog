@@ -53,6 +53,7 @@ export interface SystemPromptOptions {
   readonly includeKnowledgePrompt?: boolean;
   readonly executionMode?: string | null;
   readonly findingsSummary?: string | null;
+  readonly runtimeContext?: string | null;
   readonly wakeupPrompt?: string | null;
 }
 
@@ -188,6 +189,7 @@ export const buildSystemPrompt = (bundle: AiPromptBundle, options: SystemPromptO
     options.includeKnowledgePrompt === false || !bundle.knowledgePrompt?.trim()
       ? ""
       : `Knowledge summaries:\n${bundle.knowledgePrompt}`,
+    options.runtimeContext?.trim() ? `Runtime context:\n${options.runtimeContext}` : "",
     options.includeModePrompt === false ? "" : bundle.primaryModePrompt,
     buildToolPrompt(options.tools ?? []),
     options.executionMode ? `Execution mode: ${options.executionMode}` : "",

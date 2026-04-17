@@ -13,6 +13,8 @@ const createEnvironment = (): AgentEnvironment => ({
   port: 6900,
   executionMode: "propose",
   monitorIntervalMs: 5_000,
+  runtimeContext: null,
+  hidePosthogContextTools: false,
   channels: ["telegram"],
   posthog: {
     host: "https://us.posthog.com",

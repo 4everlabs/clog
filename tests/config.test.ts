@@ -196,6 +196,71 @@ describe("loadAgentEnvironment", () => {
     }
   });
 
+  test("injects pinned PostHog context from read-only settings and hides discovery tools", () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "clog-config-posthog-context-"));
+    cleanupPaths.push(workspaceRoot);
+
+    const settingsDir = join(workspaceRoot, ".runtime", "instances", "personal-instance", "read-only");
+    mkdirSync(settingsDir, { recursive: true });
+    writeFileSync(join(settingsDir, "settings.json"), JSON.stringify({
+      posthog: {
+        context: "4ever.ai / app.4ever.ai",
+      },
+    }));
+
+    const previousCwd = process.cwd();
+    process.chdir(workspaceRoot);
+
+    try {
+      const env = loadAgentEnvironment({
+        POSTHOG_PROJECT_ID: "12345",
+        POSTHOG_API_KEY: "phx_test",
+      POSTHOG_CLAW_POSTHOG_MANAGE_ENDPOINTS: "true",
+      POSTHOG_CLAW_POSTHOG_ENABLE_FLAGS: "true",
+      POSTHOG_CLAW_POSTHOG_READ_FLAGS: "true",
+      NOTION_SECRET: "ntn_test",
+      });
+
+      expect(env.runtimeContext).toBe("PostHog context: 4ever.ai / app.4ever.ai");
+      expect(env.hidePosthogContextTools).toBe(true);
+      expect(env.availableTools.map((tool) => tool.name)).toEqual([
+        "posthog_list_errors",
+        "posthog_get_documented_tool_catalog",
+        "posthog_list_mcp_tools",
+        "posthog_call_mcp_tool",
+        "posthog_run_query",
+        "posthog_get_dashboard_snapshot",
+        "posthog_list_dashboards",
+        "posthog_get_dashboard",
+        "posthog_list_insights",
+        "posthog_get_insight",
+        "posthog_list_feature_flags",
+        "posthog_get_feature_flag",
+        "posthog_get_feature_flag_status",
+        "posthog_get_feature_flag_blast_radius",
+        "posthog_search_entities",
+        "posthog_read_data_schema",
+        "posthog_read_data_warehouse_schema",
+        "posthog_execute_sql",
+        "posthog_search_docs",
+        "posthog_list_endpoints",
+        "posthog_diff_endpoints",
+        "posthog_run_endpoint",
+        "notion_get_todo_list",
+        "runtime_get_state_snapshot",
+        "runtime_get_recent_logs",
+        "runtime_get_monitoring_snapshot",
+        "runtime_list_actions",
+        "runtime_run_action",
+        "runtime_list_routines",
+        "runtime_run_routine",
+        "runtime_read_knowledge",
+      ]);
+    } finally {
+      process.chdir(previousCwd);
+    }
+  });
+
   test("uses read-only tools config to control visible tool capabilities", () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), "clog-config-"));
     cleanupPaths.push(workspaceRoot);

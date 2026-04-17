@@ -91,6 +91,7 @@ describe("BrainService", () => {
       modelName: "test-model",
       baseUrl: "https://api.openai.com/v1",
       executionMode: "propose",
+      runtimeContext: "PostHog context: 4ever.ai / app.4ever.ai",
       availableTools: [createToolSummary()],
       fetchFn: async (_input, init) => {
         requests.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
@@ -130,9 +131,12 @@ describe("BrainService", () => {
     const systemPrompt = messages[0]?.content ?? "";
     expect(systemPrompt.indexOf("## Hard Rules")).toBeGreaterThanOrEqual(0);
     expect(systemPrompt.indexOf("Operating mode: `primary`.")).toBeGreaterThan(systemPrompt.indexOf("## Hard Rules"));
+    expect(systemPrompt.indexOf("Runtime context:")).toBeGreaterThan(systemPrompt.indexOf("## Hard Rules"));
+    expect(systemPrompt.indexOf("Runtime context:")).toBeLessThan(systemPrompt.indexOf("Operating mode: `primary`."));
     expect(systemPrompt.indexOf("Enabled tools for this turn:")).toBeGreaterThan(
       systemPrompt.indexOf("Operating mode: `primary`."),
     );
+    expect(systemPrompt).toContain("PostHog context: 4ever.ai / app.4ever.ai");
     expect(systemPrompt).not.toContain("Knowledge summaries:");
   });
 

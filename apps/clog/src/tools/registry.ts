@@ -11,6 +11,15 @@ import { shellTools } from "./definitions/shell";
 import { vercelTools } from "./definitions/vercel";
 import type { AnyRegisteredTool } from "./types";
 
+export interface ToolVisibilityOptions {
+  readonly hidePosthogContextTools?: boolean;
+}
+
+const posthogContextToolNames = new Set<AgentToolName>([
+  "posthog_get_organizations",
+  "posthog_get_projects",
+]);
+
 const registeredTools: readonly AnyRegisteredTool[] = [
   ...posthogTools,
   ...notionTools,
@@ -59,6 +68,14 @@ const toProviderFunctionTool = (tool: AnyRegisteredTool): ProviderFunctionTool =
   });
 };
 
+const isVisibleTool = (tool: AnyRegisteredTool, options: ToolVisibilityOptions): boolean => {
+  if (options.hidePosthogContextTools && posthogContextToolNames.has(tool.name)) {
+    return false;
+  }
+
+  return true;
+};
+
 export const listRegisteredTools = (): readonly AnyRegisteredTool[] => registeredTools;
 
 export const getRegisteredTool = (toolName: AgentToolName): AnyRegisteredTool | null =>
@@ -66,15 +83,18 @@ export const getRegisteredTool = (toolName: AgentToolName): AnyRegisteredTool | 
 
 export const resolveEnabledTools = (
   capabilities: IntegrationCapabilitySnapshot,
+  options: ToolVisibilityOptions = {},
 ): readonly AnyRegisteredTool[] =>
-  registeredTools.filter((tool) => tool.implemented && tool.isEnabled(capabilities));
+  registeredTools.filter((tool) => tool.implemented && tool.isEnabled(capabilities) && isVisibleTool(tool, options));
 
 export const summarizeEnabledTools = (
   capabilities: IntegrationCapabilitySnapshot,
+  options: ToolVisibilityOptions = {},
 ): readonly ToolSummary[] =>
-  resolveEnabledTools(capabilities).map(toToolSummary);
+  resolveEnabledTools(capabilities, options).map(toToolSummary);
 
 export const buildProviderTools = (
   capabilities: IntegrationCapabilitySnapshot,
+  options: ToolVisibilityOptions = {},
 ): readonly ProviderFunctionTool[] =>
-  resolveEnabledTools(capabilities).map(toProviderFunctionTool);
+  resolveEnabledTools(capabilities, options).map(toProviderFunctionTool);

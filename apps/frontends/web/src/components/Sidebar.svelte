@@ -1,319 +1,176 @@
 <script lang="ts">
-  import type {
-    AgentRuntimeSummary,
-    IntegrationCapabilitySnapshot,
-    IntegrationHealthView,
-    IntegrationKind,
-    SurfaceChannelKind,
-  } from "@clog/types";
-
-  type ThreadRow = {
-    readonly id: string;
-    readonly title: string;
-    readonly channel: SurfaceChannelKind;
-    readonly updatedAt: number;
-  };
+  import type { AgentRuntimeSummary, IntegrationHealthView } from "@clog/types";
 
   const {
     runtime,
-    channels,
     integrations,
-    capabilities,
-    threads,
-    activeThreadId,
-    newThreadTitle = "",
-    refreshBusy = false,
-    monitorBusy = false,
-    onNewThreadTitleChange,
-    onSelectThread,
-    onRefresh,
-    onMonitorCycle,
+    threadCount,
+    activeView,
+    onSelectView,
   }: {
     readonly runtime: AgentRuntimeSummary | null;
-    readonly channels: readonly SurfaceChannelKind[];
     readonly integrations: readonly IntegrationHealthView[];
-    readonly capabilities: IntegrationCapabilitySnapshot | null;
-    readonly threads: readonly ThreadRow[];
-    readonly newThreadTitle?: string;
-    readonly activeThreadId: string | null;
-    readonly refreshBusy?: boolean;
-    readonly monitorBusy?: boolean;
-    readonly onNewThreadTitleChange: (value: string) => void;
-    readonly onSelectThread: (threadId: string) => void;
-    readonly onRefresh: () => void;
-    readonly onMonitorCycle: () => void;
+    readonly threadCount: number;
+    readonly activeView: "chat" | "settings";
+    readonly onSelectView: (view: "chat" | "settings") => void;
   } = $props();
-
-  function intLabel(kind: IntegrationKind): string {
-    return kind;
-  }
 </script>
 
 <aside class="side">
   <div class="brand">Clog</div>
 
-  <section class="block">
-    <h3 class="h">Runtime</h3>
-    {#if !runtime}
-      <p class="muted">Loading…</p>
-    {:else}
-      <dl class="kv">
-        <dt>Name</dt>
-        <dd>{runtime.name}</dd>
-        <dt>Status</dt>
-        <dd>{runtime.status}</dd>
+  <section class="summary">
+    <p class="runtime-name">{runtime?.name ?? "Loading runtime"}</p>
+    <p class="status" data-status={runtime?.status ?? "loading"}>{runtime?.status ?? "loading"}</p>
+    <dl class="meta">
+      <div>
+        <dt>Threads</dt>
+        <dd>{threadCount}</dd>
+      </div>
+      <div>
+        <dt>Integrations</dt>
+        <dd>{runtime?.activeIntegrations.length ?? integrations.length}</dd>
+      </div>
+      <div>
         <dt>Mode</dt>
-        <dd>{runtime.executionMode}</dd>
-        <dt>Monitor</dt>
-        <dd>{runtime.monitorIntervalMs} ms</dd>
-        <dt>Active integrations</dt>
-        <dd>{runtime.activeIntegrations.join(", ") || "—"}</dd>
-      </dl>
-    {/if}
+        <dd>{runtime?.executionMode ?? "—"}</dd>
+      </div>
+    </dl>
   </section>
 
-  <section class="block">
-    <h3 class="h">Channels</h3>
-    {#if channels.length === 0}
-      <p class="muted">None</p>
-    {:else}
-      <ul class="list">
-        {#each channels as ch (ch)}
-          <li>{ch}</li>
-        {/each}
-      </ul>
-    {/if}
-  </section>
-
-  <section class="block">
-    <h3 class="h">Integrations</h3>
-    {#if integrations.length === 0}
-      <p class="muted">None reported</p>
-    {:else}
-      <ul class="int-list">
-        {#each integrations as integ, i (`${integ.kind}-${i}`)}
-          <li>
-            <span class="int-kind">{intLabel(integ.kind)}</span>
-            <span class="int-st">{integ.status}</span>
-            <div class="int-sum">{integ.summary}</div>
-          </li>
-        {/each}
-      </ul>
-    {/if}
-  </section>
-
-  {#if capabilities}
-    <section class="block">
-      <h3 class="h">Capabilities</h3>
-      <p class="caps">
-        Shell: {capabilities.shell.canExecute ? "execute" : "no"} · PostHog read: {capabilities.posthog.canReadErrors
-          ? "errors"
-          : "—"}
-      </p>
-    </section>
-  {/if}
-
-  <section class="block">
-    <h3 class="h">Threads</h3>
-    <label class="lbl" for="new-title">New thread title</label>
-    <input
-      id="new-title"
-      class="title-input"
-      type="text"
-      placeholder="optional"
-      value={newThreadTitle}
-      oninput={(event) => {
-        onNewThreadTitleChange((event.currentTarget as HTMLInputElement).value);
-      }}
-    />
-    <div class="actions">
-      <button type="button" class="btn" disabled={refreshBusy} onclick={onRefresh}>
-        {refreshBusy ? "Refresh…" : "Refresh"}
-      </button>
-      <button type="button" class="btn" disabled={monitorBusy} onclick={onMonitorCycle}>
-        {monitorBusy ? "Monitor…" : "Monitor cycle"}
-      </button>
-    </div>
-    {#if threads.length === 0}
-      <p class="muted">No threads</p>
-    {:else}
-      <ul class="threads">
-        {#each threads as t (t.id)}
-          <li>
-            <button
-              type="button"
-              class="thread"
-              data-active={activeThreadId === t.id}
-              onclick={() => onSelectThread(t.id)}
-            >
-              <span class="tt">{t.title || "(untitled)"}</span>
-              <span class="tc">{t.channel}</span>
-            </button>
-          </li>
-        {/each}
-      </ul>
-    {/if}
-  </section>
+  <nav class="nav" aria-label="Views">
+    <button
+      type="button"
+      class="tab"
+      data-active={activeView === "chat"}
+      onclick={() => onSelectView("chat")}
+    >
+      Chat
+    </button>
+    <button
+      type="button"
+      class="tab"
+      data-active={activeView === "settings"}
+      onclick={() => onSelectView("settings")}
+    >
+      Settings
+    </button>
+  </nav>
 </aside>
 
 <style>
   .side {
     display: flex;
     flex-direction: column;
-    gap: 0.65rem;
-    padding: 0.5rem 0.55rem;
+    gap: 1rem;
+    padding: 0.85rem 0.75rem;
     height: 100%;
     overflow: auto;
     font-size: 0.82rem;
+    scrollbar-width: none;
+    color: var(--text-primary);
+  }
+
+  .side::-webkit-scrollbar {
+    display: none;
   }
 
   .brand {
     font-weight: 700;
+    font-size: 1rem;
+    letter-spacing: 0.02em;
+  }
+
+  .summary {
+    border: 1px solid var(--border);
+    border-radius: 0;
+    background: var(--bg-panel);
+    padding: 0.85rem;
+  }
+
+  .runtime-name {
+    margin: 0;
     font-size: 0.95rem;
-    border-bottom: 1px solid #bbb;
-    padding-bottom: 0.35rem;
-  }
-
-  .block {
-    border-bottom: 1px solid #e8e8e8;
-    padding-bottom: 0.5rem;
-  }
-
-  .h {
-    margin: 0 0 0.35rem;
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: #444;
-  }
-
-  .muted {
-    margin: 0;
-    color: #666;
-  }
-
-  .kv {
-    margin: 0;
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 0.15rem 0.5rem;
-    font-size: 0.78rem;
-  }
-
-  .kv dt {
-    color: #555;
-  }
-
-  .kv dd {
-    margin: 0;
-    font-family: ui-monospace, monospace;
-  }
-
-  .list {
-    margin: 0;
-    padding-left: 1.1rem;
-  }
-
-  .int-list {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .int-list li {
-    margin-bottom: 0.35rem;
-  }
-
-  .int-kind {
     font-weight: 600;
-    margin-right: 0.35rem;
   }
 
-  .int-st {
-    font-family: ui-monospace, monospace;
+  .status {
+    display: inline-flex;
+    align-items: center;
+    margin: 0.45rem 0 0;
+    padding: 0.2rem 0.5rem;
+    border-radius: 0;
+    background: var(--bg-panel-alt);
+    color: var(--text-muted);
     font-size: 0.72rem;
-    color: #333;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
   }
 
-  .int-sum {
-    font-size: 0.75rem;
-    color: #444;
-    margin-top: 0.1rem;
+  .status[data-status="running"],
+  .status[data-status="healthy"] {
+    background: #dcefe2;
+    color: #205533;
   }
 
-  .caps {
-    margin: 0;
-    font-size: 0.75rem;
-    color: #333;
+  .status[data-status="error"],
+  .status[data-status="failed"] {
+    background: #f3dcdf;
+    color: #7a2430;
   }
 
-  .lbl {
-    display: block;
-    font-size: 0.72rem;
-    margin-bottom: 0.2rem;
-    color: #444;
+  .meta {
+    margin: 0.85rem 0 0;
+    display: grid;
+    gap: 0.55rem;
   }
 
-  .title-input {
-    width: 100%;
-    box-sizing: border-box;
-    font: inherit;
-    padding: 0.25rem 0.35rem;
-    margin-bottom: 0.4rem;
-  }
-
-  .actions {
+  .meta div {
     display: flex;
-    gap: 0.35rem;
-    margin-bottom: 0.45rem;
-    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.5rem;
+    align-items: baseline;
   }
 
-  .btn {
-    font: inherit;
-    font-size: 0.78rem;
-    padding: 0.25rem 0.45rem;
-    cursor: pointer;
+  .meta dt {
+    color: var(--text-muted);
   }
 
-  .btn:disabled {
-    opacity: 0.65;
-    cursor: not-allowed;
-  }
-
-  .threads {
+  .meta dd {
     margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .thread {
-    width: 100%;
-    text-align: left;
-    font: inherit;
-    font-size: 0.78rem;
-    padding: 0.3rem 0.35rem;
-    margin-bottom: 0.25rem;
-    border: 1px solid #c8c8c8;
-    background: #fff;
-    cursor: pointer;
-    display: flex;
-    flex-direction: column;
-    gap: 0.1rem;
-  }
-
-  .thread[data-active="true"] {
-    background: #eef3ff;
-    border-color: #99aacc;
-  }
-
-  .tt {
-    font-weight: 500;
-  }
-
-  .tc {
+    text-align: right;
     font-family: ui-monospace, monospace;
-    font-size: 0.7rem;
-    color: #555;
+  }
+
+  .nav {
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .tab {
+    width: 100%;
+    font: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 0;
+    background: var(--bg-panel);
+    color: var(--text-primary);
+    padding: 0.65rem 0.75rem;
+    cursor: pointer;
+    transition:
+      background-color 0.15s ease,
+      border-color 0.15s ease;
+  }
+
+  .tab:hover {
+    background: var(--bg-panel-alt);
+  }
+
+  .tab[data-active="true"] {
+    background: var(--accent-strong);
+    border-color: var(--accent-strong);
+    color: var(--text-primary);
   }
 </style>

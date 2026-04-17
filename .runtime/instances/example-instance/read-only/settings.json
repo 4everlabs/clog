@@ -10,6 +10,9 @@
     "temperature": 0.3,
     "maximumTokens": 10000
   },
+  "posthog": {
+    "context": "4ever.ai / app.4ever.ai"
+  },
   "chat": {
     "notify": true
   },

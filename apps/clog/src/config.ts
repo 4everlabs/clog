@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import type { AgentExecutionMode, IntegrationCapabilitySnapshot, SurfaceChannelKind } from "@clog/types";
+import { z } from "zod";
 import type { ToolSummary } from "./schema/tools";
 import { RuntimeToolsConfigSchema, type RuntimeToolsConfig } from "./schema/tools";
 import { summarizeEnabledTools } from "./tools/registry";
@@ -41,6 +42,17 @@ const readOptionalString = (value: string | undefined): string | null => {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
 };
+
+const RuntimeSettingsSchema = z.object({
+  monitor: z.object({
+    intervalMs: z.number().finite().optional(),
+  }).strict().optional(),
+  posthog: z.object({
+    context: z.string().trim().min(1).optional(),
+  }).strict().optional(),
+}).passthrough();
+
+type RuntimeSettings = z.infer<typeof RuntimeSettingsSchema>;
 
 const normalizeHost = (value: string | undefined, fallback: string): string => {
   const host = readOptionalString(value) ?? fallback;
@@ -162,21 +174,31 @@ export interface NotionRuntimeConfig {
   readonly todoSearchTitle: string;
 }
 
-const readSettingsMonitorIntervalMs = (storage: RuntimeStorageConfig): number | null => {
-  const value = readOptionalJson<unknown>(join(storage.readOnlyDir, "settings.json"));
-  if (!value || typeof value !== "object") {
+const readRuntimeSettings = (storage: RuntimeStorageConfig): RuntimeSettings | null => {
+  const path = join(storage.readOnlyDir, "settings.json");
+  const value = readOptionalJson<unknown>(path);
+  if (!value) {
     return null;
   }
 
-  const monitor = (value as { monitor?: unknown }).monitor;
-  if (!monitor || typeof monitor !== "object") {
+  const parsed = RuntimeSettingsSchema.safeParse(value);
+  if (!parsed.success) {
     return null;
   }
 
-  const intervalMs = (monitor as { intervalMs?: unknown }).intervalMs;
+  return parsed.data;
+};
+
+const readSettingsMonitorIntervalMs = (settings: RuntimeSettings | null): number | null => {
+  const intervalMs = settings?.monitor?.intervalMs;
   return typeof intervalMs === "number" && Number.isFinite(intervalMs)
     ? Math.max(5_000, intervalMs)
     : null;
+};
+
+const buildRuntimeContextPrompt = (settings: RuntimeSettings | null): string | null => {
+  const context = settings?.posthog?.context?.trim();
+  return context ? `PostHog context: ${context}` : null;
 };
 
 const readInsightMonitor = (
@@ -319,6 +341,8 @@ export interface AgentEnvironment {
   readonly port: number;
   readonly executionMode: AgentExecutionMode;
   readonly monitorIntervalMs: number;
+  readonly runtimeContext: string | null;
+  readonly hidePosthogContextTools: boolean;
   readonly channels: readonly SurfaceChannelKind[];
   readonly posthog: PostHogRuntimeConfig;
   readonly ai: AiRuntimeConfig;
@@ -335,13 +359,16 @@ export const loadAgentEnvironment = (env: NodeJS.ProcessEnv = getRuntimeProcessE
   const canPushBranch = readBoolean(env.POSTHOG_CLAW_GITHUB_PUSH, false);
   const requestedPort = readInteger(env.PORT, 6900);
   const storage = createRuntimeStorageConfig(env);
+  const runtimeSettings = readRuntimeSettings(storage);
   const posthog = createPostHogConfig(env, storage);
   const ai = createAiConfig(env);
   const telegram = createTelegramConfig(env);
   const notion = createNotionConfig(env);
   const channels = telegram.botToken ? appendChannel(requestedChannels, "telegram") : requestedChannels;
-  const monitorIntervalMs = readSettingsMonitorIntervalMs(storage) ?? 60_000;
+  const monitorIntervalMs = readSettingsMonitorIntervalMs(runtimeSettings) ?? 60_000;
   const runtimeTools = readRuntimeToolsConfig(storage);
+  const runtimeContext = buildRuntimeContextPrompt(runtimeSettings);
+  const hidePosthogContextTools = Boolean(runtimeContext);
   const hasPostHogAccess = hasPostHogManagementAccess(posthog);
   const capabilities: IntegrationCapabilitySnapshot = {
     posthog: {
@@ -398,13 +425,17 @@ export const loadAgentEnvironment = (env: NodeJS.ProcessEnv = getRuntimeProcessE
       ],
     },
   };
-  const availableTools = summarizeEnabledTools(capabilities);
+  const availableTools = summarizeEnabledTools(capabilities, {
+    hidePosthogContextTools,
+  });
 
   return {
     appName: env.POSTHOG_CLAW_APP_NAME?.trim() || "PostHog Claw",
     port: Number.isFinite(requestedPort) ? requestedPort : 6900,
     executionMode: readExecutionMode(env.POSTHOG_CLAW_EXECUTION_MODE),
     monitorIntervalMs,
+    runtimeContext,
+    hidePosthogContextTools,
     channels,
     posthog,
     ai,

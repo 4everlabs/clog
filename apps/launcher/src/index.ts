@@ -30,10 +30,6 @@ interface RuntimeSession {
 const WEB_FRONTEND_DIRECTORY = fileURLToPath(new URL("../../frontends/web/", import.meta.url));
 const WEB_FRONTEND_ENTRY = fileURLToPath(new URL("../../frontends/web/dist/index.html", import.meta.url));
 
-const clearScreen = (): void => {
-  process.stdout.write("\u001Bc");
-};
-
 const writeLine = (value = ""): void => {
   process.stdout.write(`${value}\n`);
 };
@@ -62,7 +58,6 @@ const runtimeBanner = (): string => {
 };
 
 const printWelcomeScreen = (session: RuntimeSession): void => {
-  clearScreen();
   writeLine(runtimeBanner());
   writeLine();
   writeLine(colorize("WELCOME TO CLOG", ANSI.bold, ANSI.white));
@@ -277,7 +272,6 @@ const launchWeb = async (session: RuntimeSession): Promise<void> => {
 };
 
 const startLauncher = async (): Promise<void> => {
-  clearScreen();
   writeLine(colorize("Starting CLOG...", ANSI.bold, ANSI.cyan));
   writeLine();
 

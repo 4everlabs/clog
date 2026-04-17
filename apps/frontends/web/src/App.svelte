@@ -1,13 +1,10 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import type {
-    ConversationThread,
-    ShellCommandResponse,
-    SurfaceBootstrapResponse,
-  } from "@clog/types";
+  import type { ConversationThread, SurfaceBootstrapResponse } from "@clog/types";
   import { ClogApiClient, resolveBackendBaseUrl } from "./clog-api";
   import ChatPanel from "./components/ChatPanel.svelte";
   import ConsolePanel from "./components/ConsolePanel.svelte";
+  import SettingsPanel from "./components/SettingsPanel.svelte";
   import Sidebar from "./components/Sidebar.svelte";
 
   type ConsoleEntryKind = "observation" | "finding" | "health" | "shell" | "info" | "error";
@@ -19,6 +16,8 @@
     readonly title: string;
     readonly body?: string;
   }
+
+  type MainView = "chat" | "settings";
 
   const { baseUrl }: { readonly baseUrl?: string } = $props();
 
@@ -37,9 +36,8 @@
   let refreshBusy = $state(false);
   let monitorBusy = $state(false);
   let sending = $state(false);
-  let shellBusy = $state(false);
   let consoleEntries = $state<ConsoleEntry[]>([]);
-
+  let activeView = $state<MainView>("chat");
   const activeThread = $derived(threads.find((t) => t.id === activeThreadId) ?? null);
 
   function pushConsole(entry: Omit<ConsoleEntry, "id" | "at"> & { readonly id?: string }): void {
@@ -137,7 +135,7 @@
     }
   }
 
-  function selectThread(threadId: string): void {
+  function selectThread(threadId: string | null): void {
     activeThreadId = threadId;
   }
 
@@ -180,43 +178,6 @@
     }
   }
 
-  function formatShellResult(result: ShellCommandResponse): string {
-    const lines = [
-      `exit ${result.exitCode} · ${result.durationMs} ms`,
-      `cwd ${result.workingDirectory}`,
-      result.stdout ? `stdout:\n${result.stdout}` : "",
-      result.stderr ? `stderr:\n${result.stderr}` : "",
-    ].filter(Boolean);
-    return lines.join("\n\n");
-  }
-
-  async function handleShell(line: string): Promise<void> {
-    if (!line.trim()) {
-      return;
-    }
-    shellBusy = true;
-    try {
-      const trimmed = line.trim();
-      const parts = trimmed.split(/\s+/u);
-      const command = parts[0] ?? "";
-      const args = parts.slice(1);
-      const res = await client.runShellCommand({
-        command,
-        ...(args.length > 0 ? { args } : {}),
-      });
-      pushConsole({
-        kind: "shell",
-        title: `$ ${trimmed}`,
-        body: formatShellResult(res.result),
-      });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      pushConsole({ kind: "error", title: "Shell request failed", body: msg });
-    } finally {
-      shellBusy = false;
-    }
-  }
-
   const threadRows = $derived(
     threads.map((t) => ({
       id: t.id,
@@ -238,27 +199,48 @@
   <div class="layout">
     <Sidebar
       runtime={bootstrap?.runtime ?? null}
-      channels={bootstrap?.channels ?? []}
       integrations={bootstrap?.integrations ?? []}
-      capabilities={bootstrap?.capabilities ?? null}
-      threads={threadRows}
-      {activeThreadId}
-      {newThreadTitle}
-      {refreshBusy}
-      {monitorBusy}
-      onNewThreadTitleChange={(value) => {
-        newThreadTitle = value;
+      threadCount={threads.length}
+      activeView={activeView}
+      onSelectView={(view: MainView) => {
+        activeView = view;
       }}
-      onSelectThread={selectThread}
-      onRefresh={refresh}
-      onMonitorCycle={monitorCycle}
     />
     <main class="main">
-      <ChatPanel activeThread={activeThread} {sending} onSend={(b) => void handleSend(b)} />
+      {#if activeView === "chat"}
+        <div class="chat-layout">
+          <div class="chat-column">
+            <ChatPanel
+              activeThread={activeThread}
+              threads={threadRows}
+              {activeThreadId}
+              {newThreadTitle}
+              {sending}
+              onSend={(body) => void handleSend(body)}
+              onSelectThread={selectThread}
+              onNewThreadTitleChange={(value: string) => {
+                newThreadTitle = value;
+              }}
+            />
+          </div>
+
+          <aside class="right">
+            <ConsolePanel entries={consoleEntries} />
+          </aside>
+        </div>
+      {:else}
+        <SettingsPanel
+          runtime={bootstrap?.runtime ?? null}
+          integrations={bootstrap?.integrations ?? []}
+          capabilities={bootstrap?.capabilities ?? null}
+          entries={consoleEntries}
+          {refreshBusy}
+          {monitorBusy}
+          onRefresh={refresh}
+          onMonitorCycle={monitorCycle}
+        />
+      {/if}
     </main>
-    <aside class="right">
-      <ConsolePanel entries={consoleEntries} {shellBusy} onRunShell={(l) => void handleShell(l)} />
-    </aside>
   </div>
 </div>
 
@@ -275,8 +257,22 @@
       Segoe UI,
       Roboto,
       sans-serif;
-    background: #f0f0f0;
-    color: #111;
+    color-scheme: light;
+    --bg-page: #e8ecef;
+    --bg-sidebar: #e3e7eb;
+    --bg-main: #f1f4f7;
+    --bg-panel: #e8edf2;
+    --bg-panel-alt: #dce3ea;
+    --bg-input: #f3f6f9;
+    --border: #c0c9d3;
+    --border-strong: #aeb9c4;
+    --text-primary: #111111;
+    --text-muted: #434d5a;
+    --text-subtle: #5b6573;
+    --accent: #d2dae3;
+    --accent-strong: #c6d0dc;
+    background: var(--bg-page);
+    color: var(--text-primary);
   }
 
   .app-root {
@@ -289,48 +285,61 @@
   .loading {
     padding: 0.35rem 0.6rem;
     font-size: 0.85rem;
-    background: #e8e8e8;
-    border-bottom: 1px solid #bbb;
+    background: var(--bg-panel-alt);
+    border-bottom: 1px solid var(--border);
   }
 
   .banner {
     padding: 0.35rem 0.6rem;
     font-size: 0.85rem;
-    border-bottom: 1px solid #bbb;
+    border-bottom: 1px solid var(--border);
   }
 
   .banner.error {
-    background: #ffe8e8;
-    color: #600;
+    background: #f3dcdf;
+    color: #5f1f27;
   }
 
   .layout {
     flex: 1;
     display: flex;
     min-height: 0;
-    border-top: 1px solid #999;
+    border-top: 1px solid var(--border-strong);
   }
 
   .layout > :global(.side) {
-    width: 260px;
+    width: 220px;
     flex-shrink: 0;
-    background: #f7f7f7;
-    border-right: 1px solid #999;
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border-strong);
   }
 
   .main {
     flex: 1;
     min-width: 0;
-    background: #fff;
+    background: var(--bg-main);
     display: flex;
     flex-direction: column;
+    min-height: 0;
+  }
+
+  .chat-layout {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+  }
+
+  .chat-column {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
   }
 
   .right {
     width: 300px;
     flex-shrink: 0;
-    background: #fafafa;
-    border-left: 1px solid #999;
+    background: var(--bg-sidebar);
+    border-left: 1px solid var(--border-strong);
     display: flex;
     flex-direction: column;
     min-height: 0;

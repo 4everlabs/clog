@@ -48,6 +48,12 @@ describe("prompt loader", () => {
     expect(buildSystemPrompt(bundle)).toContain("Project context:");
     expect(buildSystemPrompt(bundle)).toContain("Knowledge summaries:");
     expect(buildSystemPrompt(bundle)).toContain("4ever.ai");
+    expect(buildSystemPrompt(bundle, {
+      runtimeContext: "PostHog context: 4ever.ai / app.4ever.ai",
+    })).toContain("Runtime context:");
+    expect(buildSystemPrompt(bundle, {
+      runtimeContext: "PostHog context: 4ever.ai / app.4ever.ai",
+    })).toContain("4ever.ai / app.4ever.ai");
   });
 
   test("keeps runtime wakeup config optional", () => {

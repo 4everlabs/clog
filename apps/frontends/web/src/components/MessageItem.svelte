@@ -17,7 +17,6 @@
 <div class="msg" data-role={message.role}>
   <header class="msg-head">
     <span class="role">{message.role}</span>
-    <span class="chan">{message.channel}</span>
     <time class="time">{timeLabel}</time>
   </header>
   <pre class="body">{message.content}</pre>
@@ -33,10 +32,11 @@
 
 <style>
   .msg {
-    border: 1px solid #c8c8c8;
+    border: 1px solid var(--border);
     padding: 0.5rem 0.6rem;
     margin-bottom: 0.5rem;
-    background: #fafafa;
+    background: var(--bg-panel);
+    color: var(--text-primary);
     font-size: 0.875rem;
   }
 
@@ -46,7 +46,7 @@
     align-items: baseline;
     margin-bottom: 0.35rem;
     font-size: 0.75rem;
-    color: #444;
+    color: var(--text-muted);
   }
 
   .role {
@@ -54,13 +54,9 @@
     text-transform: uppercase;
   }
 
-  .chan {
-    font-family: ui-monospace, monospace;
-  }
-
   .time {
     margin-left: auto;
-    color: #666;
+    color: var(--text-subtle);
   }
 
   .body {
@@ -77,6 +73,6 @@
 
   .muted {
     margin: 0.25rem 0 0;
-    color: #555;
+    color: var(--text-muted);
   }
 </style>
