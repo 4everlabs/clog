@@ -17,13 +17,13 @@ describe("syncRuntimeInstanceTemplate", () => {
       const exampleRoot = join(workspaceRoot, ".runtime", "instances", "example-instance");
       const personalRoot = join(workspaceRoot, ".runtime", "instances", "personal-instance");
 
-      writeFile(join(exampleRoot, "read-only", "settings.json"), "{\n  \"starter\": true\n}\n");
+      writeFile(join(exampleRoot, "read-only", "settings.json"), "{\n  \"starter\": true,\n  \"ai\": {\n    \"model\": \"google/gemma-4-31b-it:free\"\n  }\n}\n");
       writeFile(join(exampleRoot, "read-only", "tools.json"), "{\n  \"starter\": true\n}\n");
       writeFile(join(exampleRoot, "wakeup.json"), "{\n  \"intervalMs\": 60000,\n  \"message\": \"starter\"\n}\n");
       writeFile(join(exampleRoot, "storage", "README.md"), "storage\n");
       writeFile(join(exampleRoot, "workspace", "README.md"), "workspace\n");
 
-      writeFile(join(personalRoot, "settings.json"), "{\n  \"legacy\": true\n}\n");
+      writeFile(join(personalRoot, "settings.json"), "{\n  \"legacy\": true,\n  \"monitor\": {\n    \"intervalMs\": 5000\n  }\n}\n");
       writeFile(join(personalRoot, "settings", "wakeup.json"), "{\n  \"intervalMs\": 5000,\n  \"message\": \"legacy\"\n}\n");
       writeFile(join(personalRoot, "settings", "ai.json"), "{}\n");
       writeFile(join(personalRoot, "settings", "tools.json"), "{ broken json\n");
@@ -32,7 +32,7 @@ describe("syncRuntimeInstanceTemplate", () => {
 
       syncRuntimeInstanceTemplate(
         {
-          POSTHOG_CLAW_INSTANCE_ID: "personal-instance",
+          CLOG_INSTANCE_ID: "personal-instance",
         },
         workspaceRoot,
       );
@@ -44,6 +44,8 @@ describe("syncRuntimeInstanceTemplate", () => {
       expect(existsSync(join(personalRoot, "settings.json"))).toBe(false);
       expect(existsSync(join(personalRoot, "brain"))).toBe(false);
       expect(existsSync(join(personalRoot, "storage", "runtime.sqlite"))).toBe(false);
+      expect(readFileSync(join(personalRoot, "read-only", "settings.json"), "utf-8")).toContain("\"model\": \"google/gemma-4-31b-it:free\"");
+      expect(readFileSync(join(personalRoot, "read-only", "settings.json"), "utf-8")).toContain("\"intervalMs\": 5000");
       expect(readFileSync(join(personalRoot, "read-only", "tools.json"), "utf-8")).toBe("{\n  \"starter\": true\n}\n");
     } finally {
       rmSync(workspaceRoot, { recursive: true, force: true });

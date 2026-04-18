@@ -22,7 +22,7 @@ describe("prompt loader", () => {
     cleanupPaths.push(workspaceRoot);
 
     const env: NodeJS.ProcessEnv = {
-      POSTHOG_CLAW_INSTANCE_ID: "operator-1",
+      CLOG_INSTANCE_ID: "operator-1",
     };
 
     const wakeupPath = resolveRuntimeWakeupConfigPath(env, workspaceRoot);
@@ -78,7 +78,7 @@ describe("prompt loader", () => {
 
     const bundle = loadAiPromptBundle(
       {
-        POSTHOG_CLAW_INSTANCE_ID: "missing-instance",
+        CLOG_INSTANCE_ID: "missing-instance",
       },
       workspaceRoot,
     );

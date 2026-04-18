@@ -33,11 +33,11 @@ External-system boundaries:
 
 Chat surfaces are not part of `integrations/`. They live under `apps/frontends/*` and attach to the gateway as transports or clients.
 
-### `monitoring`
+### `runtime monitoring`
 
-The monitoring loop lives here.
+The monitoring loop lives with the other runtime services.
 
-- `monitor-loop.ts`
+- `runtime/monitor-loop.ts`
   - gathers observations and turns them into findings
 
 ### `storage`

@@ -11,7 +11,7 @@ import { PostHogCliTool } from "./integrations/posthog/cli-tool";
 import { createPostHogToolServices } from "./integrations/posthog/tool-services";
 import { PostHogWorkspaceReporter } from "./integrations/posthog/workspace-reporter";
 import { VercelIntegrationClient } from "./integrations/vercel/client";
-import { MonitoringLoop } from "./monitoring/monitor-loop";
+import { MonitoringLoop } from "./runtime/monitor-loop";
 import { syncRuntimeInstanceTemplate } from "../../../tests/runtime-instance-template";
 import { FileRuntimeStore } from "./storage/file-runtime-store";
 import type { RuntimeStore } from "./storage/chat";

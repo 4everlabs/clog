@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { IntegrationHealthView, RuntimeObservation } from "@clog/types";
-import { MonitoringLoop } from "../apps/clog/src/monitoring/monitor-loop";
+import { MonitoringLoop } from "../apps/clog/src/runtime/monitor-loop";
 import { InMemoryRuntimeStore } from "../apps/clog/src/storage/in-memory-runtime-store";
 
 const createHealth = (

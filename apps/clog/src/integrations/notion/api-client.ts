@@ -240,7 +240,7 @@ export class NotionApiClient {
     ][0];
 
     if (!preferred?.id) {
-      throw new Error(`Unable to find a Notion data source for "${title}". Share the database with the integration or set POSTHOG_CLAW_NOTION_TODO_DATA_SOURCE_ID.`);
+      throw new Error(`Unable to find a Notion data source for "${title}". Share the database with the integration or set CLOG_NOTION_TODO_DATA_SOURCE_ID.`);
     }
 
     return await this.fetchResolvedDataSource(preferred.id);

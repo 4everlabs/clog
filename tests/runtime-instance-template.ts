@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
 const STARTER_INSTANCE_ID = "example-instance";
@@ -12,12 +12,12 @@ export const resolveRuntimeInstanceRoot = (
   env: NodeJS.ProcessEnv = process.env,
   workspaceRoot = process.cwd(),
 ): string => {
-  const explicitRoot = readOptionalString(env.POSTHOG_CLAW_INSTANCE_ROOT);
+  const explicitRoot = readOptionalString(env.CLOG_INSTANCE_ROOT);
   if (explicitRoot) {
     return resolve(workspaceRoot, explicitRoot);
   }
 
-  const instanceId = readOptionalString(env.POSTHOG_CLAW_INSTANCE_ID) ?? "personal-instance";
+  const instanceId = readOptionalString(env.CLOG_INSTANCE_ID) ?? "personal-instance";
   return resolve(workspaceRoot, `.runtime/instances/${instanceId}`);
 };
 
@@ -79,6 +79,80 @@ const hasValidJson = (path: string): boolean => {
   }
 };
 
+const readOptionalJson = (path: string): unknown | null => {
+  try {
+    return JSON.parse(readFileSync(path, "utf-8")) as unknown;
+  } catch {
+    return null;
+  }
+};
+
+const cloneJsonValue = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map((entry) => cloneJsonValue(entry));
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, cloneJsonValue(entry)]),
+    );
+  }
+
+  return value;
+};
+
+const mergeMissingJsonDefaults = (target: unknown, source: unknown): unknown => {
+  if (!target || typeof target !== "object" || Array.isArray(target)) {
+    return cloneJsonValue(target);
+  }
+
+  if (!source || typeof source !== "object" || Array.isArray(source)) {
+    return cloneJsonValue(target);
+  }
+
+  const merged: Record<string, unknown> = {
+    ...(target as Record<string, unknown>),
+  };
+
+  for (const [key, sourceValue] of Object.entries(source as Record<string, unknown>)) {
+    const targetValue = merged[key];
+    if (typeof targetValue === "undefined") {
+      merged[key] = cloneJsonValue(sourceValue);
+      continue;
+    }
+
+    if (
+      targetValue
+      && typeof targetValue === "object"
+      && !Array.isArray(targetValue)
+      && sourceValue
+      && typeof sourceValue === "object"
+      && !Array.isArray(sourceValue)
+    ) {
+      merged[key] = mergeMissingJsonDefaults(targetValue, sourceValue);
+    }
+  }
+
+  return merged;
+};
+
+const mergeMissingJsonFileDefaults = (sourcePath: string, targetPath: string): boolean => {
+  const source = readOptionalJson(sourcePath);
+  const target = readOptionalJson(targetPath);
+  if (source === null || target === null) {
+    return false;
+  }
+
+  const merged = mergeMissingJsonDefaults(target, source);
+  const nextContent = `${JSON.stringify(merged, null, 2)}\n`;
+  if (nextContent === `${JSON.stringify(target, null, 2)}\n`) {
+    return true;
+  }
+
+  writeFileSync(targetPath, nextContent, "utf-8");
+  return true;
+};
+
 const moveLegacyFile = (from: string, to: string): void => {
   if (!existsSync(from)) {
     return;
@@ -138,6 +212,15 @@ export const syncRuntimeInstanceTemplate = (
     ensureDirectory(dirname(targetPath));
     const targetExists = existsSync(targetPath);
     const shouldOverwriteInvalidJson = targetExists && isJsonFile(targetPath) && !hasValidJson(targetPath);
+
+    if (
+      targetExists
+      && !options.overwriteExisting
+      && relativePath === join("read-only", "settings.json")
+      && mergeMissingJsonFileDefaults(sourcePath, targetPath)
+    ) {
+      continue;
+    }
 
     if (!options.overwriteExisting && targetExists && !shouldOverwriteInvalidJson) {
       continue;

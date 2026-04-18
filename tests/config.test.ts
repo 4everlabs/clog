@@ -19,23 +19,23 @@ describe("loadAgentEnvironment", () => {
   test("parses PostHog runtime config and capabilities", () => {
     const env = loadAgentEnvironment({
       PORT: "3001",
-      POSTHOG_CLAW_INSTANCE_ID: "config-test-1",
-      POSTHOG_CLAW_CHANNELS: "telegram,web",
-      POSTHOG_CLAW_POSTHOG_HOST: "https://eu.posthog.com/",
+      CLOG_INSTANCE_ID: "config-test-1",
+      CLOG_CHANNELS: "telegram,web",
+      CLOG_POSTHOG_HOST: "https://eu.posthog.com/",
       POSTHOG_PROJECT_ID: "12345",
       POSTHOG_API_KEY: "phx_test",
       POSTHOG_PROJECT_TOKEN: "phc_test",
-      POSTHOG_CLAW_POSTHOG_MANAGE_ENDPOINTS: "true",
-      POSTHOG_CLAW_POSTHOG_UPLOAD_SOURCEMAPS: "true",
-      POSTHOG_CLAW_POSTHOG_ENABLE_FLAGS: "true",
-      POSTHOG_CLAW_POSTHOG_READ_FLAGS: "true",
-      POSTHOG_CLAW_POSTHOG_CLI_TIMEOUT_MS: "45000",
-      POSTHOG_CLAW_POSTHOG_PRIMARY_INSIGHT_NAME: "Revenue monitor",
-      POSTHOG_CLAW_POSTHOG_PRIMARY_INSIGHT_QUERY: "SELECT 80 AS current_value, 100 AS previous_value",
-      POSTHOG_CLAW_POSTHOG_PRIMARY_INSIGHT_REGRESSION_THRESHOLD_PERCENT: "15",
-      POSTHOG_CLAW_POSTHOG_PRIMARY_INSIGHT_MIN_PREVIOUS_VALUE: "20",
+      CLOG_POSTHOG_MANAGE_ENDPOINTS: "true",
+      CLOG_POSTHOG_UPLOAD_SOURCEMAPS: "true",
+      CLOG_POSTHOG_ENABLE_FLAGS: "true",
+      CLOG_POSTHOG_READ_FLAGS: "true",
+      CLOG_POSTHOG_CLI_TIMEOUT_MS: "45000",
+      CLOG_POSTHOG_PRIMARY_INSIGHT_NAME: "Revenue monitor",
+      CLOG_POSTHOG_PRIMARY_INSIGHT_QUERY: "SELECT 80 AS current_value, 100 AS previous_value",
+      CLOG_POSTHOG_PRIMARY_INSIGHT_REGRESSION_THRESHOLD_PERCENT: "15",
+      CLOG_POSTHOG_PRIMARY_INSIGHT_MIN_PREVIOUS_VALUE: "20",
       OPENROUTER_API_KEY: "sk-or-test",
-      OPENROUTER_MODEL: "openrouter/test-model",
+      CLOG_MODEL: "openrouter/test-model",
       NOTION_SECRET: "ntn_test",
       TELEGRAM_BOT_TOKEN: "123456:telegram-test-token",
       TELEGRAM_ALLOWED_CHATS: "1001, 1002",
@@ -126,8 +126,8 @@ describe("loadAgentEnvironment", () => {
 
   test("disables PostHog management capabilities when credentials are missing", () => {
     const env = loadAgentEnvironment({
-      POSTHOG_CLAW_INSTANCE_ID: "config-test-2",
-      POSTHOG_CLAW_POSTHOG_PROJECT_ID: "12345",
+      CLOG_INSTANCE_ID: "config-test-2",
+      CLOG_POSTHOG_PROJECT_ID: "12345",
     });
 
     expect(env.channels).toEqual(["tui"]);
@@ -156,25 +156,25 @@ describe("loadAgentEnvironment", () => {
     ]);
   });
 
-  test("defaults to StepFun and auto-enables Telegram when both tokens are present", () => {
+  test("defaults to Gemma and auto-enables Telegram when both tokens are present", () => {
     const env = loadAgentEnvironment({
       OPENROUTER_API_KEY: "sk-or-live",
       TELEGRAM_BOT_TOKEN: "123456:telegram-live-token",
       TELEGRAM_BOT_USERNAME: "@clog4everbot",
-      POSTHOG_CLAW_CHANNELS: "tui",
+      CLOG_CHANNELS: "tui",
     });
 
     expect(env.ai.provider).toBe("openrouter");
-    expect(env.ai.model).toBe("stepfun/step-3.5-flash");
+    expect(env.ai.model).toBe("google/gemma-4-31b-it:free");
     expect(env.channels).toEqual(["tui", "telegram"]);
     expect(env.telegram.botToken).toBe("123456:telegram-live-token");
     expect(env.telegram.userName).toBe("clog4everbot");
   });
 
-  test("uses OPENAI_MODEL when OpenAI is the active provider", () => {
+  test("uses CLOG_MODEL when OpenAI is the active provider", () => {
     const env = loadAgentEnvironment({
       OPENAI_API_KEY: "sk-openai-live",
-      OPENAI_MODEL: "gpt-5-mini",
+      CLOG_MODEL: "gpt-5-mini",
     });
 
     expect(env.ai).toMatchObject({
@@ -187,8 +187,8 @@ describe("loadAgentEnvironment", () => {
 
   test("allows overriding the runtime state directory", () => {
     const env = loadAgentEnvironment({
-      POSTHOG_CLAW_INSTANCE_ID: "operator-1",
-      POSTHOG_CLAW_RUNTIME_STATE_DIR: "custom-runtime-state",
+      CLOG_INSTANCE_ID: "operator-1",
+      CLOG_RUNTIME_STATE_DIR: "custom-runtime-state",
     });
 
     expect(env.storage.instanceId).toBe("operator-1");
@@ -197,8 +197,8 @@ describe("loadAgentEnvironment", () => {
 
   test("rejects PostHog endpoint directories outside the runtime workspace", () => {
     expect(() => loadAgentEnvironment({
-      POSTHOG_CLAW_POSTHOG_ENDPOINTS_DIR: "../outside-endpoints",
-    })).toThrow("POSTHOG_CLAW_POSTHOG_ENDPOINTS_DIR must stay inside");
+      CLOG_POSTHOG_ENDPOINTS_DIR: "../outside-endpoints",
+    })).toThrow("CLOG_POSTHOG_ENDPOINTS_DIR must stay inside");
   });
 
   test("reads monitor interval from read-only settings", () => {
@@ -224,6 +224,70 @@ describe("loadAgentEnvironment", () => {
     }
   });
 
+  test("maps runtime defaults from read-only settings", () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "clog-config-runtime-settings-"));
+    cleanupPaths.push(workspaceRoot);
+
+    const settingsDir = join(workspaceRoot, ".runtime", "instances", "personal-instance", "read-only");
+    mkdirSync(settingsDir, { recursive: true });
+    writeFileSync(join(settingsDir, "settings.json"), JSON.stringify({
+      app: {
+        name: "Ops Clog",
+      },
+      runtime: {
+        executionMode: "execute",
+        channels: ["web", "tui"],
+        port: 7777,
+      },
+      monitor: {
+        intervalMs: 9000,
+      },
+      ai: {
+        model: "google/gemma-4-26b-a4b-it:free",
+      },
+      posthog: {
+        host: "https://eu.posthog.com/",
+        cliTimeoutMs: 45000,
+        requestTimeoutMs: 120000,
+        enableLogs: true,
+      },
+      telegram: {
+        userName: "@opsclog",
+        allowedChatIds: [77, 88],
+      },
+      notion: {
+        requestTimeoutMs: 4000,
+        todoSearchTitle: "Ops queue",
+      },
+    }));
+
+    const previousCwd = process.cwd();
+    process.chdir(workspaceRoot);
+
+    try {
+      const env = loadAgentEnvironment({
+        OPENROUTER_API_KEY: "sk-or-live",
+      });
+
+      expect(env.appName).toBe("Ops Clog");
+      expect(env.executionMode).toBe("execute");
+      expect(env.channels).toEqual(["web", "tui"]);
+      expect(env.port).toBe(7777);
+      expect(env.monitorIntervalMs).toBe(9000);
+      expect(env.ai.model).toBe("google/gemma-4-26b-a4b-it:free");
+      expect(env.posthog.host).toBe("https://eu.posthog.com");
+      expect(env.posthog.cliTimeoutMs).toBe(45_000);
+      expect(env.posthog.requestTimeoutMs).toBe(120_000);
+      expect(env.posthog.enableLogs).toBe(true);
+      expect(env.telegram.userName).toBe("opsclog");
+      expect(env.telegram.allowedChatIds).toEqual([77, 88]);
+      expect(env.notion.requestTimeoutMs).toBe(4_000);
+      expect(env.notion.todoSearchTitle).toBe("Ops queue");
+    } finally {
+      process.chdir(previousCwd);
+    }
+  });
+
   test("injects pinned PostHog context from read-only settings and hides discovery tools", () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), "clog-config-posthog-context-"));
     cleanupPaths.push(workspaceRoot);
@@ -243,9 +307,9 @@ describe("loadAgentEnvironment", () => {
       const env = loadAgentEnvironment({
         POSTHOG_PROJECT_ID: "12345",
         POSTHOG_API_KEY: "phx_test",
-      POSTHOG_CLAW_POSTHOG_MANAGE_ENDPOINTS: "true",
-      POSTHOG_CLAW_POSTHOG_ENABLE_FLAGS: "true",
-      POSTHOG_CLAW_POSTHOG_READ_FLAGS: "true",
+      CLOG_POSTHOG_MANAGE_ENDPOINTS: "true",
+      CLOG_POSTHOG_ENABLE_FLAGS: "true",
+      CLOG_POSTHOG_READ_FLAGS: "true",
       NOTION_SECRET: "ntn_test",
       });
 
@@ -333,14 +397,14 @@ describe("loadAgentEnvironment", () => {
       const env = loadAgentEnvironment({
         POSTHOG_PROJECT_ID: "12345",
         POSTHOG_API_KEY: "phx_test",
-        POSTHOG_CLAW_POSTHOG_READ_LOGS: "true",
-        POSTHOG_CLAW_GITHUB_READ: "true",
-        POSTHOG_CLAW_GITHUB_PR: "true",
-        POSTHOG_CLAW_GITHUB_PUSH: "true",
+        CLOG_POSTHOG_READ_LOGS: "true",
+        CLOG_GITHUB_READ: "true",
+        CLOG_GITHUB_PR: "true",
+        CLOG_GITHUB_PUSH: "true",
         NOTION_SECRET: "ntn_test",
-        POSTHOG_CLAW_NOTION_READ_TODO: "true",
-        POSTHOG_CLAW_VERCEL_DEPLOY: "true",
-        POSTHOG_CLAW_SHELL_EXECUTE: "true",
+        CLOG_NOTION_READ_TODO: "true",
+        CLOG_VERCEL_DEPLOY: "true",
+        CLOG_SHELL_EXECUTE: "true",
       });
 
       expect(env.capabilities.posthog.canReadInsights).toBe(true);

@@ -1,9 +1,19 @@
 #!/usr/bin/env bun
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { createInterface, emitKeypressEvents } from "node:readline";
 import { fileURLToPath } from "node:url";
+import type { AgentExecutionMode, SurfaceChannelKind } from "@clog/types";
 import { startDefaultRuntimeServer } from "../../clog/src/index.ts";
+import {
+  DEFAULT_CLOG_MODEL,
+  DEFAULT_MONITOR_INTERVAL_MS,
+  DEFAULT_RUNTIME_PORT,
+  getModelChoices,
+  RuntimeSettingsSchema,
+  type RuntimeSettings,
+} from "../../clog/src/runtime/settings";
 import { resolveBackendBaseUrl } from "../../frontends/tui/src/clog-api";
 import { startTuiFrontend } from "../../frontends/tui/src/index.ts";
 
@@ -21,7 +31,7 @@ const ANSI = {
 } as const;
 
 type FrontendChoice = "tui" | "web" | "settings" | "quit";
-type SettingsChoice = "model" | "back";
+type SettingsChoice = "model" | "instance" | "back";
 
 interface RuntimeSession {
   readonly baseUrl: string;
@@ -29,16 +39,37 @@ interface RuntimeSession {
 }
 
 interface LauncherAiSettings {
-  readonly provider: "openrouter" | "openai" | "none";
-  readonly providerLabel: string;
   readonly model: string;
-  readonly modelEnvKey: "OPENROUTER_MODEL" | "OPENAI_MODEL";
+  readonly modelChoices: readonly string[];
+}
+
+interface LauncherRuntimeSettingsState {
+  readonly instanceId: string;
+  readonly settingsPath: string;
+  readonly settings: RuntimeSettings | null;
+}
+
+interface LauncherRuntimeSettingsSummary {
+  readonly instanceId: string;
+  readonly settingsPath: string;
+  readonly appName: string;
+  readonly executionMode: AgentExecutionMode;
+  readonly channels: readonly SurfaceChannelKind[];
+  readonly monitorIntervalMs: number;
+  readonly posthogHost: string;
+  readonly posthogContext: string | null;
+  readonly notionTodoTitle: string;
+  readonly notionTodoPageUrl: string | null;
+  readonly notionRequestTimeoutMs: number;
+  readonly telegramUserName: string | null;
+  readonly allowedChatIdsCount: number;
 }
 
 interface LauncherScreenState {
   readonly runtimeBaseUrl: string;
   readonly runtimeReachable: boolean;
   readonly ai: LauncherAiSettings;
+  readonly settings: LauncherRuntimeSettingsSummary;
 }
 
 interface Keypress {
@@ -49,6 +80,8 @@ interface Keypress {
 
 const WEB_FRONTEND_DIRECTORY = fileURLToPath(new URL("../../frontends/web/", import.meta.url));
 const REPO_ENV_FILE = fileURLToPath(new URL("../../../.env", import.meta.url));
+const RUNTIME_INSTANCES_DIRECTORY = fileURLToPath(new URL("../../../.runtime/instances/", import.meta.url));
+const DEFAULT_INSTANCE_ID = "personal-instance";
 const WEB_DEV_SERVER_URL = "http://127.0.0.1:4173";
 type ChildProcess = ReturnType<typeof Bun.spawn>;
 
@@ -77,33 +110,47 @@ const readOptionalEnvString = (key: string): string | null => {
   return value ? value : null;
 };
 
-export const resolveLauncherAiSettings = (): LauncherAiSettings => {
-  const openRouterApiKey = readOptionalEnvString("OPENROUTER_API_KEY");
-  const openAiApiKey = readOptionalEnvString("OPENAI_API_KEY");
+const resolveSelectedInstanceId = (): string => {
+  return readOptionalEnvString("CLOG_INSTANCE_ID") ?? DEFAULT_INSTANCE_ID;
+};
 
-  if (openRouterApiKey) {
-    return {
-      provider: "openrouter",
-      providerLabel: "OpenRouter",
-      model: readOptionalEnvString("OPENROUTER_MODEL") ?? "stepfun/step-3.5-flash",
-      modelEnvKey: "OPENROUTER_MODEL",
-    };
+const resolveRuntimeInstanceRoot = (instanceId: string): string => {
+  return join(RUNTIME_INSTANCES_DIRECTORY, instanceId);
+};
+
+const resolveRuntimeSettingsPath = (instanceId: string): string => {
+  return join(resolveRuntimeInstanceRoot(instanceId), "read-only", "settings.json");
+};
+
+const readRuntimeSettingsFile = (settingsPath: string): RuntimeSettings | null => {
+  if (!existsSync(settingsPath)) {
+    return null;
   }
 
-  if (openAiApiKey) {
-    return {
-      provider: "openai",
-      providerLabel: "OpenAI",
-      model: readOptionalEnvString("OPENAI_MODEL") ?? readOptionalEnvString("OPENROUTER_MODEL") ?? "gpt-4o-mini",
-      modelEnvKey: "OPENAI_MODEL",
-    };
+  try {
+    const parsed = JSON.parse(readFileSync(settingsPath, "utf-8")) as unknown;
+    const validated = RuntimeSettingsSchema.safeParse(parsed);
+    return validated.success ? validated.data : null;
+  } catch {
+    return null;
   }
+};
+
+const loadLauncherRuntimeSettingsState = (instanceId = resolveSelectedInstanceId()): LauncherRuntimeSettingsState => {
+  const settingsPath = resolveRuntimeSettingsPath(instanceId);
+  return {
+    instanceId,
+    settingsPath,
+    settings: readRuntimeSettingsFile(settingsPath),
+  };
+};
+
+export const resolveLauncherAiSettings = (instanceId = resolveSelectedInstanceId()): LauncherAiSettings => {
+  const instance = loadLauncherRuntimeSettingsState(instanceId);
 
   return {
-    provider: "none",
-    providerLabel: "No provider configured",
-    model: readOptionalEnvString("OPENROUTER_MODEL") ?? "stepfun/step-3.5-flash",
-    modelEnvKey: "OPENROUTER_MODEL",
+    model: readOptionalEnvString("CLOG_MODEL") || instance.settings?.ai?.model?.trim() || DEFAULT_CLOG_MODEL,
+    modelChoices: getModelChoices(instance.settings),
   };
 };
 
@@ -122,16 +169,81 @@ export const upsertEnvVariable = (content: string, key: string, value: string): 
   return trimmedContent ? `${trimmedContent}\n\n${serializedLine}\n` : `${serializedLine}\n`;
 };
 
-const persistAiModelSelection = (settings: LauncherAiSettings, model: string): void => {
-  let content = "";
-  try {
-    content = readFileSync(REPO_ENV_FILE, "utf-8");
-  } catch {
-    content = "";
+const writeRuntimeSettingsFile = (instanceId: string, settings: RuntimeSettings): void => {
+  const settingsPath = resolveRuntimeSettingsPath(instanceId);
+  mkdirSync(dirname(settingsPath), { recursive: true });
+  writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf-8");
+};
+
+const persistAiModelSelection = (instanceId: string, settings: LauncherAiSettings, model: string): void => {
+  const trimmedModel = model.trim();
+  if (!trimmedModel) {
+    return;
   }
 
-  writeFileSync(REPO_ENV_FILE, upsertEnvVariable(content, settings.modelEnvKey, model), "utf-8");
-  process.env[settings.modelEnvKey] = model;
+  const current = loadLauncherRuntimeSettingsState(instanceId).settings;
+  const validated = RuntimeSettingsSchema.parse({
+    ...(current ?? {}),
+    ai: {
+      ...(current?.ai ?? {}),
+      model: trimmedModel,
+      modelChoices: Array.from(new Set([trimmedModel, ...getModelChoices(current)])),
+    },
+  });
+
+  writeRuntimeSettingsFile(instanceId, validated);
+  process.env.CLOG_INSTANCE_ID = instanceId;
+  process.env.CLOG_MODEL = trimmedModel;
+
+  let envContent = "";
+  try {
+    envContent = readFileSync(REPO_ENV_FILE, "utf-8");
+  } catch {
+    envContent = "";
+  }
+  writeFileSync(REPO_ENV_FILE, upsertEnvVariable(envContent, "CLOG_MODEL", trimmedModel), "utf-8");
+};
+
+const resolveLauncherRuntimeSettingsSummary = (
+  instance: LauncherRuntimeSettingsState,
+): LauncherRuntimeSettingsSummary => {
+  const settings = instance.settings;
+  const executionMode: AgentExecutionMode = settings?.runtime?.executionMode ?? "propose";
+  const channels: SurfaceChannelKind[] = [...(settings?.runtime?.channels ?? ["tui"])];
+
+  return {
+    instanceId: instance.instanceId,
+    settingsPath: instance.settingsPath,
+    appName: settings?.app?.name?.trim() || "Clog",
+    executionMode,
+    channels,
+    monitorIntervalMs: settings?.monitor?.intervalMs ?? DEFAULT_MONITOR_INTERVAL_MS,
+    posthogHost: settings?.posthog?.host?.trim() || "https://us.posthog.com",
+    posthogContext: settings?.posthog?.context?.trim() || null,
+    notionTodoTitle: settings?.notion?.todoSearchTitle?.trim() || "Pre Beta To Do",
+    notionTodoPageUrl: settings?.notion?.todoPageUrl?.trim() || null,
+    notionRequestTimeoutMs: settings?.notion?.requestTimeoutMs ?? 30_000,
+    telegramUserName: settings?.telegram?.userName?.trim()?.replace(/^@/u, "") ?? null,
+    allowedChatIdsCount: settings?.telegram?.allowedChatIds?.length ?? 0,
+  };
+};
+
+const syncProcessEnvWithInstanceSettings = (instanceId = resolveSelectedInstanceId()): void => {
+  const instance = loadLauncherRuntimeSettingsState(instanceId);
+  process.env.CLOG_INSTANCE_ID = instanceId;
+  process.env.PORT = String(instance.settings?.runtime?.port ?? DEFAULT_RUNTIME_PORT);
+};
+
+const listRuntimeInstances = (): string[] => {
+  try {
+    const entries = readdirSync(RUNTIME_INSTANCES_DIRECTORY, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort((left, right) => left.localeCompare(right));
+    return entries.length > 0 ? entries : [DEFAULT_INSTANCE_ID];
+  } catch {
+    return [DEFAULT_INSTANCE_ID];
+  }
 };
 
 const runtimeBanner = (): string => {
@@ -152,10 +264,11 @@ const printWelcomeScreen = (state: LauncherScreenState): void => {
   writeLine(colorize("WELCOME TO CLOG", ANSI.bold, ANSI.white));
   writeLine(colorize("Runtime-first oversight agent", ANSI.dim, ANSI.white));
   writeLine();
+  writeLine(`${colorize("Instance:", ANSI.bold)} ${colorize(state.settings.instanceId, ANSI.dim)}`);
   writeLine(
     `${colorize("Runtime:", ANSI.bold)} ${state.runtimeReachable ? colorize("connected", ANSI.green) : colorize("starts on launch", ANSI.yellow)} ${colorize(state.runtimeBaseUrl, ANSI.dim)}`,
   );
-  writeLine(`${colorize("Model:", ANSI.bold)} ${colorize(state.ai.model, ANSI.dim)} ${colorize(`(${state.ai.providerLabel})`, ANSI.dim)}`);
+  writeLine(`${colorize("Clog model:", ANSI.bold)} ${colorize(state.ai.model, ANSI.dim)}`);
   writeLine();
   writeLine(colorize("Choose frontend:", ANSI.bold, ANSI.yellow));
   writeLine(`  ${colorize("[1]", ANSI.bgBlue, ANSI.white, ANSI.bold)} ${colorize("TUI", ANSI.bold)}  Full terminal interface`);
@@ -250,24 +363,128 @@ const waitForEnter = async (message = "Press Enter to continue."): Promise<void>
   await promptForLine(colorize(message, ANSI.dim));
 };
 
-const printSystemSettingsScreen = (settings: LauncherAiSettings): void => {
+const printInstanceSelectionScreen = (instances: readonly string[], currentInstanceId: string | null): void => {
+  clearScreen();
+  writeLine(runtimeBanner());
+  writeLine();
+  writeLine(colorize("CHOOSE INSTANCE", ANSI.bold, ANSI.white));
+  writeLine(colorize("Pick the runtime instance folder to use for this session", ANSI.dim, ANSI.white));
+  writeLine();
+
+  instances.forEach((instanceId, index) => {
+    const marker = instanceId === currentInstanceId ? colorize("current", ANSI.green) : colorize("available", ANSI.dim);
+    writeLine(`  ${colorize(`[${index + 1}]`, ANSI.bgBlue, ANSI.white, ANSI.bold)} ${colorize(instanceId, ANSI.bold)} ${marker}`);
+  });
+
+  writeLine();
+};
+
+const chooseRuntimeInstance = async (): Promise<string> => {
+  const instances = listRuntimeInstances();
+  if (instances.length === 1) {
+    const selected = instances[0] ?? DEFAULT_INSTANCE_ID;
+    process.env.CLOG_INSTANCE_ID = selected;
+    return selected;
+  }
+
+  while (true) {
+    const currentInstanceId = readOptionalEnvString("CLOG_INSTANCE_ID");
+    printInstanceSelectionScreen(instances, currentInstanceId);
+    const answer = await promptForLine(colorize("Choose an instance by number or folder name: ", ANSI.bold));
+    const trimmed = answer.trim();
+    const numericChoice = Number.parseInt(trimmed, 10);
+
+    if (Number.isInteger(numericChoice) && numericChoice >= 1 && numericChoice <= instances.length) {
+      const selected = instances[numericChoice - 1] ?? DEFAULT_INSTANCE_ID;
+      process.env.CLOG_INSTANCE_ID = selected;
+      return selected;
+    }
+
+    const matchedInstance = instances.find((instanceId) => instanceId === trimmed);
+    if (matchedInstance) {
+      process.env.CLOG_INSTANCE_ID = matchedInstance;
+      return matchedInstance;
+    }
+
+    writeLine(colorize(`Unknown instance "${trimmed}".`, ANSI.red, ANSI.bold));
+    await waitForEnter();
+  }
+};
+
+const chooseModelFromList = async (
+  instanceId: string,
+  settings: LauncherAiSettings,
+): Promise<string | null> => {
+  clearScreen();
+  writeLine(runtimeBanner());
+  writeLine();
+  writeLine(colorize("MODEL SETTINGS", ANSI.bold, ANSI.white));
+  writeLine(colorize(`Instance: ${instanceId}`, ANSI.dim, ANSI.white));
+  writeLine();
+
+  settings.modelChoices.forEach((model, index) => {
+    const marker = model === settings.model ? colorize("current", ANSI.green) : colorize("preset", ANSI.dim);
+    writeLine(`  ${colorize(`[${index + 1}]`, ANSI.bgBlue, ANSI.white, ANSI.bold)} ${colorize(model, ANSI.bold)} ${marker}`);
+  });
+
+  writeLine(`  ${colorize("[c]", ANSI.bgBlue, ANSI.white, ANSI.bold)} ${colorize("Custom model id", ANSI.bold)}`);
+  writeLine(`  ${colorize("[b]", ANSI.bgBlue, ANSI.white, ANSI.bold)} ${colorize("Back", ANSI.bold)}`);
+  writeLine();
+
+  const answer = await promptForLine(colorize("Choose a model: ", ANSI.bold));
+  const trimmed = answer.trim();
+
+  if (!trimmed || trimmed === "b") {
+    return null;
+  }
+
+  if (trimmed === "c") {
+    const customModel = await promptForLine(
+      `${colorize("Enter a Clog model id", ANSI.bold)} ${colorize("(CLOG_MODEL)", ANSI.dim)}: `,
+    );
+    return customModel.trim() || null;
+  }
+
+  const numericChoice = Number.parseInt(trimmed, 10);
+  if (Number.isInteger(numericChoice) && numericChoice >= 1 && numericChoice <= settings.modelChoices.length) {
+    return settings.modelChoices[numericChoice - 1] ?? null;
+  }
+
+  writeLine(colorize(`Unknown model selection "${trimmed}".`, ANSI.red, ANSI.bold));
+  await waitForEnter();
+  return null;
+};
+
+const printSystemSettingsScreen = (state: LauncherScreenState): void => {
   clearScreen();
   writeLine(runtimeBanner());
   writeLine();
   writeLine(colorize("SYSTEM SETTINGS", ANSI.bold, ANSI.white));
-  writeLine(colorize("High-level launcher and runtime defaults", ANSI.dim, ANSI.white));
+  writeLine(colorize("Per-instance launcher and runtime defaults", ANSI.dim, ANSI.white));
   writeLine();
-  writeLine(`${colorize("Provider:", ANSI.bold)} ${settings.provider === "none" ? colorize(settings.providerLabel, ANSI.yellow) : colorize(settings.providerLabel, ANSI.green)}`);
-  writeLine(`${colorize("Model:", ANSI.bold)} ${colorize(settings.model, ANSI.dim)}`);
-  writeLine(`${colorize("Env key:", ANSI.bold)} ${colorize(settings.modelEnvKey, ANSI.dim)}`);
+  writeLine(`${colorize("Instance:", ANSI.bold)} ${colorize(state.settings.instanceId, ANSI.dim)}`);
+  writeLine(`${colorize("Settings file:", ANSI.bold)} ${colorize(state.settings.settingsPath, ANSI.dim)}`);
+  writeLine(`${colorize("App name:", ANSI.bold)} ${colorize(state.settings.appName, ANSI.dim)}`);
+  writeLine(`${colorize("Execution mode:", ANSI.bold)} ${colorize(state.settings.executionMode, ANSI.dim)}`);
+  writeLine(`${colorize("Channels:", ANSI.bold)} ${colorize(state.settings.channels.join(", "), ANSI.dim)}`);
+  writeLine(`${colorize("Monitor interval:", ANSI.bold)} ${colorize(`${state.settings.monitorIntervalMs} ms`, ANSI.dim)}`);
+  writeLine(`${colorize("Clog model:", ANSI.bold)} ${colorize(state.ai.model, ANSI.dim)}`);
+  writeLine(`${colorize("PostHog host:", ANSI.bold)} ${colorize(state.settings.posthogHost, ANSI.dim)}`);
+  writeLine(`${colorize("PostHog context:", ANSI.bold)} ${colorize(state.settings.posthogContext ?? "not set", ANSI.dim)}`);
+  writeLine(`${colorize("Notion todo title:", ANSI.bold)} ${colorize(state.settings.notionTodoTitle, ANSI.dim)}`);
+  writeLine(`${colorize("Notion request timeout:", ANSI.bold)} ${colorize(`${state.settings.notionRequestTimeoutMs} ms`, ANSI.dim)}`);
+  writeLine(`${colorize("Notion todo page:", ANSI.bold)} ${colorize(state.settings.notionTodoPageUrl ?? "not set", ANSI.dim)}`);
+  writeLine(`${colorize("Telegram username:", ANSI.bold)} ${colorize(state.settings.telegramUserName ?? "not set", ANSI.dim)}`);
+  writeLine(`${colorize("Telegram allowed chats:", ANSI.bold)} ${colorize(String(state.settings.allowedChatIdsCount), ANSI.dim)}`);
   writeLine();
-  writeLine(`  ${colorize("[m]", ANSI.bgBlue, ANSI.white, ANSI.bold)} ${colorize("Change model", ANSI.bold)}  Update the active provider model`);
+  writeLine(`  ${colorize("[i]", ANSI.bgBlue, ANSI.white, ANSI.bold)} ${colorize("Change instance", ANSI.bold)}  Switch runtime instance folder`);
+  writeLine(`  ${colorize("[m]", ANSI.bgBlue, ANSI.white, ANSI.bold)} ${colorize("Change Clog model", ANSI.bold)}  Update the selected model`);
   writeLine(`  ${colorize("[b]", ANSI.bgBlue, ANSI.white, ANSI.bold)} ${colorize("Back", ANSI.bold)} Return to launcher`);
   writeLine();
 };
 
 const requestSettingsChoice = async (): Promise<SettingsChoice> => {
-  writeLine(colorize("Press m to change the model, or b to go back.", ANSI.dim));
+  writeLine(colorize("Press i to change instance, m to change model, or b to go back.", ANSI.dim));
   writeLine();
 
   return await new Promise<SettingsChoice>((resolve) => {
@@ -299,6 +516,11 @@ const requestSettingsChoice = async (): Promise<SettingsChoice> => {
         return;
       }
 
+      if (key.name === "i") {
+        finish("instance");
+        return;
+      }
+
       if (key.name === "b" || key.name === "q" || key.name === "escape") {
         finish("back");
       }
@@ -315,35 +537,44 @@ const requestSettingsChoice = async (): Promise<SettingsChoice> => {
 
 const openSystemSettings = async (): Promise<void> => {
   while (true) {
-    const settings = resolveLauncherAiSettings();
-    printSystemSettingsScreen(settings);
+    const screenState = await getLauncherScreenState();
+    printSystemSettingsScreen(screenState);
 
     const choice = await requestSettingsChoice();
     if (choice === "back") {
       return;
     }
 
-    const nextModel = await promptForLine(
-      `${colorize(`Enter a new model for ${settings.providerLabel}`, ANSI.bold)} ${colorize(`(${settings.modelEnvKey})`, ANSI.dim)}: `,
-    );
+    if (choice === "instance") {
+      const nextInstanceId = await chooseRuntimeInstance();
+      syncProcessEnvWithInstanceSettings(nextInstanceId);
+      continue;
+    }
+
+    const nextModel = await chooseModelFromList(screenState.settings.instanceId, screenState.ai);
     if (!nextModel) {
       writeLine(colorize("Model unchanged.", ANSI.yellow));
       await waitForEnter();
       continue;
     }
 
-    persistAiModelSelection(settings, nextModel);
-    writeLine(colorize(`Saved ${settings.modelEnvKey}=${nextModel}`, ANSI.green, ANSI.bold));
+    persistAiModelSelection(screenState.settings.instanceId, screenState.ai, nextModel);
+    writeLine(colorize(`Saved CLOG_MODEL=${nextModel} to ${screenState.settings.settingsPath}`, ANSI.green, ANSI.bold));
     await waitForEnter();
   }
 };
 
 const getLauncherScreenState = async (): Promise<LauncherScreenState> => {
-  const runtimeBaseUrl = resolveBackendBaseUrl(process.env);
+  const instance = loadLauncherRuntimeSettingsState();
+  const runtimeBaseUrl = resolveBackendBaseUrl({
+    ...process.env,
+    PORT: String(instance.settings?.runtime?.port ?? process.env.PORT ?? DEFAULT_RUNTIME_PORT),
+  });
   return {
     runtimeBaseUrl,
     runtimeReachable: await runtimeIsReachable(runtimeBaseUrl),
-    ai: resolveLauncherAiSettings(),
+    ai: resolveLauncherAiSettings(instance.instanceId),
+    settings: resolveLauncherRuntimeSettingsSummary(instance),
   };
 };
 
@@ -548,6 +779,8 @@ const launchWeb = async (session: RuntimeSession): Promise<void> => {
 const startLauncher = async (): Promise<void> => {
   writeLine(colorize("Starting CLOG...", ANSI.bold, ANSI.cyan));
   writeLine();
+  const instanceId = await chooseRuntimeInstance();
+  syncProcessEnvWithInstanceSettings(instanceId);
 
   while (true) {
     const screenState = await getLauncherScreenState();

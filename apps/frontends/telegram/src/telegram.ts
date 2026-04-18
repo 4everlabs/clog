@@ -14,8 +14,9 @@ const writeStdoutLine = (value: string): void => {
 };
 
 const TELEGRAM_API_BASE_URL = "https://api.telegram.org";
-const TELEGRAM_THREAD_TITLE_PREFIX = "Telegram Thread ";
+const TELEGRAM_CONVERSATION_TITLE = "Telegram Conversation";
 const TELEGRAM_TARGET_STATE_FILE = "telegram-target.json";
+const TELEGRAM_QUEUE_KEY = "telegram";
 
 type TelegramThreadTarget = {
   chatId: string;
@@ -31,8 +32,6 @@ type SavedTelegramTarget = {
   readonly threadId: string;
   readonly updatedAt: number;
 };
-
-const getThreadTitle = (threadId: string): string => `Telegram Thread ${threadId}`;
 
 const getTelegramTargetStatePath = (runtime: Pick<RuntimeBootstrap, "env">): string =>
   join(runtime.env.storage.stateDir, TELEGRAM_TARGET_STATE_FILE);
@@ -69,13 +68,18 @@ const getRawChatId = (message: Message): number | null => {
   return typeof raw?.chat?.id === "number" ? raw.chat.id : null;
 };
 
-const isAllowedChat = (message: Message, allowedChatIds: readonly number[]): boolean => {
-  if (allowedChatIds.length === 0) {
+const getConfiguredTelegramChatId = (allowedChatIds: readonly number[]): number | null => {
+  const chatId = allowedChatIds[0];
+  return typeof chatId === "number" && Number.isFinite(chatId) ? chatId : null;
+};
+
+const isAllowedChat = (message: Message, configuredChatId: number | null): boolean => {
+  if (configuredChatId === null) {
     return true;
   }
 
   const chatId = getRawChatId(message);
-  return chatId !== null && allowedChatIds.includes(chatId);
+  return chatId === configuredChatId;
 };
 
 const normalizeTelegramReplyText = (value: string): string => {
@@ -161,16 +165,17 @@ const sendTelegramReply = async (
   }
 };
 
+const getTelegramConversationThreadId = (runtime: Pick<RuntimeBootstrap, "store">): string | null => {
+  return runtime.store.listThreads().find((entry) => (
+    entry.channel === "telegram" && entry.title === TELEGRAM_CONVERSATION_TITLE
+  ))?.id ?? null;
+};
+
 const forwardMessageToRuntime = async (
   runtime: RuntimeBootstrap,
-  runtimeThreadIds: Map<string, string>,
-  thread: Thread,
   message: Message,
 ): Promise<string> => {
-  const title = getThreadTitle(thread.id);
-  const existingThreadId = runtimeThreadIds.get(thread.id)
-    ?? runtime.store.listThreads().find((entry) => entry.channel === "telegram" && entry.title === title)?.id;
-
+  const existingThreadId = getTelegramConversationThreadId(runtime);
   const response = await runtime.gateway.sendMessage(
     existingThreadId
       ? {
@@ -180,30 +185,28 @@ const forwardMessageToRuntime = async (
         }
       : {
           channel: "telegram",
-          title,
+          title: TELEGRAM_CONVERSATION_TITLE,
           message: message.text,
         },
   );
 
-  runtimeThreadIds.set(thread.id, response.thread.id);
   return response.replyMessage.content;
 };
 
 const postRuntimeReply = async (
   runtime: RuntimeBootstrap,
   botToken: string,
-  runtimeThreadIds: Map<string, string>,
-  allowedChatIds: readonly number[],
+  configuredChatId: number | null,
   thread: Thread,
   message: Message,
 ): Promise<void> => {
-  if (!isAllowedChat(message, allowedChatIds)) {
+  if (!isAllowedChat(message, configuredChatId)) {
     return;
   }
 
   persistTelegramTarget(runtime, thread.id);
   writeStdoutLine(`[telegram] received message on ${thread.id}: ${message.text}`);
-  const reply = await forwardMessageToRuntime(runtime, runtimeThreadIds, thread, message);
+  const reply = await forwardMessageToRuntime(runtime, message);
   const plainTextReply = normalizeTelegramReplyText(reply);
   await sendTelegramReply(botToken, thread.id, plainTextReply);
   writeStdoutLine(`[telegram] posted reply on ${thread.id}: ${plainTextReply.slice(0, 240)}`);
@@ -247,28 +250,30 @@ export const startTelegramSurface = async (runtime: RuntimeBootstrap): Promise<v
     state: createMemoryState(),
   });
 
-  const runtimeThreadIds = new Map<string, string>();
   const threadQueues = new Map<string, Promise<void>>();
-  const allowedChatIds = [...runtime.env.telegram.allowedChatIds];
+  const configuredChatId = getConfiguredTelegramChatId(runtime.env.telegram.allowedChatIds);
+  if (runtime.env.telegram.allowedChatIds.length > 1) {
+    writeStdoutLine(`[telegram] multiple allowed chats configured; using only ${String(configuredChatId)}`);
+  }
 
   bot.onNewMention(async (thread, message) => {
-    await queueThreadReply(threadQueues, thread.id, async () => {
+    await queueThreadReply(threadQueues, TELEGRAM_QUEUE_KEY, async () => {
       await thread.subscribe();
-      await postRuntimeReply(runtime, botToken, runtimeThreadIds, allowedChatIds, thread, message);
+      await postRuntimeReply(runtime, botToken, configuredChatId, thread, message);
     });
   });
 
   // Allow a first plain-text message to start a Telegram conversation without requiring an @-mention.
   bot.onNewMessage(/[\s\S]+/u, async (thread, message) => {
-    await queueThreadReply(threadQueues, thread.id, async () => {
+    await queueThreadReply(threadQueues, TELEGRAM_QUEUE_KEY, async () => {
       await thread.subscribe();
-      await postRuntimeReply(runtime, botToken, runtimeThreadIds, allowedChatIds, thread, message);
+      await postRuntimeReply(runtime, botToken, configuredChatId, thread, message);
     });
   });
 
   bot.onSubscribedMessage(async (thread, message) => {
-    await queueThreadReply(threadQueues, thread.id, async () => {
-      await postRuntimeReply(runtime, botToken, runtimeThreadIds, allowedChatIds, thread, message);
+    await queueThreadReply(threadQueues, TELEGRAM_QUEUE_KEY, async () => {
+      await postRuntimeReply(runtime, botToken, configuredChatId, thread, message);
     });
   });
 
@@ -276,33 +281,18 @@ export const startTelegramSurface = async (runtime: RuntimeBootstrap): Promise<v
   writeStdoutLine(`[telegram] Chat SDK initialized in ${telegram.runtimeMode} mode`);
 };
 
-const listTelegramNotificationTargets = (runtime: Pick<RuntimeBootstrap, "env" | "store">): string[] => {
-  const targets = new Set<string>();
+const resolveTelegramNotificationTarget = (runtime: Pick<RuntimeBootstrap, "env">): string | null => {
   const savedTarget = readSavedTelegramTarget(runtime);
   if (savedTarget) {
-    targets.add(savedTarget);
+    return savedTarget;
   }
 
-  for (const thread of runtime.store.listThreads()) {
-    if (thread.channel !== "telegram" || !thread.title.startsWith(TELEGRAM_THREAD_TITLE_PREFIX)) {
-      continue;
-    }
-
-    const threadId = thread.title.slice(TELEGRAM_THREAD_TITLE_PREFIX.length).trim();
-    if (threadId.startsWith("telegram:")) {
-      targets.add(threadId);
-    }
-  }
-
-  for (const chatId of runtime.env.telegram.allowedChatIds) {
-    targets.add(`telegram:${chatId}`);
-  }
-
-  return [...targets];
+  const configuredChatId = getConfiguredTelegramChatId(runtime.env.telegram.allowedChatIds);
+  return configuredChatId === null ? null : `telegram:${configuredChatId}`;
 };
 
 export const sendTelegramOperatorNotifications = async (
-  runtime: Pick<RuntimeBootstrap, "env" | "store">,
+  runtime: Pick<RuntimeBootstrap, "env">,
   markdown: string,
 ): Promise<number> => {
   const botToken = runtime.env.telegram.botToken;
@@ -310,17 +300,14 @@ export const sendTelegramOperatorNotifications = async (
     return 0;
   }
 
-  const targets = listTelegramNotificationTargets(runtime);
-  if (targets.length === 0) {
+  const target = resolveTelegramNotificationTarget(runtime);
+  if (!target) {
     writeStdoutLine("[telegram] skipped proactive notification because no Telegram targets are known yet");
     return 0;
   }
 
   const normalizedReply = normalizeTelegramReplyText(markdown);
-  await Promise.all(targets.map(async (threadId) => {
-    await sendTelegramReply(botToken, threadId, normalizedReply);
-    writeStdoutLine(`[telegram] proactive notification posted on ${threadId}: ${normalizedReply.slice(0, 240)}`);
-  }));
-
-  return targets.length;
+  await sendTelegramReply(botToken, target, normalizedReply);
+  writeStdoutLine(`[telegram] proactive notification posted on ${target}: ${normalizedReply.slice(0, 240)}`);
+  return 1;
 };

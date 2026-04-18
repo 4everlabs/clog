@@ -26,7 +26,7 @@ import type {
   ShellCommandRequest,
   SurfaceShellCommandResponse,
 } from "@clog/types";
-import type { MonitoringTickResult } from "../monitoring/monitor-loop";
+import type { MonitoringTickResult } from "../runtime/monitor-loop";
 
 export interface AgentGatewaySurface {
   bootstrap(): Promise<SurfaceBootstrapResponse>;

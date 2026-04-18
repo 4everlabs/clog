@@ -4,12 +4,12 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { AgentEnvironment } from "../apps/clog/src/config";
 import { AgentGateway } from "../apps/clog/src/gateway/service";
-import type { MonitoringTickResult } from "../apps/clog/src/monitoring/monitor-loop";
+import type { MonitoringTickResult } from "../apps/clog/src/runtime/monitor-loop";
 import { InMemoryRuntimeStore } from "../apps/clog/src/storage/in-memory-runtime-store";
 import type { BrainService } from "../apps/clog/src/brain/service";
 import type { PostHogIntegrationClient } from "../apps/clog/src/integrations/posthog/client";
 import type { PostHogToolServices } from "../apps/clog/src/tools/types";
-import type { MonitoringLoop } from "../apps/clog/src/monitoring/monitor-loop";
+import type { MonitoringLoop } from "../apps/clog/src/runtime/monitor-loop";
 
 const cleanupPaths: string[] = [];
 

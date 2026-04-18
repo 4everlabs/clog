@@ -1,8 +1,46 @@
 {
+  "app": {
+    "name": "Clog"
+  },
+  "runtime": {
+    "executionMode": "propose",
+    "channels": [
+      "tui"
+    ],
+    "port": 6900
+  },
   "monitor": {
     "intervalMs": 60000
   },
+  "ai": {
+    "model": "google/gemma-4-31b-it:free",
+    "modelChoices": [
+      "google/gemma-4-31b-it:free",
+      "google/gemma-4-26b-a4b-it:free",
+      "stepfun/step-3.5-flash"
+    ]
+  },
   "posthog": {
-    "context": "4ever.ai / app.4ever.ai"
+    "context": "4ever.ai / app.4ever.ai",
+    "host": "https://us.posthog.com",
+    "endpointsDir": "posthog/endpoints",
+    "cliBin": "posthog-cli",
+    "cliTimeoutMs": 30000,
+    "requestTimeoutMs": 100000,
+    "enableLogs": false,
+    "enableFlags": false,
+    "enableExperiments": false,
+    "errorLookbackMinutes": 30,
+    "errorSpikeThreshold": 10,
+    "errorSpikeMultiplier": 2,
+    "criticalErrorThreshold": 25,
+    "insightMonitors": []
+  },
+  "telegram": {
+    "allowedChatIds": []
+  },
+  "notion": {
+    "requestTimeoutMs": 30000,
+    "todoSearchTitle": "Pre Beta To Do"
   }
 }

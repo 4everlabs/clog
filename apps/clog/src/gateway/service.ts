@@ -36,7 +36,7 @@ import { normalizeRuntimeWakeupConfig } from "../brain/prompt-loader";
 import type { NotionToolServices } from "../tools/types";
 import type { PostHogIntegrationClient } from "../integrations/posthog/client";
 import { BrainService } from "../brain/service";
-import type { MonitoringLoop } from "../monitoring/monitor-loop";
+import type { MonitoringLoop } from "../runtime/monitor-loop";
 import { ShellExecutor } from "../execution/shell-executor";
 import type { RuntimeStore } from "../storage/chat";
 import type { AgentGatewaySurface } from "./contracts";

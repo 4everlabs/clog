@@ -1,9 +1,15 @@
 import { readFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import type { AgentExecutionMode, IntegrationCapabilitySnapshot, SurfaceChannelKind } from "@clog/types";
-import { z } from "zod";
 import type { ToolSummary } from "./schema/tools";
 import { RuntimeToolsConfigSchema, type RuntimeToolsConfig } from "./schema/tools";
+import {
+  DEFAULT_CLOG_MODEL,
+  DEFAULT_MONITOR_INTERVAL_MS,
+  DEFAULT_RUNTIME_PORT,
+  RuntimeSettingsSchema,
+  type RuntimeSettings,
+} from "./runtime/settings";
 import { summarizeEnabledTools } from "./tools/registry";
 
 const readBoolean = (value: string | undefined, fallback: boolean): boolean => {
@@ -42,17 +48,6 @@ const readOptionalString = (value: string | undefined): string | null => {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
 };
-
-const RuntimeSettingsSchema = z.object({
-  monitor: z.object({
-    intervalMs: z.number().finite().optional(),
-  }).strict().optional(),
-  posthog: z.object({
-    context: z.string().trim().min(1).optional(),
-  }).strict().optional(),
-}).passthrough();
-
-type RuntimeSettings = z.infer<typeof RuntimeSettingsSchema>;
 
 const normalizeHost = (value: string | undefined, fallback: string): string => {
   const host = readOptionalString(value) ?? fallback;
@@ -210,7 +205,7 @@ const buildRuntimeContextPrompt = (settings: RuntimeSettings | null): string | n
 
 const readInsightMonitor = (
   env: NodeJS.ProcessEnv,
-  prefix: "POSTHOG_CLAW_POSTHOG_PRIMARY_INSIGHT" | "POSTHOG_CLAW_POSTHOG_SECONDARY_INSIGHT",
+  prefix: "CLOG_POSTHOG_PRIMARY_INSIGHT" | "CLOG_POSTHOG_SECONDARY_INSIGHT",
   fallbackName: string,
 ): PostHogInsightMonitorConfig | null => {
   const query = readOptionalString(env[`${prefix}_QUERY`]);
@@ -226,71 +221,73 @@ const readInsightMonitor = (
   };
 };
 
-const createPostHogConfig = (env: NodeJS.ProcessEnv, storage: RuntimeStorageConfig): PostHogRuntimeConfig => {
-  const primaryInsight = readInsightMonitor(env, "POSTHOG_CLAW_POSTHOG_PRIMARY_INSIGHT", "Primary insight monitor");
-  const secondaryInsight = readInsightMonitor(env, "POSTHOG_CLAW_POSTHOG_SECONDARY_INSIGHT", "Secondary insight monitor");
+const createPostHogConfig = (env: NodeJS.ProcessEnv, storage: RuntimeStorageConfig, settings: RuntimeSettings | null): PostHogRuntimeConfig => {
+  const configuredInsightMonitors = settings?.posthog?.insightMonitors ?? [];
+  const primaryInsight = readInsightMonitor(env, "CLOG_POSTHOG_PRIMARY_INSIGHT", configuredInsightMonitors[0]?.name ?? "Primary insight monitor");
+  const secondaryInsight = readInsightMonitor(env, "CLOG_POSTHOG_SECONDARY_INSIGHT", configuredInsightMonitors[1]?.name ?? "Secondary insight monitor");
+  const insightMonitors = [primaryInsight, secondaryInsight].filter((monitor): monitor is PostHogInsightMonitorConfig => monitor !== null);
 
   return {
-    host: normalizeHost(env.POSTHOG_CLAW_POSTHOG_HOST, "https://us.posthog.com"),
+    host: normalizeHost(env.CLOG_POSTHOG_HOST, settings?.posthog?.host ?? "https://us.posthog.com"),
     workspaceDir: storage.workspaceDir,
-    projectId: readOptionalString(env.POSTHOG_CLAW_POSTHOG_PROJECT_ID)
+    projectId: readOptionalString(env.CLOG_POSTHOG_PROJECT_ID)
       ?? readOptionalString(env.POSTHOG_PROJECT_ID),
-    personalApiKey: readOptionalString(env.POSTHOG_CLAW_POSTHOG_PERSONAL_API_KEY)
+    personalApiKey: readOptionalString(env.CLOG_POSTHOG_PERSONAL_API_KEY)
       ?? readOptionalString(env.POSTHOG_API_KEY),
-    projectApiKey: readOptionalString(env.POSTHOG_CLAW_POSTHOG_PROJECT_API_KEY)
+    projectApiKey: readOptionalString(env.CLOG_POSTHOG_PROJECT_API_KEY)
       ?? readOptionalString(env.POSTHOG_PROJECT_TOKEN),
-    featureFlagsSecureApiKey: readOptionalString(env.POSTHOG_CLAW_POSTHOG_FEATURE_FLAGS_SECURE_KEY),
+    featureFlagsSecureApiKey: readOptionalString(env.CLOG_POSTHOG_FEATURE_FLAGS_SECURE_KEY),
     endpointsDir: resolvePathWithinRoot(
-      env.POSTHOG_CLAW_POSTHOG_ENDPOINTS_DIR,
-      "posthog/endpoints",
+      env.CLOG_POSTHOG_ENDPOINTS_DIR,
+      settings?.posthog?.endpointsDir ?? "posthog/endpoints",
       storage.workspaceDir,
-      "POSTHOG_CLAW_POSTHOG_ENDPOINTS_DIR",
+      "CLOG_POSTHOG_ENDPOINTS_DIR",
     ),
-    cliBin: readOptionalString(env.POSTHOG_CLAW_POSTHOG_CLI_BIN) ?? "posthog-cli",
-    cliTimeoutMs: Math.max(1_000, readInteger(env.POSTHOG_CLAW_POSTHOG_CLI_TIMEOUT_MS, 30_000)),
-    requestTimeoutMs: Math.max(1_000, readInteger(env.POSTHOG_CLAW_POSTHOG_REQUEST_TIMEOUT_MS, 100_000)),
-    enableLogs: readBoolean(env.POSTHOG_CLAW_POSTHOG_ENABLE_LOGS, false),
-    enableFlags: readBoolean(env.POSTHOG_CLAW_POSTHOG_ENABLE_FLAGS, false),
-    enableExperiments: readBoolean(env.POSTHOG_CLAW_POSTHOG_ENABLE_EXPERIMENTS, false),
-    errorLookbackMinutes: Math.max(5, readInteger(env.POSTHOG_CLAW_POSTHOG_ERROR_LOOKBACK_MINUTES, 30)),
-    errorSpikeThreshold: Math.max(1, readInteger(env.POSTHOG_CLAW_POSTHOG_ERROR_SPIKE_THRESHOLD, 10)),
-    errorSpikeMultiplier: Math.max(1, readNumber(env.POSTHOG_CLAW_POSTHOG_ERROR_SPIKE_MULTIPLIER, 2)),
-    criticalErrorThreshold: Math.max(1, readInteger(env.POSTHOG_CLAW_POSTHOG_CRITICAL_ERROR_THRESHOLD, 25)),
-    insightMonitors: [primaryInsight, secondaryInsight].filter((monitor): monitor is PostHogInsightMonitorConfig => monitor !== null),
+    cliBin: readOptionalString(env.CLOG_POSTHOG_CLI_BIN) ?? settings?.posthog?.cliBin ?? "posthog-cli",
+    cliTimeoutMs: Math.max(1_000, readInteger(env.CLOG_POSTHOG_CLI_TIMEOUT_MS, settings?.posthog?.cliTimeoutMs ?? 30_000)),
+    requestTimeoutMs: Math.max(1_000, readInteger(env.CLOG_POSTHOG_REQUEST_TIMEOUT_MS, settings?.posthog?.requestTimeoutMs ?? 100_000)),
+    enableLogs: readBoolean(env.CLOG_POSTHOG_ENABLE_LOGS, settings?.posthog?.enableLogs ?? false),
+    enableFlags: readBoolean(env.CLOG_POSTHOG_ENABLE_FLAGS, settings?.posthog?.enableFlags ?? false),
+    enableExperiments: readBoolean(env.CLOG_POSTHOG_ENABLE_EXPERIMENTS, settings?.posthog?.enableExperiments ?? false),
+    errorLookbackMinutes: Math.max(5, readInteger(env.CLOG_POSTHOG_ERROR_LOOKBACK_MINUTES, settings?.posthog?.errorLookbackMinutes ?? 30)),
+    errorSpikeThreshold: Math.max(1, readInteger(env.CLOG_POSTHOG_ERROR_SPIKE_THRESHOLD, settings?.posthog?.errorSpikeThreshold ?? 10)),
+    errorSpikeMultiplier: Math.max(1, readNumber(env.CLOG_POSTHOG_ERROR_SPIKE_MULTIPLIER, settings?.posthog?.errorSpikeMultiplier ?? 2)),
+    criticalErrorThreshold: Math.max(1, readInteger(env.CLOG_POSTHOG_CRITICAL_ERROR_THRESHOLD, settings?.posthog?.criticalErrorThreshold ?? 25)),
+    insightMonitors: insightMonitors.length > 0 ? insightMonitors : configuredInsightMonitors,
   };
 };
 
 const hasPostHogManagementAccess = (config: PostHogRuntimeConfig): boolean =>
   Boolean(config.projectId && config.personalApiKey);
 
-const createAiConfig = (env: NodeJS.ProcessEnv): AiRuntimeConfig => {
+const createAiConfig = (env: NodeJS.ProcessEnv, settings: RuntimeSettings | null): AiRuntimeConfig => {
   const openRouterApiKey = readOptionalString(env.OPENROUTER_API_KEY);
   const openAiApiKey = readOptionalString(env.OPENAI_API_KEY);
-  const openRouterModel = readOptionalString(env.OPENROUTER_MODEL);
-  const openAiModel = readOptionalString(env.OPENAI_MODEL);
-  const usingOpenRouter = Boolean(openRouterApiKey);
+  const model = readOptionalString(env.CLOG_MODEL) ?? settings?.ai?.model?.trim() ?? null;
+  const provider = openRouterApiKey ? "openrouter" : (openAiApiKey ? "openai" : null);
+  const usingOpenRouter = provider === "openrouter";
 
   return {
-    provider: openRouterApiKey ? "openrouter" : (openAiApiKey ? "openai" : null),
-    apiKey: openRouterApiKey ?? openAiApiKey,
-    model: usingOpenRouter
-      ? (openRouterModel ?? "stepfun/step-3.5-flash")
-      : (openAiModel ?? openRouterModel ?? "gpt-4o-mini"),
+    provider,
+    apiKey: provider === "openrouter"
+      ? openRouterApiKey
+      : (provider === "openai" ? openAiApiKey : null),
+    model: model ?? DEFAULT_CLOG_MODEL,
     baseUrl: usingOpenRouter ? "https://openrouter.ai/api/v1" : "https://api.openai.com/v1",
   };
 };
 
 const createRuntimeStorageConfig = (env: NodeJS.ProcessEnv): RuntimeStorageConfig => {
-  const instanceId = readOptionalString(env.POSTHOG_CLAW_INSTANCE_ID) ?? "personal-instance";
-  const instanceRoot = resolveWorkspacePath(env.POSTHOG_CLAW_INSTANCE_ROOT, `.runtime/instances/${instanceId}`);
+  const instanceId = readOptionalString(env.CLOG_INSTANCE_ID) ?? "personal-instance";
+  const instanceRoot = resolveWorkspacePath(env.CLOG_INSTANCE_ROOT, `.runtime/instances/${instanceId}`);
   const readOnlyDir = join(instanceRoot, "read-only");
   const workspaceDir = join(instanceRoot, "workspace");
-  const storageDir = resolveWorkspacePath(env.POSTHOG_CLAW_STORAGE_DIR, join(instanceRoot, "storage"));
+  const storageDir = resolveWorkspacePath(env.CLOG_STORAGE_DIR, join(instanceRoot, "storage"));
   const stateDir = resolvePathWithinRoot(
-    env.POSTHOG_CLAW_RUNTIME_STATE_DIR,
+    env.CLOG_RUNTIME_STATE_DIR,
     "state",
     storageDir,
-    "POSTHOG_CLAW_RUNTIME_STATE_DIR",
+    "CLOG_RUNTIME_STATE_DIR",
   );
 
   return {
@@ -313,22 +310,27 @@ const readAllowedChatIds = (value: string | undefined): number[] => {
     .filter((entry) => Number.isFinite(entry));
 };
 
-const createTelegramConfig = (env: NodeJS.ProcessEnv): TelegramRuntimeConfig => {
-  const userName = readOptionalString(env.TELEGRAM_BOT_USERNAME)?.replace(/^@/u, "") ?? null;
+const createTelegramConfig = (env: NodeJS.ProcessEnv, settings: RuntimeSettings | null): TelegramRuntimeConfig => {
+  const userName = readOptionalString(env.TELEGRAM_BOT_USERNAME)
+    ?? settings?.telegram?.userName?.trim()
+    ?? null;
+  const allowedChatIds = readAllowedChatIds(env.TELEGRAM_ALLOWED_CHATS);
   return {
     botToken: readOptionalString(env.TELEGRAM_BOT_TOKEN),
-    userName,
-    allowedChatIds: readAllowedChatIds(env.TELEGRAM_ALLOWED_CHATS),
+    userName: userName?.replace(/^@/u, "") ?? null,
+    allowedChatIds: allowedChatIds.length > 0
+      ? allowedChatIds
+      : [...(settings?.telegram?.allowedChatIds ?? [])],
   };
 };
 
-const createNotionConfig = (env: NodeJS.ProcessEnv): NotionRuntimeConfig => {
+const createNotionConfig = (env: NodeJS.ProcessEnv, settings: RuntimeSettings | null): NotionRuntimeConfig => {
   return {
-    token: readOptionalString(env.POSTHOG_CLAW_NOTION_TOKEN) ?? readOptionalString(env.NOTION_SECRET),
-    requestTimeoutMs: Math.max(1_000, readInteger(env.POSTHOG_CLAW_NOTION_REQUEST_TIMEOUT_MS, 30_000)),
-    todoPageUrl: readOptionalString(env.POSTHOG_CLAW_NOTION_TODO_URL),
-    todoDataSourceId: readOptionalString(env.POSTHOG_CLAW_NOTION_TODO_DATA_SOURCE_ID),
-    todoSearchTitle: readOptionalString(env.POSTHOG_CLAW_NOTION_TODO_TITLE) ?? "Pre Beta To Do",
+    token: readOptionalString(env.CLOG_NOTION_TOKEN) ?? readOptionalString(env.NOTION_SECRET),
+    requestTimeoutMs: Math.max(1_000, readInteger(env.CLOG_NOTION_REQUEST_TIMEOUT_MS, settings?.notion?.requestTimeoutMs ?? 30_000)),
+    todoPageUrl: readOptionalString(env.CLOG_NOTION_TODO_URL) ?? settings?.notion?.todoPageUrl?.trim() ?? null,
+    todoDataSourceId: readOptionalString(env.CLOG_NOTION_TODO_DATA_SOURCE_ID) ?? settings?.notion?.todoDataSourceId?.trim() ?? null,
+    todoSearchTitle: readOptionalString(env.CLOG_NOTION_TODO_TITLE) ?? settings?.notion?.todoSearchTitle?.trim() ?? "Pre Beta To Do",
   };
 };
 
@@ -365,18 +367,20 @@ export interface AgentEnvironment {
 }
 
 export const loadAgentEnvironment = (env: NodeJS.ProcessEnv = getRuntimeProcessEnv()): AgentEnvironment => {
-  const requestedChannels = readChannels(env.POSTHOG_CLAW_CHANNELS);
-  const canCreatePullRequest = readBoolean(env.POSTHOG_CLAW_GITHUB_PR, false);
-  const canPushBranch = readBoolean(env.POSTHOG_CLAW_GITHUB_PUSH, false);
-  const requestedPort = readInteger(env.PORT, 6900);
+  const canCreatePullRequest = readBoolean(env.CLOG_GITHUB_PR, false);
+  const canPushBranch = readBoolean(env.CLOG_GITHUB_PUSH, false);
   const storage = createRuntimeStorageConfig(env);
   const runtimeSettings = readRuntimeSettings(storage);
-  const posthog = createPostHogConfig(env, storage);
-  const ai = createAiConfig(env);
-  const telegram = createTelegramConfig(env);
-  const notion = createNotionConfig(env);
-  const channels = telegram.botToken ? appendChannel(requestedChannels, "telegram") : requestedChannels;
-  const monitorIntervalMs = readSettingsMonitorIntervalMs(runtimeSettings) ?? 60_000;
+  const requestedChannels: SurfaceChannelKind[] = env.CLOG_CHANNELS
+    ? readChannels(env.CLOG_CHANNELS)
+    : [...(runtimeSettings?.runtime?.channels ?? ["tui"])];
+  const requestedPort = readInteger(env.PORT, runtimeSettings?.runtime?.port ?? DEFAULT_RUNTIME_PORT);
+  const posthog = createPostHogConfig(env, storage, runtimeSettings);
+  const ai = createAiConfig(env, runtimeSettings);
+  const telegram = createTelegramConfig(env, runtimeSettings);
+  const notion = createNotionConfig(env, runtimeSettings);
+  const channels: SurfaceChannelKind[] = telegram.botToken ? appendChannel(requestedChannels, "telegram") : requestedChannels;
+  const monitorIntervalMs = readSettingsMonitorIntervalMs(runtimeSettings) ?? DEFAULT_MONITOR_INTERVAL_MS;
   const runtimeTools = readRuntimeToolsConfig(storage);
   const runtimeContext = buildRuntimeContextPrompt(runtimeSettings);
   const hidePosthogContextTools = Boolean(runtimeContext);
@@ -385,50 +389,50 @@ export const loadAgentEnvironment = (env: NodeJS.ProcessEnv = getRuntimeProcessE
     posthog: {
       canReadInsights: hasPostHogAccess && readToolFlag(
         runtimeTools?.posthog?.readInsights,
-        readBoolean(env.POSTHOG_CLAW_POSTHOG_READ_INSIGHTS, true),
+        readBoolean(env.CLOG_POSTHOG_READ_INSIGHTS, true),
       ),
       canReadErrors: hasPostHogAccess && readToolFlag(
         runtimeTools?.posthog?.readErrors,
-        readBoolean(env.POSTHOG_CLAW_POSTHOG_READ_ERRORS, true),
+        readBoolean(env.CLOG_POSTHOG_READ_ERRORS, true),
       ),
       canReadLogs: hasPostHogAccess && readToolFlag(
         runtimeTools?.posthog?.readLogs,
-        readBoolean(env.POSTHOG_CLAW_POSTHOG_READ_LOGS, false),
+        readBoolean(env.CLOG_POSTHOG_READ_LOGS, false),
       ),
       canReadFlags: hasPostHogAccess && readToolFlag(
         runtimeTools?.posthog?.readFlags,
-        readBoolean(env.POSTHOG_CLAW_POSTHOG_READ_FLAGS, false),
+        readBoolean(env.CLOG_POSTHOG_READ_FLAGS, false),
       ),
       canReadExperiments: hasPostHogAccess && readToolFlag(
         runtimeTools?.posthog?.readExperiments,
-        readBoolean(env.POSTHOG_CLAW_POSTHOG_READ_EXPERIMENTS, false),
+        readBoolean(env.CLOG_POSTHOG_READ_EXPERIMENTS, false),
       ),
       canManageEndpoints: hasPostHogAccess && readToolFlag(
         runtimeTools?.posthog?.manageEndpoints,
-        readBoolean(env.POSTHOG_CLAW_POSTHOG_MANAGE_ENDPOINTS, false),
+        readBoolean(env.CLOG_POSTHOG_MANAGE_ENDPOINTS, false),
       ),
-      canUploadSourcemaps: hasPostHogAccess && readBoolean(env.POSTHOG_CLAW_POSTHOG_UPLOAD_SOURCEMAPS, false),
+      canUploadSourcemaps: hasPostHogAccess && readBoolean(env.CLOG_POSTHOG_UPLOAD_SOURCEMAPS, false),
     },
     github: {
-      canReadRepository: readToolFlag(runtimeTools?.github?.readRepository, readBoolean(env.POSTHOG_CLAW_GITHUB_READ, false)),
+      canReadRepository: readToolFlag(runtimeTools?.github?.readRepository, readBoolean(env.CLOG_GITHUB_READ, false)),
       canCreatePullRequest: readToolFlag(runtimeTools?.github?.createPullRequests, canCreatePullRequest),
       canPushBranch: readToolFlag(runtimeTools?.github?.pushBranches, canPushBranch),
     },
     vercel: {
-      canTriggerDeploy: readToolFlag(runtimeTools?.vercel?.triggerDeploys, readBoolean(env.POSTHOG_CLAW_VERCEL_DEPLOY, false)),
+      canTriggerDeploy: readToolFlag(runtimeTools?.vercel?.triggerDeploys, readBoolean(env.CLOG_VERCEL_DEPLOY, false)),
     },
     chat: {
-      canSendOperatorMessages: readToolFlag(runtimeTools?.chat?.notifyOperator, readBoolean(env.POSTHOG_CLAW_CHAT_NOTIFY, true)),
+      canSendOperatorMessages: readToolFlag(runtimeTools?.chat?.notifyOperator, readBoolean(env.CLOG_CHAT_NOTIFY, true)),
       supportedChannels: channels,
     },
     notion: {
       canReadTodo: Boolean(notion.token) && readToolFlag(
         runtimeTools?.notion?.readTodo,
-        readBoolean(env.POSTHOG_CLAW_NOTION_READ_TODO, true),
+        readBoolean(env.CLOG_NOTION_READ_TODO, true),
       ),
     },
     shell: {
-      canExecute: readToolFlag(runtimeTools?.shell?.execute, readBoolean(env.POSTHOG_CLAW_SHELL_EXECUTE, false)),
+      canExecute: readToolFlag(runtimeTools?.shell?.execute, readBoolean(env.CLOG_SHELL_EXECUTE, false)),
       safeCommands: ["ls", "cat", "rg", "grep", "head", "tail", "wc", "find"],
       safeRoots: [
         storage.workspaceDir,
@@ -441,9 +445,9 @@ export const loadAgentEnvironment = (env: NodeJS.ProcessEnv = getRuntimeProcessE
   });
 
   return {
-    appName: env.POSTHOG_CLAW_APP_NAME?.trim() || "Clog",
-    port: Number.isFinite(requestedPort) ? requestedPort : 6900,
-    executionMode: readExecutionMode(env.POSTHOG_CLAW_EXECUTION_MODE),
+    appName: env.CLOG_APP_NAME?.trim() || runtimeSettings?.app?.name?.trim() || "Clog",
+    port: Number.isFinite(requestedPort) ? requestedPort : DEFAULT_RUNTIME_PORT,
+    executionMode: readExecutionMode(env.CLOG_EXECUTION_MODE ?? runtimeSettings?.runtime?.executionMode),
     monitorIntervalMs,
     runtimeContext,
     hidePosthogContextTools,
