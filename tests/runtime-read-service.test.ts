@@ -162,7 +162,15 @@ describe("RuntimeReadService", () => {
 
     const store = new InMemoryRuntimeStore();
     const alpha = store.createThread("tui", "Alpha checkout thread");
+    const staleTimestamp = Date.now() - 26 * 60 * 60 * 1_000;
     store.appendMessages(alpha.id, [
+      {
+        id: "msg_old_banana",
+        role: "user",
+        channel: "tui",
+        content: "BANANA from yesterday",
+        createdAt: staleTimestamp,
+      },
       store.createMessage("user", "tui", "Need help with BANANA pricing"),
       store.createMessage("agent", "tui", "Banana pricing is fixed"),
     ]);
@@ -192,13 +200,47 @@ describe("RuntimeReadService", () => {
       messageOffset: 0,
       messageLimit: 1,
     });
-    expect(page.totalMessages).toBe(2);
+    expect(page.totalMessages).toBe(3);
     expect(page.messages).toHaveLength(1);
+    expect(page.tokenBudget).toBe(3_000);
+    expect(page.returnedTokenEstimate).toBeGreaterThan(0);
     expect(page.hasMoreMessages).toBe(true);
+    expect(page.nextMessageOffset).toBe(1);
+    expect(page.remainingMessages).toBe(2);
+    expect(page.nextRequest).toEqual({
+      toolName: "runtime_get_conversation",
+      arguments: {
+        threadId: alpha.id,
+        messageOffset: 1,
+        tokenBudget: 3000,
+      },
+    });
+    expect(page.continuationHint).toContain(`threadId="${alpha.id}"`);
+
+    const recentPage = service.getConversation({
+      threadId: alpha.id,
+      timePreset: "last_hour",
+      messageLimit: 10,
+    });
+    expect(recentPage.totalMessages).toBe(2);
+    expect(recentPage.nextMessageOffset).toBeNull();
+    expect(recentPage.nextRequest).toBeNull();
+
+    const tokenBoundedPage = service.getConversation({
+      threadId: alpha.id,
+      tokenBudget: 12,
+    });
+    expect(tokenBoundedPage.messages).toHaveLength(1);
+    expect(tokenBoundedPage.hasMoreMessages).toBe(true);
+    expect(tokenBoundedPage.nextRequest?.arguments.tokenBudget).toBe(12);
+    expect(tokenBoundedPage.continuationHint).toContain("tokenBudget=12");
 
     const hits = service.searchMessages({ query: "banana", limit: 10 });
-    expect(hits.matches.length).toBe(3);
+    expect(hits.matches.length).toBe(4);
     expect(hits.truncated).toBe(false);
+
+    const recentHits = service.searchMessages({ query: "banana", limit: 10, timePreset: "last_hour" });
+    expect(recentHits.matches.length).toBe(3);
 
     const scoped = service.searchMessages({ query: "banana", threadId: beta.id, limit: 10 });
     expect(scoped.matches).toHaveLength(1);

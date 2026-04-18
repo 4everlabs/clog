@@ -169,6 +169,8 @@ export interface RuntimeToolServices {
     readonly limit?: number;
     readonly channel?: "web" | "telegram" | "tui" | "system";
     readonly titleContains?: string;
+    readonly timePreset?: "last_hour" | "last_12_hours" | "last_24_hours";
+    readonly windowMinutes?: number;
   }): {
     readonly generatedAt: number;
     readonly conversations: readonly unknown[];
@@ -177,6 +179,9 @@ export interface RuntimeToolServices {
     readonly threadId: string;
     readonly messageOffset?: number;
     readonly messageLimit?: number;
+    readonly tokenBudget?: number;
+    readonly timePreset?: "last_hour" | "last_12_hours" | "last_24_hours";
+    readonly windowMinutes?: number;
   }): {
     readonly generatedAt: number;
     readonly thread: unknown;
@@ -184,7 +189,22 @@ export interface RuntimeToolServices {
     readonly totalMessages: number;
     readonly messageOffset: number;
     readonly messageLimit: number;
+    readonly tokenBudget: number;
+    readonly returnedTokenEstimate: number;
     readonly hasMoreMessages: boolean;
+    readonly nextMessageOffset: number | null;
+    readonly remainingMessages: number;
+    readonly nextRequest: {
+      readonly toolName: "runtime_get_conversation";
+      readonly arguments: {
+        readonly threadId: string;
+        readonly messageOffset: number;
+        readonly tokenBudget: number;
+        readonly timePreset?: "last_hour" | "last_12_hours" | "last_24_hours";
+        readonly windowMinutes?: number;
+      };
+    } | null;
+    readonly continuationHint: string | null;
   };
   searchMessages(input: {
     readonly query: string;
@@ -192,6 +212,8 @@ export interface RuntimeToolServices {
     readonly channel?: "web" | "telegram" | "tui" | "system";
     readonly limit?: number;
     readonly caseSensitive?: boolean;
+    readonly timePreset?: "last_hour" | "last_12_hours" | "last_24_hours";
+    readonly windowMinutes?: number;
   }): {
     readonly generatedAt: number;
     readonly matches: readonly unknown[];

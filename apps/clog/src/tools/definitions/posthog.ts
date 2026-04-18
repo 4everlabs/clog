@@ -6,12 +6,8 @@ import {
   PostHogEndpointRunInputSchema,
   PostHogGetDashboardSnapshotInputSchema,
   PostHogGetDashboardSnapshotResultSchema,
-  PostHogGetHealthSummaryInputSchema,
-  PostHogGetHealthSummaryResultSchema,
   PostHogGetAssetSummaryInputSchema,
   PostHogGetAssetSummaryResultSchema,
-  PostHogGetReleaseSummaryInputSchema,
-  PostHogGetReleaseSummaryResultSchema,
   PostHogGetDashboardInputSchema,
   PostHogGetDashboardResultSchema,
   PostHogGetDocumentedToolCatalogInputSchema,
@@ -26,12 +22,18 @@ import {
   PostHogGetFeatureFlagResultSchema,
   PostHogGetFeatureFlagStatusInputSchema,
   PostHogGetFeatureFlagStatusResultSchema,
+  PostHogGetHealthSummaryInputSchema,
+  PostHogGetHealthSummaryResultSchema,
+  PostHogGetInfoInputSchema,
+  PostHogGetInfoResultSchema,
   PostHogGetInsightInputSchema,
   PostHogGetInsightResultSchema,
   PostHogGetOrganizationsInputSchema,
   PostHogGetOrganizationsResultSchema,
   PostHogGetProjectsInputSchema,
   PostHogGetProjectsResultSchema,
+  PostHogGetReleaseSummaryInputSchema,
+  PostHogGetReleaseSummaryResultSchema,
   PostHogInsightQueryResultSchema,
   PostHogListDashboardsInputSchema,
   PostHogListDashboardsResultSchema,
@@ -69,6 +71,7 @@ import {
   normalizePostHogExperiment,
   normalizePostHogExperimentResults,
   normalizePostHogExperiments,
+  normalizePostHogEntityList,
   normalizePostHogFeatureFlag,
   normalizePostHogFeatureFlagBlastRadius,
   normalizePostHogFeatureFlagStatus,
@@ -79,11 +82,6 @@ import {
   normalizePostHogLogQuery,
   normalizePostHogSchemaEntities,
   normalizePostHogSqlResult,
-  normalizePostHogEntityList,
-  normalizePostHogExperiments,
-  normalizePostHogFeatureFlags,
-  normalizePostHogLogAttributes,
-  normalizePostHogSchemaEntities,
 } from "../../integrations/posthog/native-tool-normalizers";
 import {
   buildPostHogAssetSummary,
@@ -92,6 +90,7 @@ import {
 } from "../../integrations/posthog/summary-builders";
 import type { RuntimeObservation } from "@clog/types";
 import type { RegisteredTool } from "../types";
+import { buildTimeRangeDescriptor, resolveTimeRangeWindowMinutes } from "../time-range";
 
 const toRecord = (entries: readonly { key: string; value: string }[] | undefined): Record<string, string> | undefined => {
   if (!entries || entries.length === 0) {
@@ -99,6 +98,256 @@ const toRecord = (entries: readonly { key: string; value: string }[] | undefined
   }
 
   return Object.fromEntries(entries.map((entry) => [entry.key, entry.value]));
+};
+
+const buildPostHogHealthSummaryData = async (
+  services: Parameters<NonNullable<RegisteredTool["execute"]>>[0],
+  input: {
+    readonly context?: string;
+    readonly timePreset?: "last_hour" | "last_12_hours" | "last_24_hours";
+    readonly windowMinutes?: number;
+    readonly topPathsLimit?: number;
+    readonly reportLimit?: number;
+    readonly operationHistoryLimit?: number;
+  },
+) => {
+  if (!services.posthog) {
+    throw new Error("PostHog services are unavailable");
+  }
+
+  if (!services.runtime) {
+    throw new Error("Runtime services are unavailable");
+  }
+
+  const timeRange = buildTimeRangeDescriptor(input.timePreset, input.windowMinutes);
+  const windowMinutes = resolveTimeRangeWindowMinutes(input.timePreset, input.windowMinutes);
+  const [dashboard, monitoring] = await Promise.all([
+    services.posthog.getDashboardSnapshot({
+      windowMinutes,
+      topPathsLimit: input.topPathsLimit,
+    }),
+    Promise.resolve(services.runtime.getMonitoringSnapshot({
+      reportLimit: input.reportLimit,
+      operationHistoryLimit: input.operationHistoryLimit,
+    })),
+  ]);
+
+  return buildPostHogHealthSummary(dashboard, {
+    latestPerformanceReport: monitoring.latestPerformanceReport,
+    recentPostHogOperations: monitoring.recentPostHogOperations,
+  }, {
+    context: input.context ?? null,
+    timeRange,
+  });
+};
+
+const buildPostHogAssetSummaryData = async (
+  services: Parameters<NonNullable<RegisteredTool["execute"]>>[0],
+  input: {
+    readonly context?: string;
+    readonly dashboardLimit?: number;
+    readonly insightLimit?: number;
+    readonly entitySearchQuery?: string;
+    readonly entitySearchLimit?: number;
+    readonly schemaSearch?: string;
+    readonly schemaLimit?: number;
+  },
+) => {
+  if (!services.posthog) {
+    throw new Error("PostHog services are unavailable");
+  }
+
+  const dashboardLimit = input.dashboardLimit ?? 12;
+  const insightLimit = input.insightLimit ?? 12;
+  const generatedAt = Date.now();
+
+  let dashboardList = normalizePostHogDashboardList({
+    text: "",
+    structuredContent: { dashboards: [] },
+  });
+  try {
+    dashboardList = normalizePostHogDashboardList(await services.posthog.callMcpTool("dashboards-get-all", {
+      limit: dashboardLimit,
+      offset: 0,
+    }));
+  } catch {
+    dashboardList = { total: 0, dashboards: [], text: undefined };
+  }
+
+  let insightList = normalizePostHogInsightList({
+    text: "",
+    structuredContent: { insights: [] },
+  });
+  try {
+    insightList = normalizePostHogInsightList(await services.posthog.callMcpTool("insights-get-all", {
+      limit: insightLimit,
+      offset: 0,
+    }));
+  } catch {
+    insightList = { total: 0, insights: [], text: undefined };
+  }
+
+  let entityHits = normalizePostHogEntityList({ text: "", structuredContent: { results: [] } }, ["results"]);
+  if (input.entitySearchQuery) {
+    try {
+      entityHits = normalizePostHogEntityList(await services.posthog.callMcpTool("entity-search", {
+        query: input.entitySearchQuery,
+        limit: input.entitySearchLimit ?? 12,
+      }), ["results", "entities", "items", "data"]);
+    } catch {
+      entityHits = { total: 0, entities: [], text: undefined };
+    }
+  } else {
+    entityHits = { total: 0, entities: [], text: undefined };
+  }
+
+  let schemaEntities = normalizePostHogSchemaEntities({ text: "", structuredContent: {} }, ["events"]);
+  if (input.schemaSearch) {
+    try {
+      schemaEntities = normalizePostHogSchemaEntities(await services.posthog.callMcpTool("read-data-schema", {
+        search: input.schemaSearch,
+        limit: input.schemaLimit ?? 20,
+      }), ["events", "actions", "properties", "results", "items"]);
+    } catch {
+      schemaEntities = { total: 0, entities: [], text: undefined, raw: undefined };
+    }
+  } else {
+    schemaEntities = { total: 0, entities: [], text: undefined, raw: undefined };
+  }
+
+  return buildPostHogAssetSummary({
+    dashboards: dashboardList.dashboards.map((dashboard) => ({
+      id: dashboard.id,
+      name: dashboard.name,
+    })),
+    insights: insightList.insights.map((insight) => ({
+      id: insight.id,
+      name: insight.name,
+    })),
+    entityHits: entityHits.entities.map((entity) => ({
+      id: entity.id,
+      type: entity.type,
+      name: entity.name,
+    })),
+    schemaEntities: schemaEntities.entities.map((entity) => ({
+      name: entity.name,
+      kind: entity.kind,
+    })),
+    totals: {
+      dashboardsListed: dashboardList.total,
+      insightsListed: insightList.total,
+      entityHits: entityHits.total,
+      schemaEntities: schemaEntities.total,
+    },
+  }, generatedAt, {
+    context: input.context ?? null,
+    timeRange: buildTimeRangeDescriptor(),
+  });
+};
+
+const buildPostHogReleaseSummaryData = async (
+  services: Parameters<NonNullable<RegisteredTool["execute"]>>[0],
+  input: {
+    readonly context?: string;
+    readonly timePreset?: "last_hour" | "last_12_hours" | "last_24_hours";
+    readonly windowMinutes?: number;
+    readonly flagLimit?: number;
+    readonly experimentLimit?: number;
+    readonly includeErrorObservations?: boolean;
+    readonly observationLimit?: number;
+    readonly includeLogAttributes?: boolean;
+    readonly logAttributeLimit?: number;
+  },
+) => {
+  if (!services.posthog) {
+    throw new Error("PostHog services are unavailable");
+  }
+
+  const flagLimit = input.flagLimit ?? 30;
+  const experimentLimit = input.experimentLimit ?? 30;
+  const observationLimit = input.observationLimit ?? 10;
+  const logAttributeLimit = input.logAttributeLimit ?? 15;
+  const generatedAt = Date.now();
+
+  let flags = normalizePostHogFeatureFlags({ text: "", structuredContent: { flags: [] } });
+  try {
+    flags = normalizePostHogFeatureFlags(await services.posthog.callMcpTool("feature-flag-get-all", {
+      limit: flagLimit,
+      offset: 0,
+    }));
+  } catch {
+    flags = { total: 0, flags: [], text: undefined };
+  }
+
+  let experiments = normalizePostHogExperiments({ text: "", structuredContent: { experiments: [] } });
+  try {
+    experiments = normalizePostHogExperiments(await services.posthog.callMcpTool("experiment-get-all", {
+      limit: experimentLimit,
+      offset: 0,
+    }));
+  } catch {
+    experiments = { total: 0, experiments: [], text: undefined };
+  }
+
+  let observations: readonly RuntimeObservation[] = [];
+  if (input.includeErrorObservations) {
+    try {
+      observations = await services.posthog.listErrors();
+    } catch {
+      observations = [];
+    }
+  }
+
+  let logAttributes = normalizePostHogLogAttributes({ text: "", structuredContent: { attributes: [] } });
+  if (input.includeLogAttributes) {
+    try {
+      logAttributes = normalizePostHogLogAttributes(await services.posthog.callMcpTool("logs-list-attributes", {}));
+    } catch {
+      logAttributes = { total: 0, attributes: [], text: undefined };
+    }
+  }
+
+  const errorObservations = (input.includeErrorObservations ? observations : [])
+    .slice(0, observationLimit)
+    .map((observation, index) => ({
+      id: observation.id.trim().length > 0 ? observation.id : `observation_${index}`,
+      severity: observation.severity,
+      summary: observation.summary,
+    }));
+
+  const logAttributeRows = (input.includeLogAttributes ? logAttributes.attributes : [])
+    .slice(0, logAttributeLimit)
+    .map((attribute) => ({
+      key: attribute.key,
+      type: attribute.type,
+    }));
+
+  return buildPostHogReleaseSummary({
+    flags: flags.flags.map((flag) => ({
+      key: flag.key,
+      name: flag.name,
+      active: flag.active,
+      rolloutPercentage: flag.rolloutPercentage,
+      status: flag.status,
+    })),
+    experiments: experiments.experiments.map((experiment) => ({
+      id: experiment.id,
+      name: experiment.name,
+      status: experiment.status,
+      featureFlagKey: experiment.featureFlagKey,
+    })),
+    errorObservations,
+    logAttributes: logAttributeRows,
+    totals: {
+      flags: flags.total,
+      experiments: experiments.total,
+      errorObservations: input.includeErrorObservations ? observations.length : 0,
+      logAttributes: input.includeLogAttributes ? logAttributes.total : 0,
+    },
+  }, generatedAt, {
+    context: input.context ?? null,
+    timeRange: buildTimeRangeDescriptor(input.timePreset, input.windowMinutes),
+  });
 };
 
 export const posthogTools = [
@@ -263,7 +512,46 @@ export const posthogTools = [
         throw new Error("PostHog services are unavailable");
       }
 
-      return await services.posthog.getDashboardSnapshot(input);
+      return await services.posthog.getDashboardSnapshot({
+        windowMinutes: resolveTimeRangeWindowMinutes(input.timePreset, input.windowMinutes),
+        topPathsLimit: input.topPathsLimit,
+      });
+    },
+  },
+  {
+    name: "posthog_get_info",
+    title: "PostHog Get Info",
+    description: "Generic PostHog info entrypoint that resolves a context-aware health, asset, or release summary and points to the focused follow-up tools.",
+    integration: "posthog",
+    approvalRequired: false,
+    implemented: true,
+    inputSchema: PostHogGetInfoInputSchema,
+    outputSchema: PostHogGetInfoResultSchema,
+    isEnabled(capabilities) {
+      return capabilities.posthog.canReadInsights;
+    },
+    async execute(services, input) {
+      const suggestedTools = input.kind === "health"
+        ? ["posthog_get_health_summary", "posthog_get_dashboard_snapshot", "posthog_list_errors"]
+        : input.kind === "assets"
+          ? ["posthog_get_asset_summary", "posthog_list_dashboards", "posthog_list_insights", "posthog_search_entities"]
+          : ["posthog_get_release_summary", "posthog_list_feature_flags", "posthog_list_experiments"];
+
+      const data = input.kind === "health"
+        ? await buildPostHogHealthSummaryData(services, input)
+        : input.kind === "assets"
+          ? await buildPostHogAssetSummaryData(services, input)
+          : await buildPostHogReleaseSummaryData(services, input);
+
+      return {
+        generatedAt: data.generatedAt,
+        kind: input.kind,
+        context: input.context?.trim() || null,
+        timeRange: data.timeRange,
+        suggestedTools,
+        printout: data.printout,
+        data,
+      };
     },
   },
   {
@@ -279,29 +567,7 @@ export const posthogTools = [
       return capabilities.posthog.canReadInsights;
     },
     async execute(services, input) {
-      if (!services.posthog) {
-        throw new Error("PostHog services are unavailable");
-      }
-
-      if (!services.runtime) {
-        throw new Error("Runtime services are unavailable");
-      }
-
-      const [dashboard, monitoring] = await Promise.all([
-        services.posthog.getDashboardSnapshot({
-          windowMinutes: input.windowMinutes,
-          topPathsLimit: input.topPathsLimit,
-        }),
-        Promise.resolve(services.runtime.getMonitoringSnapshot({
-          reportLimit: input.reportLimit,
-          operationHistoryLimit: input.operationHistoryLimit,
-        })),
-      ]);
-
-      return buildPostHogHealthSummary(dashboard, {
-        latestPerformanceReport: monitoring.latestPerformanceReport,
-        recentPostHogOperations: monitoring.recentPostHogOperations,
-      });
+      return await buildPostHogHealthSummaryData(services, input);
     },
   },
   {
@@ -317,93 +583,7 @@ export const posthogTools = [
       return capabilities.posthog.canReadInsights;
     },
     async execute(services, input) {
-      if (!services.posthog) {
-        throw new Error("PostHog services are unavailable");
-      }
-
-      const dashboardLimit = input.dashboardLimit ?? 12;
-      const insightLimit = input.insightLimit ?? 12;
-      const generatedAt = Date.now();
-
-      let dashboardList = normalizePostHogDashboardList({
-        text: "",
-        structuredContent: { dashboards: [] },
-      });
-      try {
-        dashboardList = normalizePostHogDashboardList(await services.posthog.callMcpTool("dashboards-get-all", {
-          limit: dashboardLimit,
-          offset: 0,
-        }));
-      } catch {
-        dashboardList = { total: 0, dashboards: [], text: undefined };
-      }
-
-      let insightList = normalizePostHogInsightList({
-        text: "",
-        structuredContent: { insights: [] },
-      });
-      try {
-        insightList = normalizePostHogInsightList(await services.posthog.callMcpTool("insights-get-all", {
-          limit: insightLimit,
-          offset: 0,
-        }));
-      } catch {
-        insightList = { total: 0, insights: [], text: undefined };
-      }
-
-      let entityHits = normalizePostHogEntityList({ text: "", structuredContent: { results: [] } }, ["results"]);
-      if (input.entitySearchQuery) {
-        try {
-          entityHits = normalizePostHogEntityList(await services.posthog.callMcpTool("entity-search", {
-            query: input.entitySearchQuery,
-            limit: input.entitySearchLimit ?? 12,
-          }), ["results", "entities", "items", "data"]);
-        } catch {
-          entityHits = { total: 0, entities: [], text: undefined };
-        }
-      } else {
-        entityHits = { total: 0, entities: [], text: undefined };
-      }
-
-      let schemaEntities = normalizePostHogSchemaEntities({ text: "", structuredContent: {} }, ["events"]);
-      if (input.schemaSearch) {
-        try {
-          schemaEntities = normalizePostHogSchemaEntities(await services.posthog.callMcpTool("read-data-schema", {
-            search: input.schemaSearch,
-            limit: input.schemaLimit ?? 20,
-          }), ["events", "actions", "properties", "results", "items"]);
-        } catch {
-          schemaEntities = { total: 0, entities: [], text: undefined, raw: undefined };
-        }
-      } else {
-        schemaEntities = { total: 0, entities: [], text: undefined, raw: undefined };
-      }
-
-      return buildPostHogAssetSummary({
-        dashboards: dashboardList.dashboards.map((dashboard) => ({
-          id: dashboard.id,
-          name: dashboard.name,
-        })),
-        insights: insightList.insights.map((insight) => ({
-          id: insight.id,
-          name: insight.name,
-        })),
-        entityHits: entityHits.entities.map((entity) => ({
-          id: entity.id,
-          type: entity.type,
-          name: entity.name,
-        })),
-        schemaEntities: schemaEntities.entities.map((entity) => ({
-          name: entity.name,
-          kind: entity.kind,
-        })),
-        totals: {
-          dashboardsListed: dashboardList.total,
-          insightsListed: insightList.total,
-          entityHits: entityHits.total,
-          schemaEntities: schemaEntities.total,
-        },
-      }, generatedAt);
+      return await buildPostHogAssetSummaryData(services, input);
     },
   },
   {
@@ -419,92 +599,7 @@ export const posthogTools = [
       return capabilities.posthog.canReadInsights;
     },
     async execute(services, input) {
-      if (!services.posthog) {
-        throw new Error("PostHog services are unavailable");
-      }
-
-      const flagLimit = input.flagLimit ?? 30;
-      const experimentLimit = input.experimentLimit ?? 30;
-      const observationLimit = input.observationLimit ?? 10;
-      const logAttributeLimit = input.logAttributeLimit ?? 15;
-      const generatedAt = Date.now();
-
-      let flags = normalizePostHogFeatureFlags({ text: "", structuredContent: { flags: [] } });
-      try {
-        flags = normalizePostHogFeatureFlags(await services.posthog.callMcpTool("feature-flag-get-all", {
-          limit: flagLimit,
-          offset: 0,
-        }));
-      } catch {
-        flags = { total: 0, flags: [], text: undefined };
-      }
-
-      let experiments = normalizePostHogExperiments({ text: "", structuredContent: { experiments: [] } });
-      try {
-        experiments = normalizePostHogExperiments(await services.posthog.callMcpTool("experiment-get-all", {
-          limit: experimentLimit,
-          offset: 0,
-        }));
-      } catch {
-        experiments = { total: 0, experiments: [], text: undefined };
-      }
-
-      let observations: readonly RuntimeObservation[] = [];
-      if (input.includeErrorObservations) {
-        try {
-          observations = await services.posthog.listErrors();
-        } catch {
-          observations = [];
-        }
-      }
-
-      let logAttributes = normalizePostHogLogAttributes({ text: "", structuredContent: { attributes: [] } });
-      if (input.includeLogAttributes) {
-        try {
-          logAttributes = normalizePostHogLogAttributes(await services.posthog.callMcpTool("logs-list-attributes", {}));
-        } catch {
-          logAttributes = { total: 0, attributes: [], text: undefined };
-        }
-      }
-
-      const errorObservations = (input.includeErrorObservations ? observations : [])
-        .slice(0, observationLimit)
-        .map((observation, index) => ({
-          id: observation.id.trim().length > 0 ? observation.id : `observation_${index}`,
-          severity: observation.severity,
-          summary: observation.summary,
-        }));
-
-      const logAttributeRows = (input.includeLogAttributes ? logAttributes.attributes : [])
-        .slice(0, logAttributeLimit)
-        .map((attribute) => ({
-          key: attribute.key,
-          type: attribute.type,
-        }));
-
-      return buildPostHogReleaseSummary({
-        flags: flags.flags.map((flag) => ({
-          key: flag.key,
-          name: flag.name,
-          active: flag.active,
-          rolloutPercentage: flag.rolloutPercentage,
-          status: flag.status,
-        })),
-        experiments: experiments.experiments.map((experiment) => ({
-          id: experiment.id,
-          name: experiment.name,
-          status: experiment.status,
-          featureFlagKey: experiment.featureFlagKey,
-        })),
-        errorObservations,
-        logAttributes: logAttributeRows,
-        totals: {
-          flags: flags.total,
-          experiments: experiments.total,
-          errorObservations: input.includeErrorObservations ? observations.length : 0,
-          logAttributes: input.includeLogAttributes ? logAttributes.total : 0,
-        },
-      }, generatedAt);
+      return await buildPostHogReleaseSummaryData(services, input);
     },
   },
   {

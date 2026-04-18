@@ -10,6 +10,7 @@ import {
 } from "../integrations/posthog/workspace-reporter";
 import type { SurfaceChannelKind } from "@clog/types";
 import type { RuntimeStore } from "../storage/chat";
+import { resolveSinceTimestamp } from "../tools/time-range";
 
 const DEFAULT_THREAD_LIMIT = 3;
 const DEFAULT_MESSAGE_LIMIT = 6;
@@ -25,8 +26,10 @@ const DEFAULT_MONITORING_REPORT_LIMIT = 3;
 const DEFAULT_MONITORING_OPERATION_HISTORY_LIMIT = 4;
 const DEFAULT_CONVERSATION_LIST_LIMIT = 50;
 const DEFAULT_CONVERSATION_MESSAGE_LIMIT = 100;
+const DEFAULT_CONVERSATION_TOKEN_BUDGET = 3_000;
 const DEFAULT_MESSAGE_SEARCH_LIMIT = 30;
 const MESSAGE_SNIPPET_MAX_CHARS = 280;
+const APPROX_CHARS_PER_TOKEN = 4;
 
 const readTextIfExists = (path: string): string | null => {
   if (!existsSync(path)) {
@@ -184,12 +187,17 @@ export interface RuntimeListConversationsInput {
   readonly limit?: number;
   readonly channel?: SurfaceChannelKind;
   readonly titleContains?: string;
+  readonly timePreset?: "last_hour" | "last_12_hours" | "last_24_hours";
+  readonly windowMinutes?: number;
 }
 
 export interface RuntimeGetConversationInput {
   readonly threadId: string;
   readonly messageOffset?: number;
   readonly messageLimit?: number;
+  readonly tokenBudget?: number;
+  readonly timePreset?: "last_hour" | "last_12_hours" | "last_24_hours";
+  readonly windowMinutes?: number;
 }
 
 export interface RuntimeSearchMessagesInput {
@@ -198,6 +206,8 @@ export interface RuntimeSearchMessagesInput {
   readonly channel?: SurfaceChannelKind;
   readonly limit?: number;
   readonly caseSensitive?: boolean;
+  readonly timePreset?: "last_hour" | "last_12_hours" | "last_24_hours";
+  readonly windowMinutes?: number;
 }
 
 interface WorkspaceOperationHistoryEntry {
@@ -391,9 +401,15 @@ export class RuntimeReadService {
   listConversations(input: RuntimeListConversationsInput = {}) {
     const limit = clamp(input.limit, DEFAULT_CONVERSATION_LIST_LIMIT, 100);
     const titleNeedle = input.titleContains?.trim().toLowerCase() ?? "";
+    const now = Date.now();
+    const sinceTimestamp = resolveSinceTimestamp(now, input.timePreset, input.windowMinutes);
     let threads = this.store.listThreads();
     if (input.channel) {
       threads = threads.filter((thread) => thread.channel === input.channel);
+    }
+
+    if (sinceTimestamp !== null) {
+      threads = threads.filter((thread) => thread.updatedAt >= sinceTimestamp);
     }
 
     if (titleNeedle.length > 0) {
@@ -419,10 +435,64 @@ export class RuntimeReadService {
       throw new Error(`Conversation not found: ${input.threadId}`);
     }
 
-    const totalMessages = thread.messages.length;
+    const sinceTimestamp = resolveSinceTimestamp(Date.now(), input.timePreset, input.windowMinutes);
+    const filteredMessages = sinceTimestamp === null
+      ? thread.messages
+      : thread.messages.filter((message) => message.createdAt >= sinceTimestamp);
+    const totalMessages = filteredMessages.length;
     const messageOffset = Math.max(0, Math.trunc(input.messageOffset ?? 0));
     const messageLimit = clamp(input.messageLimit, DEFAULT_CONVERSATION_MESSAGE_LIMIT, 500);
-    const slice = thread.messages.slice(messageOffset, messageOffset + messageLimit);
+    const tokenBudget = clamp(input.tokenBudget, DEFAULT_CONVERSATION_TOKEN_BUDGET, 20_000);
+    const slice: typeof filteredMessages = [];
+    let returnedTokenEstimate = 0;
+
+    for (const message of filteredMessages.slice(messageOffset)) {
+      if (slice.length >= messageLimit) {
+        break;
+      }
+
+      const estimatedTokens = this.estimateConversationMessageTokens(message.content, message.role);
+      if (slice.length > 0 && returnedTokenEstimate + estimatedTokens > tokenBudget) {
+        break;
+      }
+
+      slice.push(message);
+      returnedTokenEstimate += estimatedTokens;
+    }
+
+    if (slice.length === 0 && filteredMessages[messageOffset]) {
+      const firstMessage = filteredMessages[messageOffset]!;
+      slice.push(firstMessage);
+      returnedTokenEstimate = this.estimateConversationMessageTokens(firstMessage.content, firstMessage.role);
+    }
+
+    const nextMessageOffset = messageOffset + slice.length < totalMessages
+      ? messageOffset + slice.length
+      : null;
+    const remainingMessages = nextMessageOffset === null ? 0 : totalMessages - nextMessageOffset;
+    const nextRequest = nextMessageOffset === null
+      ? null
+      : {
+          toolName: "runtime_get_conversation" as const,
+          arguments: {
+            threadId: thread.id,
+            messageOffset: nextMessageOffset,
+            tokenBudget,
+            ...(input.timePreset ? { timePreset: input.timePreset } : {}),
+            ...(!input.timePreset && typeof input.windowMinutes === "number" && Number.isFinite(input.windowMinutes)
+              ? { windowMinutes: Math.trunc(input.windowMinutes) }
+              : {}),
+          },
+        };
+    const continuationHint = nextMessageOffset === null
+      ? null
+      : this.buildConversationContinuationHint({
+          threadId: thread.id,
+          nextMessageOffset,
+          tokenBudget,
+          timePreset: input.timePreset,
+          windowMinutes: input.windowMinutes,
+        });
 
     return {
       generatedAt: Date.now(),
@@ -443,7 +513,13 @@ export class RuntimeReadService {
       totalMessages,
       messageOffset,
       messageLimit,
-      hasMoreMessages: messageOffset + slice.length < totalMessages,
+      tokenBudget,
+      returnedTokenEstimate,
+      hasMoreMessages: nextMessageOffset !== null,
+      nextMessageOffset,
+      remainingMessages,
+      nextRequest,
+      continuationHint,
     };
   }
 
@@ -452,6 +528,7 @@ export class RuntimeReadService {
     const queryRaw = input.query.trim();
     const caseSensitive = Boolean(input.caseSensitive);
     const needle = caseSensitive ? queryRaw : queryRaw.toLowerCase();
+    const sinceTimestamp = resolveSinceTimestamp(Date.now(), input.timePreset, input.windowMinutes);
 
     const threads = input.threadId
       ? [this.store.getThread(input.threadId.trim())].filter((thread): thread is NonNullable<typeof thread> => Boolean(thread))
@@ -475,6 +552,10 @@ export class RuntimeReadService {
 
     outer: for (const thread of filteredThreads) {
       for (const message of thread.messages) {
+        if (sinceTimestamp !== null && message.createdAt < sinceTimestamp) {
+          continue;
+        }
+
         const haystack = caseSensitive ? message.content : message.content.toLowerCase();
         if (!haystack.includes(needle)) {
           continue;
@@ -628,5 +709,34 @@ export class RuntimeReadService {
     }
 
     return current;
+  }
+
+  private estimateConversationMessageTokens(
+    content: string,
+    role: "system" | "user" | "agent",
+  ): number {
+    return Math.max(1, Math.ceil(content.length / APPROX_CHARS_PER_TOKEN) + role.length + 6);
+  }
+
+  private buildConversationContinuationHint(input: {
+    readonly threadId: string;
+    readonly nextMessageOffset: number;
+    readonly tokenBudget: number;
+    readonly timePreset?: "last_hour" | "last_12_hours" | "last_24_hours";
+    readonly windowMinutes?: number;
+  }): string {
+    const parts = [
+      `Call runtime_get_conversation with threadId=\"${input.threadId}\"`,
+      `messageOffset=${input.nextMessageOffset}`,
+      `tokenBudget=${input.tokenBudget}`,
+    ];
+
+    if (input.timePreset) {
+      parts.push(`timePreset=\"${input.timePreset}\"`);
+    } else if (typeof input.windowMinutes === "number" && Number.isFinite(input.windowMinutes)) {
+      parts.push(`windowMinutes=${Math.trunc(input.windowMinutes)}`);
+    }
+
+    return `${parts.join(", ")} to read the next chunk.`;
   }
 }

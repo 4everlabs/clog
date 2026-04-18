@@ -78,6 +78,7 @@ export const AgentToolNameSchema = z.enum([
   "posthog_list_errors",
   "posthog_run_query",
   "posthog_get_dashboard_snapshot",
+  "posthog_get_info",
   "posthog_get_health_summary",
   "posthog_get_asset_summary",
   "posthog_get_release_summary",
@@ -107,6 +108,7 @@ export const AgentToolNameSchema = z.enum([
   "posthog_run_endpoint",
   "notion_get_todo_list",
   "runtime_get_state_snapshot",
+  "runtime_get_info",
   "runtime_list_conversations",
   "runtime_get_conversation",
   "runtime_search_messages",
@@ -147,6 +149,18 @@ export const ObservationSourceSchema = z.object({
 export const KeyValueEntrySchema = z.object({
   key: z.string().min(1),
   value: z.string(),
+}).strict();
+
+export const TimeRangePresetSchema = z.enum([
+  "last_hour",
+  "last_12_hours",
+  "last_24_hours",
+]);
+
+export const TimeRangeDescriptorSchema = z.object({
+  preset: TimeRangePresetSchema.nullable(),
+  windowMinutes: z.number().int().positive().nullable(),
+  label: z.string().min(1).nullable(),
 }).strict();
 
 export const RuntimeObservationSchema = z.object({
@@ -254,6 +268,7 @@ const PostHogDashboardAnomalySchema = z.object({
 }).strict();
 
 export const PostHogGetDashboardSnapshotInputSchema = z.object({
+  timePreset: TimeRangePresetSchema.optional(),
   windowMinutes: z.number().int().positive().max(1_440).optional(),
   topPathsLimit: z.number().int().positive().max(20).optional(),
 }).strict();
@@ -294,6 +309,8 @@ const PostHogHealthSummaryAnomalySchema = z.object({
 }).strict();
 
 export const PostHogGetHealthSummaryInputSchema = z.object({
+  context: z.string().min(1).optional(),
+  timePreset: TimeRangePresetSchema.optional(),
   windowMinutes: z.number().int().positive().max(1_440).optional(),
   topPathsLimit: z.number().int().positive().max(20).optional(),
   reportLimit: z.number().int().positive().max(10).optional(),
@@ -302,6 +319,8 @@ export const PostHogGetHealthSummaryInputSchema = z.object({
 
 export const PostHogGetHealthSummaryResultSchema = z.object({
   generatedAt: z.number().int().nonnegative(),
+  context: z.string().min(1).nullable(),
+  timeRange: TimeRangeDescriptorSchema,
   dashboard: z.object({
     windowMinutes: z.number().int().positive(),
     productionReadinessScore: z.number().int().min(0).max(100),
@@ -323,6 +342,7 @@ export const PostHogGetHealthSummaryResultSchema = z.object({
 }).strict();
 
 export const PostHogGetAssetSummaryInputSchema = z.object({
+  context: z.string().min(1).optional(),
   dashboardLimit: z.number().int().positive().max(40).optional(),
   insightLimit: z.number().int().positive().max(40).optional(),
   entitySearchQuery: z.string().min(1).optional(),
@@ -354,6 +374,8 @@ const PostHogAssetSchemaRowSchema = z.object({
 
 export const PostHogGetAssetSummaryResultSchema = z.object({
   generatedAt: z.number().int().nonnegative(),
+  context: z.string().min(1).nullable(),
+  timeRange: TimeRangeDescriptorSchema,
   dashboards: z.array(PostHogAssetDashboardRowSchema),
   insights: z.array(PostHogAssetInsightRowSchema),
   entityHits: z.array(PostHogAssetEntityHitSchema),
@@ -368,6 +390,9 @@ export const PostHogGetAssetSummaryResultSchema = z.object({
 }).strict();
 
 export const PostHogGetReleaseSummaryInputSchema = z.object({
+  context: z.string().min(1).optional(),
+  timePreset: TimeRangePresetSchema.optional(),
+  windowMinutes: z.number().int().positive().max(1_440).optional(),
   flagLimit: z.number().int().positive().max(80).optional(),
   experimentLimit: z.number().int().positive().max(80).optional(),
   includeErrorObservations: z.boolean().optional(),
@@ -404,6 +429,8 @@ const PostHogReleaseLogAttributeSummarySchema = z.object({
 
 export const PostHogGetReleaseSummaryResultSchema = z.object({
   generatedAt: z.number().int().nonnegative(),
+  context: z.string().min(1).nullable(),
+  timeRange: TimeRangeDescriptorSchema,
   flags: z.array(PostHogReleaseFlagSummarySchema),
   experiments: z.array(PostHogReleaseExperimentSummarySchema),
   errorObservations: z.array(PostHogReleaseObservationSummarySchema),
@@ -415,6 +442,38 @@ export const PostHogGetReleaseSummaryResultSchema = z.object({
     logAttributes: z.number().int().nonnegative(),
   }).strict(),
   printout: z.string().min(1),
+}).strict();
+
+export const PostHogGetInfoInputSchema = z.object({
+  kind: z.enum(["health", "assets", "release"]),
+  context: z.string().min(1).optional(),
+  timePreset: TimeRangePresetSchema.optional(),
+  windowMinutes: z.number().int().positive().max(1_440).optional(),
+  topPathsLimit: z.number().int().positive().max(20).optional(),
+  reportLimit: z.number().int().positive().max(10).optional(),
+  operationHistoryLimit: z.number().int().positive().max(20).optional(),
+  dashboardLimit: z.number().int().positive().max(40).optional(),
+  insightLimit: z.number().int().positive().max(40).optional(),
+  entitySearchQuery: z.string().min(1).optional(),
+  entitySearchLimit: z.number().int().positive().max(40).optional(),
+  schemaSearch: z.string().min(1).optional(),
+  schemaLimit: z.number().int().positive().max(60).optional(),
+  flagLimit: z.number().int().positive().max(80).optional(),
+  experimentLimit: z.number().int().positive().max(80).optional(),
+  includeErrorObservations: z.boolean().optional(),
+  observationLimit: z.number().int().positive().max(40).optional(),
+  includeLogAttributes: z.boolean().optional(),
+  logAttributeLimit: z.number().int().positive().max(40).optional(),
+}).strict();
+
+export const PostHogGetInfoResultSchema = z.object({
+  generatedAt: z.number().int().nonnegative(),
+  kind: z.enum(["health", "assets", "release"]),
+  context: z.string().min(1).nullable(),
+  timeRange: TimeRangeDescriptorSchema,
+  suggestedTools: z.array(AgentToolNameSchema),
+  printout: z.string().min(1),
+  data: z.unknown(),
 }).strict();
 
 const PostHogDocumentedToolSchema = z.object({
@@ -902,6 +961,8 @@ export const RuntimeListConversationsInputSchema = z.object({
   limit: z.number().int().positive().max(100).optional(),
   channel: z.enum(["web", "telegram", "tui", "system"]).optional(),
   titleContains: z.string().min(1).optional(),
+  timePreset: TimeRangePresetSchema.optional(),
+  windowMinutes: z.number().int().positive().max(1_440).optional(),
 }).strict();
 
 export const RuntimeListConversationsResultSchema = z.object({
@@ -920,6 +981,9 @@ export const RuntimeGetConversationInputSchema = z.object({
   threadId: z.string().min(1),
   messageOffset: z.number().int().nonnegative().optional(),
   messageLimit: z.number().int().positive().max(500).optional(),
+  tokenBudget: z.number().int().positive().max(20_000).optional(),
+  timePreset: TimeRangePresetSchema.optional(),
+  windowMinutes: z.number().int().positive().max(1_440).optional(),
 }).strict();
 
 export const RuntimeConversationMessageSchema = z.object({
@@ -928,6 +992,19 @@ export const RuntimeConversationMessageSchema = z.object({
   channel: z.enum(["web", "telegram", "tui", "system"]),
   content: z.string(),
   createdAt: z.number().int().nonnegative(),
+}).strict();
+
+const RuntimeConversationContinuationArgumentsSchema = z.object({
+  threadId: z.string().min(1),
+  messageOffset: z.number().int().nonnegative(),
+  tokenBudget: z.number().int().positive(),
+  timePreset: TimeRangePresetSchema.optional(),
+  windowMinutes: z.number().int().positive().max(1_440).optional(),
+}).strict();
+
+const RuntimeConversationContinuationSchema = z.object({
+  toolName: z.literal("runtime_get_conversation"),
+  arguments: RuntimeConversationContinuationArgumentsSchema,
 }).strict();
 
 export const RuntimeGetConversationResultSchema = z.object({
@@ -943,7 +1020,13 @@ export const RuntimeGetConversationResultSchema = z.object({
   totalMessages: z.number().int().nonnegative(),
   messageOffset: z.number().int().nonnegative(),
   messageLimit: z.number().int().positive(),
+  tokenBudget: z.number().int().positive(),
+  returnedTokenEstimate: z.number().int().nonnegative(),
   hasMoreMessages: z.boolean(),
+  nextMessageOffset: z.number().int().nonnegative().nullable(),
+  remainingMessages: z.number().int().nonnegative(),
+  nextRequest: RuntimeConversationContinuationSchema.nullable(),
+  continuationHint: z.string().min(1).nullable(),
 }).strict();
 
 export const RuntimeSearchMessagesInputSchema = z.object({
@@ -952,6 +1035,8 @@ export const RuntimeSearchMessagesInputSchema = z.object({
   channel: z.enum(["web", "telegram", "tui", "system"]).optional(),
   limit: z.number().int().positive().max(100).optional(),
   caseSensitive: z.boolean().optional(),
+  timePreset: TimeRangePresetSchema.optional(),
+  windowMinutes: z.number().int().positive().max(1_440).optional(),
 }).strict();
 
 export const RuntimeSearchMessagesResultSchema = z.object({
@@ -966,6 +1051,42 @@ export const RuntimeSearchMessagesResultSchema = z.object({
     contentSnippet: z.string().min(1),
   }).strict()),
   truncated: z.boolean(),
+}).strict();
+
+export const RuntimeGetInfoInputSchema = z.object({
+  kind: z.enum(["state", "conversations", "conversation", "message_search", "monitoring", "logs"]),
+  context: z.string().min(1).optional(),
+  timePreset: TimeRangePresetSchema.optional(),
+  windowMinutes: z.number().int().positive().max(1_440).optional(),
+  limit: z.number().int().positive().max(100).optional(),
+  channel: z.enum(["web", "telegram", "tui", "system"]).optional(),
+  titleContains: z.string().min(1).optional(),
+  threadId: z.string().min(1).optional(),
+  messageOffset: z.number().int().nonnegative().optional(),
+  messageLimit: z.number().int().positive().max(500).optional(),
+  tokenBudget: z.number().int().positive().max(20_000).optional(),
+  query: z.string().min(1).optional(),
+  caseSensitive: z.boolean().optional(),
+  fileLimit: z.number().int().positive().max(10).optional(),
+  lineLimit: z.number().int().positive().max(400).optional(),
+  pathContains: z.string().min(1).optional(),
+  threadLimit: z.number().int().positive().max(20).optional(),
+  messageLimitPerThread: z.number().int().positive().max(50).optional(),
+  findingLimit: z.number().int().positive().max(20).optional(),
+  memoryLimit: z.number().int().positive().max(20).optional(),
+  actionResultLimit: z.number().int().positive().max(20).optional(),
+  reportLimit: z.number().int().positive().max(10).optional(),
+  operationHistoryLimit: z.number().int().positive().max(20).optional(),
+}).strict();
+
+export const RuntimeGetInfoResultSchema = z.object({
+  generatedAt: z.number().int().nonnegative(),
+  kind: z.enum(["state", "conversations", "conversation", "message_search", "monitoring", "logs"]),
+  context: z.string().min(1).nullable(),
+  timeRange: TimeRangeDescriptorSchema,
+  suggestedTools: z.array(AgentToolNameSchema),
+  printout: z.string().min(1),
+  data: z.unknown(),
 }).strict();
 
 export const RuntimeReadKnowledgeInputSchema = z.object({

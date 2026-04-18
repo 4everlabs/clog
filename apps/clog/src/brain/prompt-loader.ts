@@ -8,6 +8,9 @@ import type { ToolFamily, ToolSummary } from "../schema/tools";
 const brainDir = fileURLToPath(new URL("./", import.meta.url));
 const promptsDir = join(brainDir, "prompts");
 const knowledgeDir = join(brainDir, "knowledge");
+const integrationKnowledgePaths: Partial<Record<ToolFamily, string>> = {
+  posthog: fileURLToPath(new URL("../integrations/posthog/knowledge.md", import.meta.url)),
+};
 
 const readMarkdown = (path: string): string => readFileSync(path, "utf-8").trim();
 const readJson = <T>(path: string): T => JSON.parse(readFileSync(path, "utf-8")) as T;
@@ -20,9 +23,9 @@ const readOptionalMarkdown = (path: string): string | null => {
   }
 };
 
-const readKnowledgePrompt = (): string | null => {
+const readMarkdownDirectory = (directory: string): string | null => {
   try {
-    const entries = readdirSync(knowledgeDir, { withFileTypes: true })
+    const entries = readdirSync(directory, { withFileTypes: true })
       .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
       .map((entry) => entry.name)
       .sort((left, right) => left.localeCompare(right));
@@ -32,7 +35,7 @@ const readKnowledgePrompt = (): string | null => {
     }
 
     return entries
-      .map((entry) => readMarkdown(join(knowledgeDir, entry)))
+      .map((entry) => readMarkdown(join(directory, entry)))
       .filter(Boolean)
       .join("\n\n");
   } catch {
@@ -40,10 +43,27 @@ const readKnowledgePrompt = (): string | null => {
   }
 };
 
+const readKnowledgePrompt = (): string | null => readMarkdownDirectory(knowledgeDir);
+
+const readIntegrationKnowledgePrompts = (): Partial<Record<ToolFamily, string>> => {
+  const prompts: Partial<Record<ToolFamily, string>> = {};
+
+  for (const family of Object.keys(integrationKnowledgePaths) as ToolFamily[]) {
+    const path = integrationKnowledgePaths[family];
+    const content = path ? readOptionalMarkdown(path) : null;
+    if (content) {
+      prompts[family] = content;
+    }
+  }
+
+  return prompts;
+};
+
 export interface AiPromptBundle {
   readonly systemPrompt: string;
   readonly projectPrompt: string | null;
   readonly knowledgePrompt: string | null;
+  readonly integrationKnowledgePrompts: Partial<Record<ToolFamily, string>>;
   readonly primaryModePrompt: string;
   readonly wakeupPrompt: string | null;
 }
@@ -149,6 +169,7 @@ export const loadAiPromptBundle = (
 ): AiPromptBundle => {
   const projectPrompt = readOptionalMarkdown(join(promptsDir, "project.md"));
   const knowledgePrompt = readKnowledgePrompt();
+  const integrationKnowledgePrompts = readIntegrationKnowledgePrompts();
   const sharedWakeupPrompt = readOptionalMarkdown(join(promptsDir, "wakeup.md"));
   const runtimeWakeupConfig = loadRuntimeWakeupConfig(env, workspaceRoot);
 
@@ -156,6 +177,7 @@ export const loadAiPromptBundle = (
     systemPrompt: readMarkdown(join(promptsDir, "system.md")),
     projectPrompt,
     knowledgePrompt,
+    integrationKnowledgePrompts,
     primaryModePrompt: readMarkdown(join(promptsDir, "modes", "primary.md")),
     wakeupPrompt: buildWakeupPrompt(sharedWakeupPrompt, runtimeWakeupConfig),
   };
@@ -208,13 +230,36 @@ const buildToolPrompt = (tools: readonly ToolSummary[]): string => {
   ].join("\n");
 };
 
+const buildKnowledgePrompt = (
+  bundle: AiPromptBundle,
+  tools: readonly ToolSummary[],
+): string | null => {
+  const sections: string[] = [];
+
+  if (bundle.knowledgePrompt?.trim()) {
+    sections.push(bundle.knowledgePrompt);
+  }
+
+  const enabledFamilies = new Set<ToolFamily>(tools.map((tool) => tool.integration));
+  for (const family of enabledFamilies) {
+    const knowledgePrompt = bundle.integrationKnowledgePrompts[family];
+    if (knowledgePrompt?.trim()) {
+      sections.push(knowledgePrompt);
+    }
+  }
+
+  return sections.length > 0 ? sections.join("\n\n") : null;
+};
+
 export const buildSystemPrompt = (bundle: AiPromptBundle, options: SystemPromptOptions = {}): string => {
+  const knowledgePrompt = options.includeKnowledgePrompt === false
+    ? null
+    : buildKnowledgePrompt(bundle, options.tools ?? []);
+
   return [
     bundle.systemPrompt,
     bundle.projectPrompt?.trim() ? `Project Context:\n${bundle.projectPrompt}` : "",
-    options.includeKnowledgePrompt === false || !bundle.knowledgePrompt?.trim()
-      ? ""
-      : `Knowledge Context:\n${bundle.knowledgePrompt}`,
+    knowledgePrompt?.trim() ? `Knowledge Context:\n${knowledgePrompt}` : "",
     options.runtimeContext?.trim() ? `Runtime Context:\n${options.runtimeContext}` : "",
     options.includeModePrompt === false ? "" : bundle.primaryModePrompt,
     buildToolPrompt(options.tools ?? []),

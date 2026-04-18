@@ -1,5 +1,14 @@
 import type { PostHogDashboardSnapshot } from "./dashboard-snapshot";
 
+interface SummaryMetadata {
+  readonly context?: string | null;
+  readonly timeRange?: {
+    readonly preset: "last_hour" | "last_12_hours" | "last_24_hours" | null;
+    readonly windowMinutes: number | null;
+    readonly label: string | null;
+  };
+}
+
 export interface MonitoringSnapshotForHealthSummary {
   readonly latestPerformanceReport: unknown | null;
   readonly recentPostHogOperations: ReadonlyArray<{
@@ -26,6 +35,7 @@ const readProductionReadinessFromReport = (report: unknown): number | null => {
 export const buildPostHogHealthSummary = (
   dashboard: PostHogDashboardSnapshot,
   monitoring: MonitoringSnapshotForHealthSummary,
+  metadata: SummaryMetadata = {},
 ) => {
   const topAnomalies = dashboard.anomalies.slice(0, 5).map((anomaly) => ({
     title: anomaly.title,
@@ -59,6 +69,12 @@ export const buildPostHogHealthSummary = (
 
   return {
     generatedAt: dashboard.generatedAt,
+    context: metadata.context ?? null,
+    timeRange: metadata.timeRange ?? {
+      preset: null,
+      windowMinutes: dashboard.windowMinutes,
+      label: dashboard.windowMinutes === 60 ? "last hour" : `last ${dashboard.windowMinutes} minutes`,
+    },
     dashboard: {
       windowMinutes: dashboard.windowMinutes,
       productionReadinessScore: dashboard.summary.productionReadinessScore,
@@ -90,7 +106,11 @@ export interface PostHogAssetSummaryInput {
   };
 }
 
-export const buildPostHogAssetSummary = (input: PostHogAssetSummaryInput, generatedAt: number) => {
+export const buildPostHogAssetSummary = (
+  input: PostHogAssetSummaryInput,
+  generatedAt: number,
+  metadata: SummaryMetadata = {},
+) => {
   const lines = [
     "PostHog asset summary",
     `- Dashboards (sample): ${input.dashboards.length === 0
@@ -109,6 +129,12 @@ export const buildPostHogAssetSummary = (input: PostHogAssetSummaryInput, genera
 
   return {
     generatedAt,
+    context: metadata.context ?? null,
+    timeRange: metadata.timeRange ?? {
+      preset: null,
+      windowMinutes: null,
+      label: null,
+    },
     dashboards: [...input.dashboards],
     insights: [...input.insights],
     entityHits: [...input.entityHits],
@@ -146,7 +172,11 @@ export interface PostHogReleaseSummaryInput {
   };
 }
 
-export const buildPostHogReleaseSummary = (input: PostHogReleaseSummaryInput, generatedAt: number) => {
+export const buildPostHogReleaseSummary = (
+  input: PostHogReleaseSummaryInput,
+  generatedAt: number,
+  metadata: SummaryMetadata = {},
+) => {
   const lines = [
     "PostHog release / rollout summary",
     `- Flags (sample ${input.flags.length}): ${input.flags.length === 0
@@ -165,6 +195,12 @@ export const buildPostHogReleaseSummary = (input: PostHogReleaseSummaryInput, ge
 
   return {
     generatedAt,
+    context: metadata.context ?? null,
+    timeRange: metadata.timeRange ?? {
+      preset: null,
+      windowMinutes: null,
+      label: null,
+    },
     flags: [...input.flags],
     experiments: [...input.experiments],
     errorObservations: [...input.errorObservations],

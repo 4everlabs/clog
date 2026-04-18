@@ -1,6 +1,8 @@
 import {
   RuntimeGetConversationInputSchema,
   RuntimeGetConversationResultSchema,
+  RuntimeGetInfoInputSchema,
+  RuntimeGetInfoResultSchema,
   RuntimeGetMonitoringSnapshotInputSchema,
   RuntimeGetMonitoringSnapshotResultSchema,
   RuntimeGetRecentLogsInputSchema,
@@ -25,6 +27,7 @@ import {
   RuntimeReadJsonResultSchema,
 } from "../../schema/tools";
 import type { RegisteredTool } from "../types";
+import { buildTimeRangeDescriptor } from "../time-range";
 
 export const runtimeTools = [
   {
@@ -48,9 +51,147 @@ export const runtimeTools = [
     },
   },
   {
+    name: "runtime_get_info",
+    title: "Runtime Get Info",
+    description: "Generic runtime info entrypoint that can summarize state, conversations, a thread, message search, monitoring, or logs for the current context.",
+    integration: "runtime",
+    approvalRequired: false,
+    implemented: true,
+    inputSchema: RuntimeGetInfoInputSchema,
+    outputSchema: RuntimeGetInfoResultSchema,
+    isEnabled() {
+      return true;
+    },
+    execute(services, input) {
+      if (!services.runtime) {
+        throw new Error("Runtime read services are unavailable");
+      }
+
+      const timeRange = buildTimeRangeDescriptor(input.timePreset, input.windowMinutes);
+      const base = {
+        generatedAt: Date.now(),
+        context: input.context?.trim() || null,
+        timeRange,
+      };
+
+      switch (input.kind) {
+        case "state": {
+          const data = services.runtime.getStateSnapshot({
+            threadLimit: input.threadLimit,
+            messageLimitPerThread: input.messageLimitPerThread,
+            findingLimit: input.findingLimit,
+            memoryLimit: input.memoryLimit,
+            actionResultLimit: input.actionResultLimit,
+          });
+          return {
+            ...base,
+            generatedAt: data.generatedAt,
+            kind: input.kind,
+            suggestedTools: ["runtime_get_state_snapshot", "runtime_list_conversations", "runtime_get_monitoring_snapshot"],
+            printout: `Runtime state: ${data.status}; ${data.openFindingsCount} open findings; ${data.recentThreads.length} recent threads.`,
+            data,
+          };
+        }
+        case "conversations": {
+          const data = services.runtime.listConversations({
+            limit: input.limit,
+            channel: input.channel,
+            titleContains: input.titleContains,
+            timePreset: input.timePreset,
+            windowMinutes: input.windowMinutes,
+          });
+          return {
+            ...base,
+            generatedAt: data.generatedAt,
+            kind: input.kind,
+            suggestedTools: ["runtime_list_conversations", "runtime_get_conversation", "runtime_search_messages"],
+            printout: `Found ${data.conversations.length} conversations${input.channel ? ` in ${input.channel}` : ""}.`,
+            data,
+          };
+        }
+        case "conversation": {
+          if (!input.threadId) {
+            throw new Error("threadId is required when kind is conversation");
+          }
+
+          const data = services.runtime.getConversation({
+            threadId: input.threadId,
+            messageOffset: input.messageOffset,
+            messageLimit: input.messageLimit,
+            tokenBudget: input.tokenBudget,
+            timePreset: input.timePreset,
+            windowMinutes: input.windowMinutes,
+          });
+          return {
+            ...base,
+            generatedAt: data.generatedAt,
+            kind: input.kind,
+            suggestedTools: ["runtime_get_conversation", "runtime_search_messages", "runtime_list_conversations"],
+            printout: data.continuationHint
+              ? `Conversation ${data.thread.title} returned ${data.messages.length} messages (~${data.returnedTokenEstimate} tokens). ${data.continuationHint}`
+              : `Conversation ${data.thread.title} returned ${data.messages.length} messages (~${data.returnedTokenEstimate} tokens).`,
+            data,
+          };
+        }
+        case "message_search": {
+          if (!input.query) {
+            throw new Error("query is required when kind is message_search");
+          }
+
+          const data = services.runtime.searchMessages({
+            query: input.query,
+            threadId: input.threadId,
+            channel: input.channel,
+            limit: input.limit,
+            caseSensitive: input.caseSensitive,
+            timePreset: input.timePreset,
+            windowMinutes: input.windowMinutes,
+          });
+          return {
+            ...base,
+            generatedAt: data.generatedAt,
+            kind: input.kind,
+            suggestedTools: ["runtime_search_messages", "runtime_get_conversation", "runtime_list_conversations"],
+            printout: `Message search returned ${data.matches.length} matches${data.truncated ? " (truncated)" : ""}.`,
+            data,
+          };
+        }
+        case "monitoring": {
+          const data = services.runtime.getMonitoringSnapshot({
+            reportLimit: input.reportLimit,
+            operationHistoryLimit: input.operationHistoryLimit,
+          });
+          return {
+            ...base,
+            generatedAt: data.generatedAt,
+            kind: input.kind,
+            suggestedTools: ["runtime_get_monitoring_snapshot", "posthog_get_health_summary", "runtime_get_recent_logs"],
+            printout: `Monitoring snapshot includes ${data.recentPerformanceReports.length} reports and ${data.recentPostHogOperations.length} PostHog operations.`,
+            data,
+          };
+        }
+        case "logs": {
+          const data = services.runtime.getRecentLogs({
+            fileLimit: input.fileLimit,
+            lineLimit: input.lineLimit,
+            pathContains: input.pathContains,
+          });
+          return {
+            ...base,
+            generatedAt: data.generatedAt,
+            kind: input.kind,
+            suggestedTools: ["runtime_get_recent_logs", "runtime_get_monitoring_snapshot", "runtime_get_state_snapshot"],
+            printout: `Loaded ${data.files.length} recent log files.`,
+            data,
+          };
+        }
+      }
+    },
+  },
+  {
     name: "runtime_list_conversations",
     title: "Runtime Conversation List",
-    description: "List conversation threads from the runtime store with optional channel and title filters plus recency ordering.",
+    description: "List conversation threads from the runtime store with optional channel, title, and recent-window filters plus recency ordering.",
     integration: "runtime",
     approvalRequired: false,
     implemented: true,
@@ -70,7 +211,7 @@ export const runtimeTools = [
   {
     name: "runtime_get_conversation",
     title: "Runtime Conversation Read",
-    description: "Read a full conversation thread from the runtime store by threadId with optional message pagination.",
+    description: "Read a conversation thread by threadId and return a token-bounded chunk plus exact instructions for reading the rest.",
     integration: "runtime",
     approvalRequired: false,
     implemented: true,
@@ -90,7 +231,7 @@ export const runtimeTools = [
   {
     name: "runtime_search_messages",
     title: "Runtime Message Search",
-    description: "Keyword search across runtime conversation messages with optional thread and channel filters.",
+    description: "Keyword search across runtime conversation messages with optional thread, channel, and recent-window filters.",
     integration: "runtime",
     approvalRequired: false,
     implemented: true,

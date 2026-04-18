@@ -153,7 +153,13 @@ const createRuntimeServices = (): RuntimeToolServices => ({
     totalMessages: 0,
     messageOffset: 0,
     messageLimit: 100,
+    tokenBudget: 3000,
+    returnedTokenEstimate: 0,
     hasMoreMessages: false,
+    nextMessageOffset: null,
+    remainingMessages: 0,
+    nextRequest: null,
+    continuationHint: null,
   }),
   searchMessages: () => ({
     generatedAt: 1,
@@ -598,6 +604,31 @@ describe("ToolExecutor", () => {
     expect(result.content).toContain("Checkout issue");
   });
 
+  test("executes the generic runtime info tool", async () => {
+    const executor = new ToolExecutor({
+      capabilities: createCapabilities(),
+      services: {
+        posthog: null,
+        notion: null,
+        runtime: createRuntimeServices(),
+        shell: null,
+        github: null,
+        vercel: null,
+      },
+    });
+
+    const result = await executor.execute("runtime_get_info", {
+      kind: "message_search",
+      query: "banana",
+      timePreset: "last_hour",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.content).toContain("\"kind\": \"message_search\"");
+    expect(result.content).toContain("\"runtime_search_messages\"");
+    expect(result.content).toContain("\"label\": \"last hour\"");
+  });
+
   test("executes the runtime recent logs tool", async () => {
     const executor = new ToolExecutor({
       capabilities: createCapabilities(),
@@ -839,6 +870,133 @@ describe("ToolExecutor", () => {
 
     expect(result.ok).toBe(true);
     expect(result.content).toContain("query-run");
+  });
+
+  test("executes the generic PostHog info tool", async () => {
+    const executor = new ToolExecutor({
+      capabilities: createCapabilities(),
+      services: {
+        posthog: {
+          getOrganizations: async () => [],
+          getProjects: async () => ({
+            organizationId: "org_1",
+            projects: [],
+          }),
+          listMcpTools: async () => ({
+            total: 0,
+            returned: 0,
+            tools: [],
+          }),
+          callMcpTool: async (toolName) => ({
+            toolName,
+            text: "mcp ok",
+          }),
+          runQuery: async (name) => ({
+            name,
+            columns: [],
+            results: [],
+          }),
+          listErrors: async () => [sampleObservation],
+          getDocumentedToolCatalog: async () => ({
+            verifiedAt: "2026-04-01",
+            sources: ["https://posthog.com/docs/model-context-protocol"],
+            serverUrls: {
+              us: "https://mcp.posthog.com/mcp",
+              eu: "https://mcp-eu.posthog.com/mcp",
+            },
+            pinning: {
+              supportedHeaders: ["x-posthog-project-id"],
+              supportedQueryParameters: ["project_id"],
+            },
+            featureFilterExample: "https://mcp.posthog.com/mcp?features=flags,insights",
+            apiPrimitives: [],
+            recommendedBuildOrder: [],
+            features: [],
+          }),
+          getDashboardSnapshot: async () => ({
+            generatedAt: 1,
+            windowMinutes: 60,
+            summary: {
+              pageviews: 10,
+              uniqueVisitors: 5,
+              webVitalsEvents: 4,
+              exceptionEvents: 0,
+              distinctExceptionIssues: 0,
+              webVitalsCoverageRatio: 0.4,
+              errorRatePer1kPageviews: 0,
+              slowLcpPages: 0,
+              slowInpPages: 0,
+              productionReadinessScore: 100,
+              anomalyCount: 0,
+            },
+            previousWindow: {
+              pageviews: 12,
+              webVitalsEvents: 5,
+              exceptionEvents: 0,
+              pageviewsDeltaPercent: -16.7,
+              webVitalsDeltaPercent: -20,
+              exceptionDeltaPercent: null,
+            },
+            topPaths: [],
+            lcp: [],
+            inp: [],
+            anomalies: [],
+          }),
+          queryInsight: async (name) => ({
+            name,
+            columns: [],
+            results: [],
+          }),
+          listEndpoints: () => ({
+            ok: true,
+            command: "posthog-cli",
+            args: ["list"],
+            stdout: "list ok",
+            stderr: "",
+            exitCode: 0,
+            durationMs: 1,
+            workingDirectory: "/workspace",
+          }),
+          diffEndpoints: () => ({
+            ok: true,
+            command: "posthog-cli",
+            args: ["diff"],
+            stdout: "diff ok",
+            stderr: "",
+            exitCode: 0,
+            durationMs: 1,
+            workingDirectory: "/workspace",
+          }),
+          runEndpoint: () => ({
+            ok: true,
+            command: "posthog-cli",
+            args: ["run"],
+            stdout: "run ok",
+            stderr: "",
+            exitCode: 0,
+            durationMs: 1,
+            workingDirectory: "/workspace",
+          }),
+        },
+        notion: null,
+        runtime: createRuntimeServices(),
+        shell: null,
+        github: null,
+        vercel: null,
+      },
+    });
+
+    const result = await executor.execute("posthog_get_info", {
+      kind: "health",
+      context: "checkout",
+      timePreset: "last_hour",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.content).toContain("\"kind\": \"health\"");
+    expect(result.content).toContain("\"posthog_get_health_summary\"");
+    expect(result.content).toContain("\"context\": \"checkout\"");
+    expect(result.content).toContain("\"label\": \"last hour\"");
   });
 
   test("executes a first-class PostHog SQL wrapper tool", async () => {

@@ -102,12 +102,21 @@ export class BrainService {
 
   private buildModelPayload(thread: ConversationThread, findings: readonly AgentFinding[]): BrainModelPayload {
     const promptBundle = loadAiPromptBundle();
+    const threadRuntimeContext = [
+      `Current thread id: ${thread.id}`,
+      `Current thread title: ${thread.title}`,
+      `Current thread channel: ${thread.channel}`,
+      `Current thread message count: ${thread.messages.length}`,
+      "Use runtime_get_conversation with this thread id when you need to read more history than was served in-context.",
+    ].join("\n");
     const systemPrompt = buildSystemPrompt(promptBundle, {
       tools: this.availableTools,
       includeKnowledgePrompt: false,
       executionMode: this.executionMode,
       findingsSummary: this.buildFindingsSummary(findings),
-      runtimeContext: this.runtimeContext,
+      runtimeContext: this.runtimeContext?.trim()
+        ? `${this.runtimeContext}\n\n${threadRuntimeContext}`
+        : threadRuntimeContext,
       wakeupPrompt: promptBundle.wakeupPrompt,
     });
 

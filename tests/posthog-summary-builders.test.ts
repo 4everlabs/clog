@@ -54,9 +54,22 @@ describe("PostHog summary builders", () => {
       recentPostHogOperations: [
         { operation: "dashboardSnapshot", lastRecordedAt: 99 },
       ],
+    }, {
+      context: "checkout",
+      timeRange: {
+        preset: "last_hour",
+        windowMinutes: 60,
+        label: "last hour",
+      },
     });
 
     expect(summary.generatedAt).toBe(1_700_000_000_000);
+    expect(summary.context).toBe("checkout");
+    expect(summary.timeRange).toEqual({
+      preset: "last_hour",
+      windowMinutes: 60,
+      label: "last hour",
+    });
     expect(summary.dashboard.productionReadinessScore).toBe(82);
     expect(summary.dashboard.topAnomalies).toEqual([{ title: "Traffic dipped", severity: "warning" }]);
     expect(summary.monitoring.latestProductionReadinessScore).toBe(91);
@@ -77,9 +90,13 @@ describe("PostHog summary builders", () => {
         entityHits: 1,
         schemaEntities: 1,
       },
-    }, 2);
+    }, 2, {
+      context: "pricing",
+    });
 
     expect(summary.generatedAt).toBe(2);
+    expect(summary.context).toBe("pricing");
+    expect(summary.timeRange.label).toBeNull();
     expect(summary.totals.insightsListed).toBe(12);
     expect(summary.printout).toContain("Overview [d1]");
     expect(summary.printout).toContain("purchase (event)");
@@ -112,9 +129,16 @@ describe("PostHog summary builders", () => {
         errorObservations: 1,
         logAttributes: 10,
       },
-    }, 3);
+    }, 3, {
+      timeRange: {
+        preset: "last_24_hours",
+        windowMinutes: 1_440,
+        label: "last 24 hours",
+      },
+    });
 
     expect(summary.generatedAt).toBe(3);
+    expect(summary.timeRange.windowMinutes).toBe(1_440);
     expect(summary.flags[0]?.key).toBe("checkout");
     expect(summary.printout).toContain("Pricing test");
     expect(summary.printout).toContain("Elevated errors");

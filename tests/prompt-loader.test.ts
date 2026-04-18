@@ -42,6 +42,8 @@ describe("prompt loader", () => {
     expect(bundle.projectPrompt).toContain("app.4ever.ai");
     expect(bundle.knowledgePrompt).toContain("4ever Product Summary");
     expect(bundle.knowledgePrompt).toContain("Beta Launch Monitoring Priorities");
+    expect(bundle.knowledgePrompt).not.toContain("PostHog MCP Tool Catalog");
+    expect(bundle.integrationKnowledgePrompts.posthog).toContain("PostHog MCP Tool Catalog");
     expect(bundle.primaryModePrompt).toContain("Operating mode");
     expect(bundle.wakeupPrompt).toContain("Wakeup is the periodic monitoring pass");
     expect(bundle.wakeupPrompt).toContain("Check the latest signals");
@@ -49,6 +51,7 @@ describe("prompt loader", () => {
     expect(buildSystemPrompt(bundle)).toContain("Project Context:");
     expect(buildSystemPrompt(bundle)).toContain("Knowledge Context:");
     expect(buildSystemPrompt(bundle)).toContain("4ever.ai");
+    expect(buildSystemPrompt(bundle)).not.toContain("PostHog MCP Tool Catalog");
     const toolSummary: ToolSummary = {
       name: "posthog_run_query",
       title: "PostHog HogQL Query",
@@ -66,6 +69,7 @@ describe("prompt loader", () => {
     expect(buildSystemPrompt(bundle, { tools: [toolSummary] })).toContain("Tool access:");
     expect(buildSystemPrompt(bundle, { tools: [toolSummary] })).toContain("Enabled tools: 1");
     expect(buildSystemPrompt(bundle, { tools: [toolSummary] })).toContain("Enabled families: PostHog (1)");
+    expect(buildSystemPrompt(bundle, { tools: [toolSummary] })).toContain("PostHog MCP Tool Catalog");
   });
 
   test("keeps runtime wakeup config optional", () => {

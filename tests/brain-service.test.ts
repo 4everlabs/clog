@@ -137,6 +137,8 @@ describe("BrainService", () => {
       systemPrompt.indexOf("Operating mode: `primary`."),
     );
     expect(systemPrompt).toContain("PostHog context: 4ever.ai / app.4ever.ai");
+    expect(systemPrompt).toContain("Current thread id: thread_1");
+    expect(systemPrompt).toContain("Use runtime_get_conversation with this thread id");
     expect(systemPrompt).not.toContain("Knowledge Context:");
   });
 

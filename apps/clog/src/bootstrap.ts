@@ -8,8 +8,7 @@ import { NotionIntegrationClient } from "./integrations/notion/client";
 import { PostHogIntegrationClient } from "./integrations/posthog/client";
 import { PostHogApiClient } from "./integrations/posthog/api-client";
 import { PostHogCliTool } from "./integrations/posthog/cli-tool";
-import { buildPostHogDashboardSnapshot } from "./integrations/posthog/dashboard-snapshot";
-import { getPostHogDocumentedToolCatalog } from "./integrations/posthog/documented-tool-catalog";
+import { createPostHogToolServices } from "./integrations/posthog/tool-services";
 import { PostHogWorkspaceReporter } from "./integrations/posthog/workspace-reporter";
 import { VercelIntegrationClient } from "./integrations/vercel/client";
 import { MonitoringLoop } from "./monitoring/monitor-loop";
@@ -21,7 +20,6 @@ import { RuntimeOrchestrationService } from "./runtime/orchestration-service";
 import { ToolExecutor } from "./execution/tool-executor";
 import { ShellExecutor } from "./execution/shell-executor";
 import { buildProviderTools, resolveEnabledTools } from "./tools/registry";
-import type { PostHogToolServices } from "./tools/types";
 
 export interface RuntimeBootstrap {
   readonly env: AgentEnvironment;
@@ -56,64 +54,12 @@ export const bootstrapRuntime = (): RuntimeBootstrap => {
   });
   const notion = new NotionIntegrationClient(env.notion);
   let toolExecutor: ToolExecutor | null = null;
-  const recordAsync = async <T>(operation: string, execute: () => Promise<T>): Promise<T> => {
-    const result = await execute();
-    posthogWorkspaceReporter.record(operation, result);
-    return result;
-  };
-  const recordSync = <T>(operation: string, execute: () => T): T => {
-    const result = execute();
-    posthogWorkspaceReporter.record(operation, result);
-    return result;
-  };
-  const posthogServices: PostHogToolServices = {
-    getOrganizations: async () => await recordAsync("organizations", async () => await posthogApi.getOrganizations()),
-    getProjects: async (organizationId?: string) => await recordAsync(
-      "projects",
-      async () => await posthogApi.getProjects(organizationId),
-    ),
-    listMcpTools: async (input) => await recordAsync(
-      "mcpTools",
-      async () => await posthogApi.listMcpTools(input),
-    ),
-    callMcpTool: async (toolName: string, args?: Record<string, unknown>) => await recordAsync(
-      "mcpCall",
-      async () => await posthogApi.callMcpTool(toolName, args),
-    ),
-    runQuery: async (name: string, query: string, refresh?: string) => await recordAsync(
-      "query",
-      async () => await posthogApi.runQuery(name, query, refresh),
-    ),
-    listErrors: async () => await recordAsync("errors", async () => await posthog.listErrorObservations()),
-    getDashboardSnapshot: async (input = {}) => await recordAsync(
-      "dashboardSnapshot",
-      async () => await buildPostHogDashboardSnapshot({
-        windowMinutes: input.windowMinutes,
-        topPathsLimit: input.topPathsLimit,
-        runQuery: async (name, query) => await posthogApi.runQuery(name, query),
-      }),
-    ),
-    getDocumentedToolCatalog: async (input = {}) => await recordAsync(
-      "documentedToolCatalog",
-      async () => getPostHogDocumentedToolCatalog(input),
-    ),
-    queryInsight: async (name: string, query: string) => await recordAsync(
-      "insight",
-      async () => await posthogApi.runInsightQuery(name, query),
-    ),
-    listEndpoints: (cwd?: string) => recordSync(
-      "endpointList",
-      () => posthogCli.listEndpoints(cwd),
-    ),
-    diffEndpoints: (path: string, cwd?: string) => recordSync(
-      "endpointDiff",
-      () => posthogCli.diffEndpoints(path, cwd),
-    ),
-    runEndpoint: (input) => recordSync(
-      "endpointRun",
-      () => posthogCli.runEndpoint(input),
-    ),
-  };
+  const posthogServices = createPostHogToolServices({
+    posthogApi,
+    posthog,
+    posthogCli,
+    posthogWorkspaceReporter,
+  });
   const runtimeOrchestrationService = new RuntimeOrchestrationService({
     capabilities: env.capabilities,
     executeTool: async (toolName, args) => {
