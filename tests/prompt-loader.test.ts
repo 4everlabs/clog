@@ -57,6 +57,8 @@ describe("prompt loader", () => {
       title: "PostHog HogQL Query",
       description: "Run a typed PostHog HogQL query.",
       integration: "posthog",
+      exposureTier: "discoverable",
+      capabilityGroup: "analytics_buildout",
       approvalRequired: false,
       implemented: true,
     };
@@ -67,8 +69,9 @@ describe("prompt loader", () => {
       runtimeContext: "PostHog context: 4ever.ai / app.4ever.ai",
     })).toContain("4ever.ai / app.4ever.ai");
     expect(buildSystemPrompt(bundle, { tools: [toolSummary] })).toContain("Tool access:");
-    expect(buildSystemPrompt(bundle, { tools: [toolSummary] })).toContain("Enabled tools: 1");
-    expect(buildSystemPrompt(bundle, { tools: [toolSummary] })).toContain("Enabled families: PostHog (1)");
+    expect(buildSystemPrompt(bundle, { tools: [toolSummary] })).toContain("Advertised tools: 1");
+    expect(buildSystemPrompt(bundle, { tools: [toolSummary] })).toContain("Advertised families: PostHog (1)");
+    expect(buildSystemPrompt(bundle, { tools: [toolSummary] })).toContain("Capability groups: Analytics Buildout (1)");
     expect(buildSystemPrompt(bundle, { tools: [toolSummary] })).toContain("PostHog MCP Tool Catalog");
   });
 

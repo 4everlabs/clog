@@ -72,6 +72,25 @@ export type NormalizedRuntimeToolsConfig = z.infer<typeof NormalizedRuntimeTools
 export const ToolFamilySchema = z.enum(["posthog", "github", "vercel", "notion", "runtime", "shell"]);
 export type ToolFamily = z.infer<typeof ToolFamilySchema>;
 
+export const ToolExposureTierSchema = z.enum(["core", "discoverable", "internal"]);
+export type ToolExposureTier = z.infer<typeof ToolExposureTierSchema>;
+
+export const ToolCapabilityGroupSchema = z.enum([
+  "workspace",
+  "investigation",
+  "release_safety",
+  "analytics_buildout",
+  "automation",
+  "runtime_context",
+  "runtime_read",
+  "orchestration",
+  "knowledge",
+  "repository",
+  "deployment",
+  "shell",
+]);
+export type ToolCapabilityGroup = z.infer<typeof ToolCapabilityGroupSchema>;
+
 export const AgentToolNameSchema = z.enum([
   "posthog_get_organizations",
   "posthog_get_projects",
@@ -133,6 +152,8 @@ export const ToolSummarySchema = z.object({
   title: z.string().min(1),
   description: z.string().min(1),
   integration: ToolFamilySchema,
+  exposureTier: ToolExposureTierSchema,
+  capabilityGroup: ToolCapabilityGroupSchema,
   approvalRequired: z.boolean(),
   implemented: z.boolean(),
 }).strict();
@@ -488,6 +509,12 @@ const PostHogDocumentedFeatureCatalogSchema = z.object({
   docsUrl: z.string().url().nullable(),
   priority: z.enum(["core", "high", "extended"]),
   tools: z.array(PostHogDocumentedToolSchema),
+  reachable: z.boolean(),
+  accessMode: z.enum(["top_level", "generic_mcp", "unavailable"]),
+  accessibleToolNames: z.array(z.string().min(1)),
+  aliasedToolNames: z.array(z.string().min(1)),
+  missingToolNames: z.array(z.string().min(1)),
+  suggestedClogTools: z.array(AgentToolNameSchema),
 }).strict();
 
 export const PostHogGetDocumentedToolCatalogInputSchema = z.object({
@@ -517,6 +544,22 @@ export const PostHogGetDocumentedToolCatalogResultSchema = z.object({
     why: z.string().min(1),
     features: z.array(z.string().min(1)),
   }).strict()),
+  categories: z.array(z.object({
+    id: z.string().min(1),
+    title: z.string().min(1),
+    why: z.string().min(1),
+    features: z.array(z.string().min(1)),
+    documentedToolCount: z.number().int().nonnegative(),
+    accessibleToolCount: z.number().int().nonnegative(),
+    reachableFeatureCount: z.number().int().nonnegative(),
+    accessMode: z.enum(["top_level", "generic_mcp", "unavailable"]),
+    suggestedClogTools: z.array(AgentToolNameSchema),
+  }).strict()),
+  liveCatalog: z.object({
+    totalTools: z.number().int().nonnegative(),
+    accessibleToolNames: z.array(z.string().min(1)),
+    missingDocumentedToolNames: z.array(z.string().min(1)),
+  }).strict(),
   features: z.array(PostHogDocumentedFeatureCatalogSchema),
 }).strict();
 

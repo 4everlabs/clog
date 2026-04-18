@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import type { AgentFinding, ConversationThread, IntegrationCapabilitySnapshot } from "@clog/types";
 import { BrainService } from "../apps/clog/src/brain/service";
 import { ToolExecutor } from "../apps/clog/src/execution/tool-executor";
-import { buildProviderTools, summarizeEnabledTools } from "../apps/clog/src/tools/registry";
+import type { PostHogDocumentedFeatureCatalog, PostHogDocumentedToolCatalog } from "../apps/clog/src/integrations/posthog/documented-tool-catalog";
+import { buildProviderTools, summarizeAdvertisedTools } from "../apps/clog/src/tools/registry";
 import type { RuntimeToolServices } from "../apps/clog/src/tools/types";
 
 const createCapabilities = (): IntegrationCapabilitySnapshot => ({
@@ -66,6 +67,31 @@ const createFinding = (): AgentFinding => ({
   sources: [{ kind: "posthog", label: "PostHog" }],
   observations: [],
   proposedActions: [],
+});
+
+const createDocumentedCatalog = (
+  features: readonly PostHogDocumentedFeatureCatalog[] = [],
+): PostHogDocumentedToolCatalog => ({
+  verifiedAt: "2026-04-01",
+  sources: ["https://posthog.com/docs/model-context-protocol"],
+  serverUrls: {
+    us: "https://mcp.posthog.com/mcp",
+    eu: "https://mcp-eu.posthog.com/mcp",
+  },
+  pinning: {
+    supportedHeaders: ["x-posthog-project-id"],
+    supportedQueryParameters: ["project_id"],
+  },
+  featureFilterExample: "https://mcp.posthog.com/mcp?features=flags,insights",
+  apiPrimitives: [],
+  recommendedBuildOrder: [],
+  categories: [],
+  liveCatalog: {
+    totalTools: 0,
+    accessibleToolNames: [],
+    missingDocumentedToolNames: [],
+  },
+  features,
 });
 
 const createRuntimeServices = (): RuntimeToolServices => ({
@@ -193,22 +219,7 @@ describe("BrainService tool loop", () => {
             results: [{ query }],
           }),
           listErrors: async () => [],
-          getDocumentedToolCatalog: async () => ({
-            verifiedAt: "2026-04-01",
-            sources: ["https://posthog.com/docs/model-context-protocol"],
-            serverUrls: {
-              us: "https://mcp.posthog.com/mcp",
-              eu: "https://mcp-eu.posthog.com/mcp",
-            },
-            pinning: {
-              supportedHeaders: ["x-posthog-project-id"],
-              supportedQueryParameters: ["project_id"],
-            },
-            featureFilterExample: "https://mcp.posthog.com/mcp?features=flags,insights",
-            apiPrimitives: [],
-            recommendedBuildOrder: [],
-            features: [],
-          }),
+          getDocumentedToolCatalog: async () => createDocumentedCatalog(),
           getDashboardSnapshot: async () => ({
             generatedAt: 1,
             windowMinutes: 15,
@@ -302,7 +313,7 @@ describe("BrainService tool loop", () => {
       modelName: "test-model",
       baseUrl: "https://api.openai.com/v1",
       executionMode: "propose",
-      availableTools: summarizeEnabledTools(capabilities),
+      availableTools: summarizeAdvertisedTools(capabilities),
       providerTools: buildProviderTools(capabilities),
       toolExecutor,
       fetchFn: async (_input, init) => {
@@ -327,37 +338,18 @@ describe("BrainService tool loop", () => {
     expect(requests).toHaveLength(2);
     const firstRequestTools = (requests[0]?.tools ?? []) as Array<{ function: { name: string } }>;
     expect(firstRequestTools.map((tool) => tool.function.name)).toEqual([
-      "posthog_get_organizations",
-      "posthog_get_projects",
       "posthog_get_documented_tool_catalog",
       "posthog_list_mcp_tools",
       "posthog_call_mcp_tool",
-      "posthog_run_query",
       "posthog_get_dashboard_snapshot",
       "posthog_get_info",
       "posthog_get_health_summary",
       "posthog_get_asset_summary",
       "posthog_get_release_summary",
-      "posthog_list_dashboards",
-      "posthog_get_dashboard",
-      "posthog_list_insights",
-      "posthog_get_insight",
-      "posthog_search_entities",
-      "posthog_read_data_schema",
-      "posthog_read_data_warehouse_schema",
-      "posthog_execute_sql",
-      "posthog_search_docs",
-      "runtime_get_state_snapshot",
       "runtime_get_info",
       "runtime_list_conversations",
       "runtime_get_conversation",
       "runtime_search_messages",
-      "runtime_get_recent_logs",
-      "runtime_get_monitoring_snapshot",
-      "runtime_list_actions",
-      "runtime_run_action",
-      "runtime_list_routines",
-      "runtime_run_routine",
       "runtime_read_knowledge",
       "runtime_read_json",
     ]);

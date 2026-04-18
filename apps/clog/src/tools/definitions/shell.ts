@@ -15,6 +15,8 @@ export const shellTools = [
     title: "Shell Execute Command",
     description: "Run a safe shell command within the runtime-approved working roots. Only approved commands succeed.",
     integration: "shell",
+    exposureTier: "core",
+    capabilityGroup: "shell",
     approvalRequired: false,
     implemented: true,
     inputSchema: ShellExecuteInputSchema,

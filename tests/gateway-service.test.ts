@@ -8,6 +8,7 @@ import type { MonitoringTickResult } from "../apps/clog/src/runtime/monitor-loop
 import { InMemoryRuntimeStore } from "../apps/clog/src/storage/in-memory-runtime-store";
 import type { BrainService } from "../apps/clog/src/brain/service";
 import type { PostHogIntegrationClient } from "../apps/clog/src/integrations/posthog/client";
+import type { PostHogDocumentedToolCatalog, PostHogDocumentedFeatureCatalog } from "../apps/clog/src/integrations/posthog/documented-tool-catalog";
 import type { PostHogToolServices } from "../apps/clog/src/tools/types";
 import type { MonitoringLoop } from "../apps/clog/src/runtime/monitor-loop";
 
@@ -20,6 +21,31 @@ afterEach(() => {
       rmSync(path, { recursive: true, force: true });
     }
   }
+});
+
+const createDocumentedCatalog = (
+  features: readonly PostHogDocumentedFeatureCatalog[] = [],
+): PostHogDocumentedToolCatalog => ({
+  verifiedAt: "2026-04-01",
+  sources: ["https://posthog.com/docs/model-context-protocol"],
+  serverUrls: {
+    us: "https://mcp.posthog.com/mcp",
+    eu: "https://mcp-eu.posthog.com/mcp",
+  },
+  pinning: {
+    supportedHeaders: ["x-posthog-project-id"],
+    supportedQueryParameters: ["project_id"],
+  },
+  featureFilterExample: "https://mcp.posthog.com/mcp?features=flags,insights",
+  apiPrimitives: [],
+  recommendedBuildOrder: [],
+  categories: [],
+  liveCatalog: {
+    totalTools: 0,
+    accessibleToolNames: [],
+    missingDocumentedToolNames: [],
+  },
+  features,
 });
 
 const createEnvironment = (overrides: Partial<AgentEnvironment> = {}): AgentEnvironment => ({
@@ -132,22 +158,7 @@ const createPostHogServices = (): PostHogToolServices => ({
     structuredContent: undefined,
   }),
   runQuery: async (name: string) => ({ name, columns: [], results: [] }),
-  getDocumentedToolCatalog: async () => ({
-    verifiedAt: "2026-04-01",
-    sources: ["https://posthog.com/docs/model-context-protocol"],
-    serverUrls: {
-      us: "https://mcp.posthog.com/mcp",
-      eu: "https://mcp-eu.posthog.com/mcp",
-    },
-    pinning: {
-      supportedHeaders: ["x-posthog-project-id"],
-      supportedQueryParameters: ["project_id"],
-    },
-    featureFilterExample: "https://mcp.posthog.com/mcp?features=flags,insights",
-    apiPrimitives: [],
-    recommendedBuildOrder: [],
-    features: [],
-  }),
+  getDocumentedToolCatalog: async () => createDocumentedCatalog(),
   listErrors: async () => [],
   getDashboardSnapshot: async () => ({
     generatedAt: 1,

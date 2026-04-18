@@ -10,7 +10,7 @@ import {
   RuntimeSettingsSchema,
   type RuntimeSettings,
 } from "./runtime/settings";
-import { summarizeEnabledTools } from "./tools/registry";
+import { summarizeAdvertisedTools } from "./tools/registry";
 
 const readBoolean = (value: string | undefined, fallback: boolean): boolean => {
   if (!value) {
@@ -440,7 +440,7 @@ export const loadAgentEnvironment = (env: NodeJS.ProcessEnv = getRuntimeProcessE
       ],
     },
   };
-  const availableTools = summarizeEnabledTools(capabilities, {
+  const availableTools = summarizeAdvertisedTools(capabilities, {
     hidePosthogContextTools,
   });
 

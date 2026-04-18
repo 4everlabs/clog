@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { IntegrationCapabilitySnapshot, RuntimeObservation } from "@clog/types";
 import { ToolExecutor } from "../apps/clog/src/execution/tool-executor";
+import type { PostHogDocumentedFeatureCatalog, PostHogDocumentedToolCatalog } from "../apps/clog/src/integrations/posthog/documented-tool-catalog";
 import type { RuntimeToolServices } from "../apps/clog/src/tools/types";
 
 const createCapabilities = (): IntegrationCapabilitySnapshot => ({
@@ -44,6 +45,31 @@ const sampleObservation: RuntimeObservation = {
   severity: "critical",
   detectedAt: 1,
 };
+
+const createDocumentedCatalog = (
+  features: readonly PostHogDocumentedFeatureCatalog[] = [],
+): PostHogDocumentedToolCatalog => ({
+  verifiedAt: "2026-04-01",
+  sources: ["https://posthog.com/docs/model-context-protocol"],
+  serverUrls: {
+    us: "https://mcp.posthog.com/mcp",
+    eu: "https://mcp-eu.posthog.com/mcp",
+  },
+  pinning: {
+    supportedHeaders: ["x-posthog-project-id"],
+    supportedQueryParameters: ["project_id"],
+  },
+  featureFilterExample: "https://mcp.posthog.com/mcp?features=flags,insights",
+  apiPrimitives: [],
+  recommendedBuildOrder: [],
+  categories: [],
+  liveCatalog: {
+    totalTools: 0,
+    accessibleToolNames: [],
+    missingDocumentedToolNames: [],
+  },
+  features,
+});
 
 const createRuntimeServices = (): RuntimeToolServices => ({
   getStateSnapshot: () => ({
@@ -279,29 +305,20 @@ describe("ToolExecutor", () => {
             results: [{ query }],
           }),
           listErrors: async () => [sampleObservation],
-          getDocumentedToolCatalog: async () => ({
-            verifiedAt: "2026-04-01",
-            sources: ["https://posthog.com/docs/model-context-protocol"],
-            serverUrls: {
-              us: "https://mcp.posthog.com/mcp",
-              eu: "https://mcp-eu.posthog.com/mcp",
-            },
-            pinning: {
-              supportedHeaders: ["x-posthog-project-id"],
-              supportedQueryParameters: ["project_id"],
-            },
-            featureFilterExample: "https://mcp.posthog.com/mcp?features=flags,insights",
-            apiPrimitives: [],
-            recommendedBuildOrder: [],
-            features: [{
-              feature: "insights",
-              title: "Insights",
-              description: "Analytics tools",
-              docsUrl: "https://posthog.com/docs/model-context-protocol",
-              priority: "core",
-              tools: [{ name: "query-run", purpose: "Run a query" }],
-            }],
-          }),
+          getDocumentedToolCatalog: async () => createDocumentedCatalog([{
+            feature: "insights",
+            title: "Insights",
+            description: "Analytics tools",
+            docsUrl: "https://posthog.com/docs/model-context-protocol",
+            priority: "core",
+            tools: [{ name: "query-run", purpose: "Run a query" }],
+            reachable: true,
+            accessMode: "top_level",
+            accessibleToolNames: ["query-run"],
+            aliasedToolNames: [],
+            missingToolNames: [],
+            suggestedClogTools: ["posthog_get_info", "posthog_get_health_summary", "posthog_call_mcp_tool"],
+          }]),
           getDashboardSnapshot: async () => ({
             generatedAt: 1,
             windowMinutes: 15,
@@ -429,22 +446,7 @@ describe("ToolExecutor", () => {
             results: [],
           }),
           listErrors: async () => [sampleObservation],
-          getDocumentedToolCatalog: async () => ({
-            verifiedAt: "2026-04-01",
-            sources: ["https://posthog.com/docs/model-context-protocol"],
-            serverUrls: {
-              us: "https://mcp.posthog.com/mcp",
-              eu: "https://mcp-eu.posthog.com/mcp",
-            },
-            pinning: {
-              supportedHeaders: ["x-posthog-project-id"],
-              supportedQueryParameters: ["project_id"],
-            },
-            featureFilterExample: "https://mcp.posthog.com/mcp?features=flags,insights",
-            apiPrimitives: [],
-            recommendedBuildOrder: [],
-            features: [],
-          }),
+          getDocumentedToolCatalog: async () => createDocumentedCatalog(),
           getDashboardSnapshot: async () => ({
             generatedAt: 1,
             windowMinutes: 15,
@@ -762,22 +764,7 @@ describe("ToolExecutor", () => {
             results: [],
           }),
           listErrors: async () => [],
-          getDocumentedToolCatalog: async () => ({
-            verifiedAt: "2026-04-01",
-            sources: ["https://posthog.com/docs/model-context-protocol"],
-            serverUrls: {
-              us: "https://mcp.posthog.com/mcp",
-              eu: "https://mcp-eu.posthog.com/mcp",
-            },
-            pinning: {
-              supportedHeaders: ["x-posthog-project-id"],
-              supportedQueryParameters: ["project_id"],
-            },
-            featureFilterExample: "https://mcp.posthog.com/mcp?features=flags,insights",
-            apiPrimitives: [],
-            recommendedBuildOrder: [],
-            features: [],
-          }),
+          getDocumentedToolCatalog: async () => createDocumentedCatalog(),
           getDashboardSnapshot: async () => ({
             generatedAt: 1,
             windowMinutes: 15,
@@ -897,22 +884,7 @@ describe("ToolExecutor", () => {
             results: [],
           }),
           listErrors: async () => [sampleObservation],
-          getDocumentedToolCatalog: async () => ({
-            verifiedAt: "2026-04-01",
-            sources: ["https://posthog.com/docs/model-context-protocol"],
-            serverUrls: {
-              us: "https://mcp.posthog.com/mcp",
-              eu: "https://mcp-eu.posthog.com/mcp",
-            },
-            pinning: {
-              supportedHeaders: ["x-posthog-project-id"],
-              supportedQueryParameters: ["project_id"],
-            },
-            featureFilterExample: "https://mcp.posthog.com/mcp?features=flags,insights",
-            apiPrimitives: [],
-            recommendedBuildOrder: [],
-            features: [],
-          }),
+          getDocumentedToolCatalog: async () => createDocumentedCatalog(),
           getDashboardSnapshot: async () => ({
             generatedAt: 1,
             windowMinutes: 60,
@@ -1025,22 +997,7 @@ describe("ToolExecutor", () => {
             results: [],
           }),
           listErrors: async () => [],
-          getDocumentedToolCatalog: async () => ({
-            verifiedAt: "2026-04-01",
-            sources: ["https://posthog.com/docs/model-context-protocol"],
-            serverUrls: {
-              us: "https://mcp.posthog.com/mcp",
-              eu: "https://mcp-eu.posthog.com/mcp",
-            },
-            pinning: {
-              supportedHeaders: ["x-posthog-project-id"],
-              supportedQueryParameters: ["project_id"],
-            },
-            featureFilterExample: "https://mcp.posthog.com/mcp?features=flags,insights",
-            apiPrimitives: [],
-            recommendedBuildOrder: [],
-            features: [],
-          }),
+          getDocumentedToolCatalog: async () => createDocumentedCatalog(),
           getDashboardSnapshot: async () => ({
             generatedAt: 1,
             windowMinutes: 15,
@@ -1149,22 +1106,7 @@ describe("ToolExecutor", () => {
             results: [],
           }),
           listErrors: async () => [],
-          getDocumentedToolCatalog: async () => ({
-            verifiedAt: "2026-04-01",
-            sources: ["https://posthog.com/docs/model-context-protocol"],
-            serverUrls: {
-              us: "https://mcp.posthog.com/mcp",
-              eu: "https://mcp-eu.posthog.com/mcp",
-            },
-            pinning: {
-              supportedHeaders: ["x-posthog-project-id"],
-              supportedQueryParameters: ["project_id"],
-            },
-            featureFilterExample: "https://mcp.posthog.com/mcp?features=flags,insights",
-            apiPrimitives: [],
-            recommendedBuildOrder: [],
-            features: [],
-          }),
+          getDocumentedToolCatalog: async () => createDocumentedCatalog(),
           getDashboardSnapshot: async () => ({
             generatedAt: 1,
             windowMinutes: 15,
@@ -1287,22 +1229,7 @@ describe("ToolExecutor", () => {
             results: [],
           }),
           listErrors: async () => [],
-          getDocumentedToolCatalog: async () => ({
-            verifiedAt: "2026-04-01",
-            sources: ["https://posthog.com/docs/model-context-protocol"],
-            serverUrls: {
-              us: "https://mcp.posthog.com/mcp",
-              eu: "https://mcp-eu.posthog.com/mcp",
-            },
-            pinning: {
-              supportedHeaders: ["x-posthog-project-id"],
-              supportedQueryParameters: ["project_id"],
-            },
-            featureFilterExample: "https://mcp.posthog.com/mcp?features=flags,insights",
-            apiPrimitives: [],
-            recommendedBuildOrder: [],
-            features: [],
-          }),
+          getDocumentedToolCatalog: async () => createDocumentedCatalog(),
           getDashboardSnapshot: async () => ({
             generatedAt: 1,
             windowMinutes: 15,

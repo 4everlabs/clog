@@ -7,6 +7,8 @@ export const notionTools = [
     title: "Notion Todo List",
     description: "Read the configured Notion todo list and return a concise printout of what still needs to be done.",
     integration: "notion",
+    exposureTier: "core",
+    capabilityGroup: "automation",
     approvalRequired: false,
     implemented: true,
     inputSchema: NotionGetTodoListInputSchema,

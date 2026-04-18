@@ -54,6 +54,8 @@ const createToolSummary = (): ToolSummary => ({
   title: "PostHog HogQL Query",
   description: "Run a typed PostHog HogQL query against the configured project using the project query API.",
   integration: "posthog",
+  exposureTier: "discoverable",
+  capabilityGroup: "analytics_buildout",
   approvalRequired: false,
   implemented: true,
 });

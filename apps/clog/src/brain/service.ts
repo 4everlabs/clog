@@ -64,7 +64,7 @@ export class BrainService {
   private readonly providerTools: readonly ProviderFunctionTool[];
   private readonly toolExecutor: ToolExecutor | null;
   private readonly fetchFn: FetchFn;
-  private readonly maxToolRounds = 10;
+  private readonly maxToolRounds = 20;
   private readonly maxOutputTokens = 12_000;
   private readonly maxConversationContextTokens = 1_000;
 
@@ -107,7 +107,9 @@ export class BrainService {
       `Current thread title: ${thread.title}`,
       `Current thread channel: ${thread.channel}`,
       `Current thread message count: ${thread.messages.length}`,
+      "Use runtime_search_messages when you need to locate a specific part of the conversation before reading more deeply.",
       "Use runtime_get_conversation with this thread id when you need to read more history than was served in-context.",
+      "If runtime_get_conversation returns nextRequest, keep following it until you have enough context.",
     ].join("\n");
     const systemPrompt = buildSystemPrompt(promptBundle, {
       tools: this.availableTools,

@@ -92,6 +92,79 @@ import type { RuntimeObservation } from "@clog/types";
 import type { RegisteredTool } from "../types";
 import { buildTimeRangeDescriptor, resolveTimeRangeWindowMinutes } from "../time-range";
 
+type PostHogToolMetadata = Pick<RegisteredTool, "exposureTier" | "capabilityGroup">;
+
+const posthogToolMetadata: Record<
+  | "posthog_get_organizations"
+  | "posthog_get_projects"
+  | "posthog_list_errors"
+  | "posthog_get_documented_tool_catalog"
+  | "posthog_list_mcp_tools"
+  | "posthog_call_mcp_tool"
+  | "posthog_run_query"
+  | "posthog_get_dashboard_snapshot"
+  | "posthog_get_info"
+  | "posthog_get_health_summary"
+  | "posthog_get_asset_summary"
+  | "posthog_get_release_summary"
+  | "posthog_list_dashboards"
+  | "posthog_get_dashboard"
+  | "posthog_list_insights"
+  | "posthog_get_insight"
+  | "posthog_list_feature_flags"
+  | "posthog_get_feature_flag"
+  | "posthog_get_feature_flag_status"
+  | "posthog_get_feature_flag_blast_radius"
+  | "posthog_list_experiments"
+  | "posthog_get_experiment"
+  | "posthog_get_experiment_results"
+  | "posthog_list_log_attributes"
+  | "posthog_query_logs"
+  | "posthog_search_entities"
+  | "posthog_read_data_schema"
+  | "posthog_read_data_warehouse_schema"
+  | "posthog_execute_sql"
+  | "posthog_search_docs"
+  | "posthog_list_endpoints"
+  | "posthog_diff_endpoints"
+  | "posthog_run_endpoint",
+  PostHogToolMetadata
+> = {
+  posthog_get_organizations: { exposureTier: "internal", capabilityGroup: "workspace" },
+  posthog_get_projects: { exposureTier: "internal", capabilityGroup: "workspace" },
+  posthog_list_errors: { exposureTier: "core", capabilityGroup: "investigation" },
+  posthog_get_documented_tool_catalog: { exposureTier: "core", capabilityGroup: "workspace" },
+  posthog_list_mcp_tools: { exposureTier: "core", capabilityGroup: "workspace" },
+  posthog_call_mcp_tool: { exposureTier: "core", capabilityGroup: "workspace" },
+  posthog_run_query: { exposureTier: "discoverable", capabilityGroup: "analytics_buildout" },
+  posthog_get_dashboard_snapshot: { exposureTier: "core", capabilityGroup: "investigation" },
+  posthog_get_info: { exposureTier: "core", capabilityGroup: "investigation" },
+  posthog_get_health_summary: { exposureTier: "core", capabilityGroup: "investigation" },
+  posthog_get_asset_summary: { exposureTier: "core", capabilityGroup: "investigation" },
+  posthog_get_release_summary: { exposureTier: "core", capabilityGroup: "release_safety" },
+  posthog_list_dashboards: { exposureTier: "internal", capabilityGroup: "investigation" },
+  posthog_get_dashboard: { exposureTier: "internal", capabilityGroup: "investigation" },
+  posthog_list_insights: { exposureTier: "internal", capabilityGroup: "analytics_buildout" },
+  posthog_get_insight: { exposureTier: "internal", capabilityGroup: "analytics_buildout" },
+  posthog_list_feature_flags: { exposureTier: "internal", capabilityGroup: "release_safety" },
+  posthog_get_feature_flag: { exposureTier: "internal", capabilityGroup: "release_safety" },
+  posthog_get_feature_flag_status: { exposureTier: "internal", capabilityGroup: "release_safety" },
+  posthog_get_feature_flag_blast_radius: { exposureTier: "internal", capabilityGroup: "release_safety" },
+  posthog_list_experiments: { exposureTier: "internal", capabilityGroup: "release_safety" },
+  posthog_get_experiment: { exposureTier: "internal", capabilityGroup: "release_safety" },
+  posthog_get_experiment_results: { exposureTier: "internal", capabilityGroup: "release_safety" },
+  posthog_list_log_attributes: { exposureTier: "internal", capabilityGroup: "investigation" },
+  posthog_query_logs: { exposureTier: "internal", capabilityGroup: "investigation" },
+  posthog_search_entities: { exposureTier: "discoverable", capabilityGroup: "analytics_buildout" },
+  posthog_read_data_schema: { exposureTier: "discoverable", capabilityGroup: "analytics_buildout" },
+  posthog_read_data_warehouse_schema: { exposureTier: "discoverable", capabilityGroup: "analytics_buildout" },
+  posthog_execute_sql: { exposureTier: "discoverable", capabilityGroup: "analytics_buildout" },
+  posthog_search_docs: { exposureTier: "discoverable", capabilityGroup: "analytics_buildout" },
+  posthog_list_endpoints: { exposureTier: "internal", capabilityGroup: "automation" },
+  posthog_diff_endpoints: { exposureTier: "internal", capabilityGroup: "automation" },
+  posthog_run_endpoint: { exposureTier: "internal", capabilityGroup: "automation" },
+};
+
 const toRecord = (entries: readonly { key: string; value: string }[] | undefined): Record<string, string> | undefined => {
   if (!entries || entries.length === 0) {
     return undefined;
@@ -350,7 +423,7 @@ const buildPostHogReleaseSummaryData = async (
   });
 };
 
-export const posthogTools = [
+const basePosthogTools = [
   {
     name: "posthog_get_organizations",
     title: "PostHog Organizations",
@@ -534,8 +607,8 @@ export const posthogTools = [
       const suggestedTools = input.kind === "health"
         ? ["posthog_get_health_summary", "posthog_get_dashboard_snapshot", "posthog_list_errors"]
         : input.kind === "assets"
-          ? ["posthog_get_asset_summary", "posthog_list_dashboards", "posthog_list_insights", "posthog_search_entities"]
-          : ["posthog_get_release_summary", "posthog_list_feature_flags", "posthog_list_experiments"];
+          ? ["posthog_get_asset_summary", "posthog_get_documented_tool_catalog", "posthog_call_mcp_tool"]
+          : ["posthog_get_release_summary", "posthog_get_documented_tool_catalog", "posthog_call_mcp_tool"];
 
       const data = input.kind === "health"
         ? await buildPostHogHealthSummaryData(services, input)
@@ -1118,4 +1191,9 @@ export const posthogTools = [
       });
     },
   },
-] as const satisfies readonly RegisteredTool[];
+] as const satisfies readonly Omit<RegisteredTool, "exposureTier" | "capabilityGroup">[];
+
+export const posthogTools: readonly RegisteredTool[] = basePosthogTools.map((tool) => ({
+  ...posthogToolMetadata[tool.name],
+  ...tool,
+}));

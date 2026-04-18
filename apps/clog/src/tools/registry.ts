@@ -39,6 +39,8 @@ const toToolSummary = (tool: AnyRegisteredTool): ToolSummary =>
     title: tool.title,
     description: tool.description,
     integration: tool.integration,
+    exposureTier: tool.exposureTier,
+    capabilityGroup: tool.capabilityGroup,
     approvalRequired: tool.approvalRequired,
     implemented: tool.implemented,
   });
@@ -76,6 +78,8 @@ const isVisibleTool = (tool: AnyRegisteredTool, options: ToolVisibilityOptions):
   return true;
 };
 
+const isAdvertisedTool = (tool: AnyRegisteredTool): boolean => tool.exposureTier === "core";
+
 export const listRegisteredTools = (): readonly AnyRegisteredTool[] => registeredTools;
 
 export const getRegisteredTool = (toolName: AgentToolName): AnyRegisteredTool | null =>
@@ -87,14 +91,26 @@ export const resolveEnabledTools = (
 ): readonly AnyRegisteredTool[] =>
   registeredTools.filter((tool) => tool.implemented && tool.isEnabled(capabilities) && isVisibleTool(tool, options));
 
+export const resolveAdvertisedTools = (
+  capabilities: IntegrationCapabilitySnapshot,
+  options: ToolVisibilityOptions = {},
+): readonly AnyRegisteredTool[] =>
+  resolveEnabledTools(capabilities, options).filter(isAdvertisedTool);
+
 export const summarizeEnabledTools = (
   capabilities: IntegrationCapabilitySnapshot,
   options: ToolVisibilityOptions = {},
 ): readonly ToolSummary[] =>
   resolveEnabledTools(capabilities, options).map(toToolSummary);
 
+export const summarizeAdvertisedTools = (
+  capabilities: IntegrationCapabilitySnapshot,
+  options: ToolVisibilityOptions = {},
+): readonly ToolSummary[] =>
+  resolveAdvertisedTools(capabilities, options).map(toToolSummary);
+
 export const buildProviderTools = (
   capabilities: IntegrationCapabilitySnapshot,
   options: ToolVisibilityOptions = {},
 ): readonly ProviderFunctionTool[] =>
-  resolveEnabledTools(capabilities, options).map(toProviderFunctionTool);
+  resolveAdvertisedTools(capabilities, options).map(toProviderFunctionTool);

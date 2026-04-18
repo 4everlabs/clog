@@ -15,7 +15,14 @@ import type {
 import type { z, ZodTypeAny } from "zod";
 import type { PostHogDashboardSnapshot } from "../integrations/posthog/dashboard-snapshot";
 import type { PostHogDocumentedToolCatalog } from "../integrations/posthog/documented-tool-catalog";
-import type { AgentToolName, ToolExecutionResultEnvelope, ToolFamily, ToolSummary } from "../schema/tools";
+import type {
+  AgentToolName,
+  ToolCapabilityGroup,
+  ToolExecutionResultEnvelope,
+  ToolExposureTier,
+  ToolFamily,
+  ToolSummary,
+} from "../schema/tools";
 
 type RuntimeMonitoringReport = {
   readonly fileName: string;
@@ -267,6 +274,8 @@ export interface RegisteredTool<TInputSchema extends ZodTypeAny = ZodTypeAny, TO
   readonly title: string;
   readonly description: string;
   readonly integration: ToolFamily;
+  readonly exposureTier: ToolExposureTier;
+  readonly capabilityGroup: ToolCapabilityGroup;
   readonly approvalRequired: boolean;
   readonly implemented: boolean;
   readonly inputSchema: TInputSchema;

@@ -19,7 +19,7 @@ import { RuntimeReadService } from "./runtime/read-service";
 import { RuntimeOrchestrationService } from "./runtime/orchestration-service";
 import { ToolExecutor } from "./execution/tool-executor";
 import { ShellExecutor } from "./execution/shell-executor";
-import { buildProviderTools, resolveEnabledTools } from "./tools/registry";
+import { buildProviderTools, resolveAdvertisedTools } from "./tools/registry";
 
 export interface RuntimeBootstrap {
   readonly env: AgentEnvironment;
@@ -102,7 +102,7 @@ export const bootstrapRuntime = (): RuntimeBootstrap => {
   const toolVisibility = {
     hidePosthogContextTools: env.hidePosthogContextTools,
   };
-  const registeredTools = resolveEnabledTools(env.capabilities, toolVisibility);
+  const registeredTools = resolveAdvertisedTools(env.capabilities, toolVisibility);
   const brain = new BrainService({
     aiConfig: env.ai,
     executionMode: env.executionMode,

@@ -84,7 +84,14 @@ export const createPostHogToolServices = ({
   getDocumentedToolCatalog: async (input = {}) => await recordAsync(
     posthogWorkspaceReporter,
     "documentedToolCatalog",
-    async () => await Promise.resolve(getPostHogDocumentedToolCatalog(input)),
+    async () => {
+      const liveCatalog = await posthogApi.listMcpTools({
+        limit: 200,
+      });
+      return getPostHogDocumentedToolCatalog(input, {
+        tools: liveCatalog.tools,
+      });
+    },
   ),
   queryInsight: async (name: string, query: string) => await recordAsync(
     posthogWorkspaceReporter,

@@ -29,7 +29,40 @@ import {
 import type { RegisteredTool } from "../types";
 import { buildTimeRangeDescriptor } from "../time-range";
 
-export const runtimeTools = [
+type RuntimeToolMetadata = Pick<RegisteredTool, "exposureTier" | "capabilityGroup">;
+
+const runtimeToolMetadata: Record<
+  | "runtime_get_state_snapshot"
+  | "runtime_get_info"
+  | "runtime_list_conversations"
+  | "runtime_get_conversation"
+  | "runtime_search_messages"
+  | "runtime_get_recent_logs"
+  | "runtime_get_monitoring_snapshot"
+  | "runtime_list_actions"
+  | "runtime_run_action"
+  | "runtime_list_routines"
+  | "runtime_run_routine"
+  | "runtime_read_knowledge"
+  | "runtime_read_json",
+  RuntimeToolMetadata
+> = {
+  runtime_get_state_snapshot: { exposureTier: "discoverable", capabilityGroup: "runtime_context" },
+  runtime_get_info: { exposureTier: "core", capabilityGroup: "runtime_context" },
+  runtime_list_conversations: { exposureTier: "core", capabilityGroup: "runtime_context" },
+  runtime_get_conversation: { exposureTier: "core", capabilityGroup: "runtime_context" },
+  runtime_search_messages: { exposureTier: "core", capabilityGroup: "runtime_context" },
+  runtime_get_recent_logs: { exposureTier: "discoverable", capabilityGroup: "runtime_read" },
+  runtime_get_monitoring_snapshot: { exposureTier: "discoverable", capabilityGroup: "runtime_read" },
+  runtime_list_actions: { exposureTier: "internal", capabilityGroup: "automation" },
+  runtime_run_action: { exposureTier: "internal", capabilityGroup: "automation" },
+  runtime_list_routines: { exposureTier: "internal", capabilityGroup: "automation" },
+  runtime_run_routine: { exposureTier: "internal", capabilityGroup: "automation" },
+  runtime_read_knowledge: { exposureTier: "core", capabilityGroup: "knowledge" },
+  runtime_read_json: { exposureTier: "core", capabilityGroup: "runtime_read" },
+};
+
+const baseRuntimeTools = [
   {
     name: "runtime_get_state_snapshot",
     title: "Runtime State Snapshot",
@@ -87,7 +120,7 @@ export const runtimeTools = [
             ...base,
             generatedAt: data.generatedAt,
             kind: input.kind,
-            suggestedTools: ["runtime_get_state_snapshot", "runtime_list_conversations", "runtime_get_monitoring_snapshot"],
+            suggestedTools: ["runtime_get_info", "runtime_list_conversations", "runtime_get_conversation"],
             printout: `Runtime state: ${data.status}; ${data.openFindingsCount} open findings; ${data.recentThreads.length} recent threads.`,
             data,
           };
@@ -165,7 +198,7 @@ export const runtimeTools = [
             ...base,
             generatedAt: data.generatedAt,
             kind: input.kind,
-            suggestedTools: ["runtime_get_monitoring_snapshot", "posthog_get_health_summary", "runtime_get_recent_logs"],
+            suggestedTools: ["runtime_get_info", "runtime_read_json", "posthog_get_health_summary"],
             printout: `Monitoring snapshot includes ${data.recentPerformanceReports.length} reports and ${data.recentPostHogOperations.length} PostHog operations.`,
             data,
           };
@@ -180,7 +213,7 @@ export const runtimeTools = [
             ...base,
             generatedAt: data.generatedAt,
             kind: input.kind,
-            suggestedTools: ["runtime_get_recent_logs", "runtime_get_monitoring_snapshot", "runtime_get_state_snapshot"],
+            suggestedTools: ["runtime_get_info", "runtime_read_json", "runtime_search_messages"],
             printout: `Loaded ${data.files.length} recent log files.`,
             data,
           };
@@ -408,4 +441,9 @@ export const runtimeTools = [
       return services.runtime.readJson(input);
     },
   },
-] as const satisfies readonly RegisteredTool[];
+] as const satisfies readonly Omit<RegisteredTool, "exposureTier" | "capabilityGroup">[];
+
+export const runtimeTools: readonly RegisteredTool[] = baseRuntimeTools.map((tool) => ({
+  ...runtimeToolMetadata[tool.name],
+  ...tool,
+}));

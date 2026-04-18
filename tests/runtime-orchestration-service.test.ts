@@ -66,6 +66,8 @@ describe("RuntimeOrchestrationService", () => {
             title: toolName,
             description: toolName,
             integration: toolName.startsWith("runtime_") ? "runtime" : "posthog",
+            exposureTier: toolName.startsWith("runtime_") ? "core" : "discoverable",
+            capabilityGroup: toolName.startsWith("runtime_") ? "runtime_context" : "investigation",
             approvalRequired: false,
             implemented: true,
           },

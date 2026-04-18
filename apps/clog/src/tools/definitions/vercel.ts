@@ -7,6 +7,8 @@ export const vercelTools = [
     title: "Vercel Trigger Deploy",
     description: "Trigger a Vercel deploy when deployment capability is enabled. Hidden until a concrete implementation is wired.",
     integration: "vercel",
+    exposureTier: "core",
+    capabilityGroup: "deployment",
     approvalRequired: true,
     implemented: false,
     inputSchema: VercelTriggerDeployInputSchema,

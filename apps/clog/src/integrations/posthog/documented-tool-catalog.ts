@@ -1,15 +1,38 @@
+import type { AgentToolName } from "../../schema/tools";
+
 export interface PostHogDocumentedTool {
   readonly name: string;
   readonly purpose: string;
 }
 
-export interface PostHogDocumentedFeatureCatalog {
+interface PostHogDocumentedFeatureDefinition {
   readonly feature: string;
   readonly title: string;
   readonly description: string;
   readonly docsUrl: string | null;
   readonly priority: "core" | "high" | "extended";
   readonly tools: readonly PostHogDocumentedTool[];
+}
+
+export interface PostHogDocumentedFeatureCatalog extends PostHogDocumentedFeatureDefinition {
+  readonly reachable: boolean;
+  readonly accessMode: "top_level" | "generic_mcp" | "unavailable";
+  readonly accessibleToolNames: readonly string[];
+  readonly aliasedToolNames: readonly string[];
+  readonly missingToolNames: readonly string[];
+  readonly suggestedClogTools: readonly AgentToolName[];
+}
+
+export interface PostHogDocumentedCategoryCatalog {
+  readonly id: string;
+  readonly title: string;
+  readonly why: string;
+  readonly features: readonly string[];
+  readonly documentedToolCount: number;
+  readonly accessibleToolCount: number;
+  readonly reachableFeatureCount: number;
+  readonly accessMode: "top_level" | "generic_mcp" | "unavailable";
+  readonly suggestedClogTools: readonly AgentToolName[];
 }
 
 export interface PostHogDocumentedToolCatalog {
@@ -33,10 +56,40 @@ export interface PostHogDocumentedToolCatalog {
     readonly why: string;
     readonly features: readonly string[];
   }>;
+  readonly categories: readonly PostHogDocumentedCategoryCatalog[];
+  readonly liveCatalog: {
+    readonly totalTools: number;
+    readonly accessibleToolNames: readonly string[];
+    readonly missingDocumentedToolNames: readonly string[];
+  };
   readonly features: readonly PostHogDocumentedFeatureCatalog[];
 }
 
-const features: readonly PostHogDocumentedFeatureCatalog[] = [
+interface PostHogDocumentedCatalogDefinition {
+  readonly verifiedAt: string;
+  readonly sources: readonly string[];
+  readonly serverUrls: {
+    readonly us: string;
+    readonly eu: string;
+  };
+  readonly pinning: {
+    readonly supportedHeaders: readonly string[];
+    readonly supportedQueryParameters: readonly string[];
+  };
+  readonly featureFilterExample: string;
+  readonly apiPrimitives: ReadonlyArray<{
+    readonly name: string;
+    readonly purpose: string;
+  }>;
+  readonly recommendedBuildOrder: ReadonlyArray<{
+    readonly surface: string;
+    readonly why: string;
+    readonly features: readonly string[];
+  }>;
+  readonly features: readonly PostHogDocumentedFeatureDefinition[];
+}
+
+const features: readonly PostHogDocumentedFeatureDefinition[] = [
   {
     feature: "workspace",
     title: "Workspace",
@@ -418,7 +471,7 @@ const features: readonly PostHogDocumentedFeatureCatalog[] = [
   },
 ];
 
-export const POSTHOG_DOCUMENTED_TOOL_CATALOG: PostHogDocumentedToolCatalog = {
+export const POSTHOG_DOCUMENTED_TOOL_CATALOG: PostHogDocumentedCatalogDefinition = {
   verifiedAt: "2026-04-01",
   sources: [
     "https://posthog.com/docs/model-context-protocol",
@@ -466,14 +519,104 @@ export const POSTHOG_DOCUMENTED_TOOL_CATALOG: PostHogDocumentedToolCatalog = {
   features,
 };
 
+const GENERIC_MCP_ENTRY_TOOLS = [
+  "posthog_get_documented_tool_catalog",
+  "posthog_list_mcp_tools",
+  "posthog_call_mcp_tool",
+] as const satisfies readonly AgentToolName[];
+
+const SURFACE_ENTRY_TOOLS: Record<string, readonly AgentToolName[]> = {
+  "operator-triage": [
+    "posthog_get_info",
+    "posthog_get_health_summary",
+    "posthog_get_asset_summary",
+    "posthog_get_dashboard_snapshot",
+    "posthog_list_errors",
+    "posthog_call_mcp_tool",
+  ],
+  "release-safety": [
+    "posthog_get_info",
+    "posthog_get_release_summary",
+    "posthog_call_mcp_tool",
+  ],
+  "data-and-growth": [...GENERIC_MCP_ENTRY_TOOLS],
+  automation: [...GENERIC_MCP_ENTRY_TOOLS],
+};
+
+const FEATURE_ENTRY_TOOLS: Partial<Record<string, readonly AgentToolName[]>> = {
+  workspace: [...GENERIC_MCP_ENTRY_TOOLS],
+  insights: ["posthog_get_info", "posthog_get_health_summary", "posthog_call_mcp_tool"],
+  dashboards: ["posthog_get_info", "posthog_get_asset_summary", "posthog_get_dashboard_snapshot", "posthog_call_mcp_tool"],
+  error_tracking: ["posthog_get_info", "posthog_get_health_summary", "posthog_list_errors", "posthog_call_mcp_tool"],
+  logs: ["posthog_get_info", "posthog_get_health_summary", "posthog_call_mcp_tool"],
+  flags: ["posthog_get_info", "posthog_get_release_summary", "posthog_call_mcp_tool"],
+  experiments: ["posthog_get_info", "posthog_get_release_summary", "posthog_call_mcp_tool"],
+  search: ["posthog_get_info", "posthog_get_asset_summary", "posthog_call_mcp_tool"],
+  docs: [...GENERIC_MCP_ENTRY_TOOLS],
+  data_schema: [...GENERIC_MCP_ENTRY_TOOLS],
+  sql: [...GENERIC_MCP_ENTRY_TOOLS],
+  data_warehouse: [...GENERIC_MCP_ENTRY_TOOLS],
+  events: [...GENERIC_MCP_ENTRY_TOOLS],
+  persons: [...GENERIC_MCP_ENTRY_TOOLS],
+  cohorts: [...GENERIC_MCP_ENTRY_TOOLS],
+  alerts: [...GENERIC_MCP_ENTRY_TOOLS],
+  annotations: [...GENERIC_MCP_ENTRY_TOOLS],
+  llm_analytics: [...GENERIC_MCP_ENTRY_TOOLS],
+  surveys: [...GENERIC_MCP_ENTRY_TOOLS],
+  hog_functions: [...GENERIC_MCP_ENTRY_TOOLS],
+  actions: [...GENERIC_MCP_ENTRY_TOOLS],
+  activity_logs: [...GENERIC_MCP_ENTRY_TOOLS],
+  early_access_features: [...GENERIC_MCP_ENTRY_TOOLS],
+  notebooks: [...GENERIC_MCP_ENTRY_TOOLS],
+  reverse_proxy: [...GENERIC_MCP_ENTRY_TOOLS],
+  debug: [...GENERIC_MCP_ENTRY_TOOLS],
+};
+
+const DOCUMENTED_TOOL_ALIASES: Record<string, readonly string[]> = {
+  "organization-details-get": ["organization-get"],
+  "organizations-get": ["organizations-list"],
+  "insights-get-all": ["insights-list"],
+  "logs-list-attributes": ["logs-attributes-list"],
+  "logs-list-attribute-values": ["logs-attribute-values-list"],
+  "logs-query": ["query-logs"],
+  "activity-logs-list": ["activity-log-list"],
+};
+
+const unique = <T>(values: readonly T[]): readonly T[] => [...new Set(values)];
+
+const genericMcpEntryToolSet = new Set<AgentToolName>(GENERIC_MCP_ENTRY_TOOLS);
+
+const hasTargetedEntryTool = (tools: readonly AgentToolName[]): boolean => (
+  tools.some((tool) => !genericMcpEntryToolSet.has(tool))
+);
+
+const toAccessMode = (
+  reachable: boolean,
+  suggestedClogTools: readonly AgentToolName[],
+): "top_level" | "generic_mcp" | "unavailable" => {
+  if (!reachable) {
+    return "unavailable";
+  }
+
+  return hasTargetedEntryTool(suggestedClogTools) ? "top_level" : "generic_mcp";
+};
+
 export const getPostHogDocumentedToolCatalog = (input: {
   readonly feature?: string;
   readonly priority?: "core" | "high" | "extended";
   readonly includeExtended?: boolean;
+}, liveCatalogInput: {
+  readonly tools?: ReadonlyArray<{
+    readonly name: string;
+    readonly title?: string | null;
+    readonly description?: string | null;
+  }>;
 } = {}): PostHogDocumentedToolCatalog => {
   const requestedFeature = input.feature?.trim().toLowerCase();
   const includeExtended = input.includeExtended !== false;
   const requestedPriority = input.priority;
+  const liveTools = liveCatalogInput.tools ?? [];
+  const liveToolNames = new Set(liveTools.map((tool) => tool.name));
 
   const filteredFeatures = features.filter((feature) => {
     if (!includeExtended && feature.priority === "extended") {
@@ -488,8 +631,63 @@ export const getPostHogDocumentedToolCatalog = (input: {
     return true;
   });
 
+  const enrichedFeatures: PostHogDocumentedFeatureCatalog[] = filteredFeatures.map((feature) => {
+    const accessibleToolNames = unique(feature.tools.flatMap((tool) => {
+      if (liveToolNames.has(tool.name)) {
+        return [tool.name];
+      }
+
+      return (DOCUMENTED_TOOL_ALIASES[tool.name] ?? []).filter((alias) => liveToolNames.has(alias));
+    }));
+    const aliasedToolNames = accessibleToolNames.filter((toolName) => !feature.tools.some((tool) => tool.name === toolName));
+    const missingToolNames = feature.tools
+      .filter((tool) => !liveToolNames.has(tool.name) && !(DOCUMENTED_TOOL_ALIASES[tool.name] ?? []).some((alias) => liveToolNames.has(alias)))
+      .map((tool) => tool.name);
+    const suggestedClogTools = FEATURE_ENTRY_TOOLS[feature.feature] ?? GENERIC_MCP_ENTRY_TOOLS;
+    const reachable = accessibleToolNames.length > 0;
+
+    return {
+      ...feature,
+      reachable,
+      accessMode: toAccessMode(reachable, suggestedClogTools),
+      accessibleToolNames,
+      aliasedToolNames,
+      missingToolNames,
+      suggestedClogTools,
+    };
+  });
+
+  const categories: PostHogDocumentedCategoryCatalog[] = POSTHOG_DOCUMENTED_TOOL_CATALOG.recommendedBuildOrder
+    .map((surface) => {
+      const categoryFeatures = enrichedFeatures.filter((feature) => surface.features.includes(feature.feature));
+      const accessibleToolNames = unique(categoryFeatures.flatMap((feature) => feature.accessibleToolNames));
+      const reachableFeatureCount = categoryFeatures.filter((feature) => feature.reachable).length;
+      const suggestedClogTools = SURFACE_ENTRY_TOOLS[surface.surface] ?? GENERIC_MCP_ENTRY_TOOLS;
+
+      return {
+        id: surface.surface,
+        title: surface.surface,
+        why: surface.why,
+        features: surface.features.filter((feature) => categoryFeatures.some((entry) => entry.feature === feature)),
+        documentedToolCount: categoryFeatures.reduce((total, feature) => total + feature.tools.length, 0),
+        accessibleToolCount: accessibleToolNames.length,
+        reachableFeatureCount,
+        accessMode: toAccessMode(reachableFeatureCount > 0, suggestedClogTools),
+        suggestedClogTools,
+      };
+    })
+    .filter((category) => category.features.length > 0);
+
+  const missingDocumentedToolNames = unique(enrichedFeatures.flatMap((feature) => feature.missingToolNames));
+
   return {
     ...POSTHOG_DOCUMENTED_TOOL_CATALOG,
-    features: filteredFeatures,
+    categories,
+    liveCatalog: {
+      totalTools: liveTools.length,
+      accessibleToolNames: unique(liveTools.map((tool) => tool.name)),
+      missingDocumentedToolNames,
+    },
+    features: enrichedFeatures,
   };
 };
