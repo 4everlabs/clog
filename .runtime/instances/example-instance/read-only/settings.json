@@ -1,29 +1,8 @@
 {
-  "mode": "propose",
-  "notifyChannels": ["cli"],
-  "channels": ["cli"],
   "monitor": {
     "intervalMs": 60000
   },
-  "llm": {
-    "model": "google/gemma-4-26b-a4b-it:free",
-    "temperature": 0.3,
-    "maximumTokens": 10000
-  },
   "posthog": {
     "context": "4ever.ai / app.4ever.ai"
-  },
-  "chat": {
-    "notify": true
-  },
-  "shell": {
-    "enabled": false
-  },
-  "errorThresholds": {
-    "lookbackMinutes": 30,
-    "spikeThreshold": 10,
-    "spikeMultiplier": 2,
-    "criticalThreshold": 25
-  },
-  "safetyProfile": "strict"
+  }
 }
