@@ -93,7 +93,14 @@ const resolvePathWithinRoot = (
 };
 
 export const getRuntimeProcessEnv = (): NodeJS.ProcessEnv => {
-  return typeof Bun !== "undefined" ? Bun.env : process.env;
+  if (typeof Bun === "undefined") {
+    return process.env;
+  }
+
+  return {
+    ...Bun.env,
+    ...process.env,
+  };
 };
 
 const readChannels = (value: string | undefined): SurfaceChannelKind[] => {
@@ -259,12 +266,16 @@ const hasPostHogManagementAccess = (config: PostHogRuntimeConfig): boolean =>
 const createAiConfig = (env: NodeJS.ProcessEnv): AiRuntimeConfig => {
   const openRouterApiKey = readOptionalString(env.OPENROUTER_API_KEY);
   const openAiApiKey = readOptionalString(env.OPENAI_API_KEY);
+  const openRouterModel = readOptionalString(env.OPENROUTER_MODEL);
+  const openAiModel = readOptionalString(env.OPENAI_MODEL);
   const usingOpenRouter = Boolean(openRouterApiKey);
 
   return {
     provider: openRouterApiKey ? "openrouter" : (openAiApiKey ? "openai" : null),
     apiKey: openRouterApiKey ?? openAiApiKey,
-    model: readOptionalString(env.OPENROUTER_MODEL) ?? (usingOpenRouter ? "stepfun/step-3.5-flash" : "gpt-4o-mini"),
+    model: usingOpenRouter
+      ? (openRouterModel ?? "stepfun/step-3.5-flash")
+      : (openAiModel ?? openRouterModel ?? "gpt-4o-mini"),
     baseUrl: usingOpenRouter ? "https://openrouter.ai/api/v1" : "https://api.openai.com/v1",
   };
 };

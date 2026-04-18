@@ -77,6 +77,8 @@ The runtime expects per-instance state under `.runtime/instances/<instance>/`:
 - `storage/`: structured runtime state.
 - `workspace/`: model-targeted writable workspace.
 
+This is a serverful setup and needs to run on a VM or container with a filesystem at minimum. For a serverless version, see [`vercel-claw`](https://github.com/henryoman/vercel-claw).
+
 Secrets still belong in `.env`.
 
 ## Docs

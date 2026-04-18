@@ -443,7 +443,7 @@ export class RuntimeReadService {
     const messageOffset = Math.max(0, Math.trunc(input.messageOffset ?? 0));
     const messageLimit = clamp(input.messageLimit, DEFAULT_CONVERSATION_MESSAGE_LIMIT, 500);
     const tokenBudget = clamp(input.tokenBudget, DEFAULT_CONVERSATION_TOKEN_BUDGET, 20_000);
-    const slice: typeof filteredMessages = [];
+    const slice: Array<(typeof filteredMessages)[number]> = [];
     let returnedTokenEstimate = 0;
 
     for (const message of filteredMessages.slice(messageOffset)) {
@@ -726,13 +726,13 @@ export class RuntimeReadService {
     readonly windowMinutes?: number;
   }): string {
     const parts = [
-      `Call runtime_get_conversation with threadId=\"${input.threadId}\"`,
+      `Call runtime_get_conversation with threadId="${input.threadId}"`,
       `messageOffset=${input.nextMessageOffset}`,
       `tokenBudget=${input.tokenBudget}`,
     ];
 
     if (input.timePreset) {
-      parts.push(`timePreset=\"${input.timePreset}\"`);
+      parts.push(`timePreset="${input.timePreset}"`);
     } else if (typeof input.windowMinutes === "number" && Number.isFinite(input.windowMinutes)) {
       parts.push(`windowMinutes=${Math.trunc(input.windowMinutes)}`);
     }

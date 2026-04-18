@@ -6,7 +6,7 @@
     "intervalMs": 60000
   },
   "llm": {
-    "model": "stepfun/flash-3.5",
+    "model": "google/gemma-4-26b-a4b-it:free",
     "temperature": 0.3,
     "maximumTokens": 10000
   },

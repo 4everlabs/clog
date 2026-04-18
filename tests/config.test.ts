@@ -171,6 +171,20 @@ describe("loadAgentEnvironment", () => {
     expect(env.telegram.userName).toBe("clog4everbot");
   });
 
+  test("uses OPENAI_MODEL when OpenAI is the active provider", () => {
+    const env = loadAgentEnvironment({
+      OPENAI_API_KEY: "sk-openai-live",
+      OPENAI_MODEL: "gpt-5-mini",
+    });
+
+    expect(env.ai).toMatchObject({
+      provider: "openai",
+      apiKey: "sk-openai-live",
+      model: "gpt-5-mini",
+      baseUrl: "https://api.openai.com/v1",
+    });
+  });
+
   test("allows overriding the runtime state directory", () => {
     const env = loadAgentEnvironment({
       POSTHOG_CLAW_INSTANCE_ID: "operator-1",

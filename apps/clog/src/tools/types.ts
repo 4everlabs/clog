@@ -1,4 +1,6 @@
 import type {
+  ConversationMessage,
+  ConversationThread,
   IntegrationCapabilitySnapshot,
   SurfaceNotionTodoResponse,
   PostHogCliCommandResponse,
@@ -14,6 +16,31 @@ import type { z, ZodTypeAny } from "zod";
 import type { PostHogDashboardSnapshot } from "../integrations/posthog/dashboard-snapshot";
 import type { PostHogDocumentedToolCatalog } from "../integrations/posthog/documented-tool-catalog";
 import type { AgentToolName, ToolExecutionResultEnvelope, ToolFamily, ToolSummary } from "../schema/tools";
+
+type RuntimeMonitoringReport = {
+  readonly fileName: string;
+  readonly createdAt: number;
+  readonly report: Record<string, unknown>;
+};
+
+type RuntimeMonitoringOperation = {
+  readonly operation: string;
+  readonly lastRecordedAt: number;
+  readonly history: ReadonlyArray<{
+    readonly recordedAt: number;
+    readonly data: unknown;
+  }>;
+};
+
+type RuntimeConversationThreadView = Pick<
+  ConversationThread,
+  "id" | "title" | "channel" | "createdAt" | "updatedAt"
+>;
+
+type RuntimeConversationMessageView = Pick<
+  ConversationMessage,
+  "id" | "role" | "channel" | "content" | "createdAt"
+>;
 
 export interface PostHogToolServices {
   getOrganizations(): Promise<readonly PostHogOrganizationSummary[]>;
@@ -99,9 +126,9 @@ export interface RuntimeToolServices {
     readonly operationHistoryLimit?: number;
   }): {
     readonly generatedAt: number;
-    readonly latestPerformanceReport: unknown | null;
-    readonly recentPerformanceReports: readonly unknown[];
-    readonly recentPostHogOperations: readonly unknown[];
+    readonly latestPerformanceReport: Record<string, unknown> | null;
+    readonly recentPerformanceReports: readonly RuntimeMonitoringReport[];
+    readonly recentPostHogOperations: readonly RuntimeMonitoringOperation[];
   };
   listActions(input?: {
     readonly tag?: string;
@@ -184,8 +211,8 @@ export interface RuntimeToolServices {
     readonly windowMinutes?: number;
   }): {
     readonly generatedAt: number;
-    readonly thread: unknown;
-    readonly messages: readonly unknown[];
+    readonly thread: RuntimeConversationThreadView;
+    readonly messages: readonly RuntimeConversationMessageView[];
     readonly totalMessages: number;
     readonly messageOffset: number;
     readonly messageLimit: number;
