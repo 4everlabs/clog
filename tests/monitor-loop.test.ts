@@ -40,6 +40,9 @@ describe("MonitoringLoop", () => {
         getHealth: async () => createHealth("posthog", "ready"),
         listObservations: async () => posthogObservationEnabled ? [observation] : [],
       },
+      convex: {
+        getHealth: async () => createHealth("convex", "ready"),
+      },
       github: {
         getHealth: async () => createHealth("github", githubMissingConfig ? "missing-config" : "ready"),
       },

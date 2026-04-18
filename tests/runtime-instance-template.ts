@@ -1,7 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
-const STARTER_INSTANCE_ID = "example-instance";
+const STARTER_INSTANCE_ID = "00";
 
 const readOptionalString = (value: string | undefined): string | null => {
   const trimmed = value?.trim();
@@ -39,7 +39,7 @@ export const resolveRuntimeStorageRoot = (
 export const resolveRuntimeWakeupPath = (
   env: NodeJS.ProcessEnv = process.env,
   workspaceRoot = process.cwd(),
-): string => join(resolveRuntimeInstanceRoot(env, workspaceRoot), "wakeup.json");
+): string => join(resolveRuntimeReadOnlyRoot(env, workspaceRoot), "wakeup.json");
 
 const resolveStarterInstanceRoot = (workspaceRoot = process.cwd()): string =>
   resolve(workspaceRoot, `.runtime/instances/${STARTER_INSTANCE_ID}`);
@@ -176,9 +176,10 @@ const removeLegacyPaths = (instanceRoot: string): void => {
   rmSync(join(instanceRoot, "storage", "runtime.sqlite"), { force: true });
   moveLegacyFile(join(instanceRoot, "settings", "settings.json"), join(instanceRoot, "read-only", "settings.json"));
   moveLegacyFile(join(instanceRoot, "settings", "tools.json"), join(instanceRoot, "read-only", "tools.json"));
-  moveLegacyFile(join(instanceRoot, "settings", "wakeup.json"), join(instanceRoot, "wakeup.json"));
+  moveLegacyFile(join(instanceRoot, "settings", "wakeup.json"), join(instanceRoot, "read-only", "wakeup.json"));
   moveLegacyFile(join(instanceRoot, "settings.json"), join(instanceRoot, "read-only", "settings.json"));
   moveLegacyFile(join(instanceRoot, "tools.json"), join(instanceRoot, "read-only", "tools.json"));
+  moveLegacyFile(join(instanceRoot, "wakeup.json"), join(instanceRoot, "read-only", "wakeup.json"));
   rmSync(join(instanceRoot, "settings"), { recursive: true, force: true });
 };
 

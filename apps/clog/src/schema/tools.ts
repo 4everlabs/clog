@@ -18,6 +18,9 @@ export const RuntimeToolsConfigSchema = z.object({
     readExperiments: z.boolean().optional(),
     manageEndpoints: z.boolean().optional(),
   }).strict().optional(),
+  convex: z.object({
+    readData: z.boolean().optional(),
+  }).strict().optional(),
   github: z.object({
     readRepository: z.boolean().optional(),
     createPullRequests: z.boolean().optional(),
@@ -48,6 +51,9 @@ export const NormalizedRuntimeToolsConfigSchema = z.object({
     readExperiments: z.boolean(),
     manageEndpoints: z.boolean(),
   }).strict(),
+  convex: z.object({
+    readData: z.boolean(),
+  }).strict(),
   github: z.object({
     readRepository: z.boolean(),
     createPullRequests: z.boolean(),
@@ -69,7 +75,7 @@ export const NormalizedRuntimeToolsConfigSchema = z.object({
 
 export type NormalizedRuntimeToolsConfig = z.infer<typeof NormalizedRuntimeToolsConfigSchema>;
 
-export const ToolFamilySchema = z.enum(["posthog", "github", "vercel", "notion", "runtime", "shell"]);
+export const ToolFamilySchema = z.enum(["posthog", "convex", "github", "vercel", "notion", "runtime", "shell"]);
 export type ToolFamily = z.infer<typeof ToolFamilySchema>;
 
 export const ToolExposureTierSchema = z.enum(["core", "discoverable", "internal"]);
@@ -125,6 +131,7 @@ export const AgentToolNameSchema = z.enum([
   "posthog_list_endpoints",
   "posthog_diff_endpoints",
   "posthog_run_endpoint",
+  "convex_run_query",
   "notion_get_todo_list",
   "runtime_get_state_snapshot",
   "runtime_get_info",
@@ -893,6 +900,26 @@ export const NotionGetTodoListInputSchema = z.object({
 export const NotionGetTodoListResultSchema = z.object({
   summary: NotionTodoSummarySchema,
   items: z.array(NotionTodoItemSchema),
+  printout: z.string().min(1),
+}).strict();
+
+const ConvexValueTypeSchema = z.enum(["object", "array", "string", "number", "boolean", "null"]);
+
+export const ConvexRunQueryInputSchema = z.object({
+  path: z.string().min(1),
+  args: z.object({}).catchall(z.unknown()).optional(),
+}).strict();
+
+export const ConvexRunQueryResultSchema = z.object({
+  path: z.string().min(1),
+  summary: z.object({
+    valueType: ConvexValueTypeSchema,
+    childKeys: z.array(z.string()),
+    itemCount: z.number().int().nonnegative().nullable(),
+    hasLogs: z.boolean(),
+  }).strict(),
+  value: z.unknown(),
+  logLines: z.array(z.string()),
   printout: z.string().min(1),
 }).strict();
 

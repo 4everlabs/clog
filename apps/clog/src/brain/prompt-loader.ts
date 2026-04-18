@@ -1,7 +1,12 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { RuntimeWakeupConfig } from "@clog/types";
+import type {
+  RuntimeWakeupConfig,
+  RuntimeWakeupPromptDefinition,
+  RuntimeWakeupPromptTarget,
+  RuntimeWakeupScheduleEntry,
+} from "@clog/types";
 import { resolveRuntimeWakeupPath } from "../../../../tests/runtime-instance-template";
 import type { ToolCapabilityGroup, ToolFamily, ToolSummary } from "../schema/tools";
 
@@ -78,24 +83,130 @@ export interface SystemPromptOptions {
   readonly wakeupPrompt?: string | null;
 }
 
-export const normalizeRuntimeWakeupConfig = (value: unknown): RuntimeWakeupConfig | null => {
+const WAKEUP_TIME_UTC_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+const normalizeWakeupPromptTarget = (value: unknown): RuntimeWakeupPromptTarget | null => {
+  if (!value || typeof value !== "object") {
+    return {
+      channel: "system",
+    };
+  }
+
+  const candidate = value as Partial<RuntimeWakeupPromptTarget>;
+  if (candidate.channel && candidate.channel !== "system") {
+    return null;
+  }
+
+  const threadTitle = typeof candidate.threadTitle === "string" ? candidate.threadTitle.trim() : "";
+  return {
+    channel: "system",
+    ...(threadTitle ? { threadTitle } : {}),
+  };
+};
+
+const normalizeWakeupPromptDefinition = (value: unknown): RuntimeWakeupPromptDefinition | null => {
   if (!value || typeof value !== "object") {
     return null;
   }
 
-  const candidate = value as Partial<RuntimeWakeupConfig>;
-  const intervalMs = typeof candidate.intervalMs === "number" && Number.isFinite(candidate.intervalMs)
-    ? Math.max(1_000, candidate.intervalMs)
-    : null;
-  const message = typeof candidate.message === "string" ? candidate.message.trim() : "";
+  const candidate = value as {
+    readonly prompt?: unknown;
+    readonly message?: unknown;
+    readonly target?: unknown;
+  };
+  const promptSource = typeof candidate.prompt === "string"
+    ? candidate.prompt
+    : typeof candidate.message === "string"
+      ? candidate.message
+      : "";
+  const prompt = promptSource.trim();
+  const target = normalizeWakeupPromptTarget(candidate.target);
 
-  if (!intervalMs || !message) {
+  if (!prompt || !target) {
     return null;
   }
 
   return {
-    intervalMs,
-    message,
+    prompt,
+    target,
+  };
+};
+
+export const parseRuntimeWakeupTimeUtc = (value: string): { readonly hour: number; readonly minute: number } | null => {
+  const match = WAKEUP_TIME_UTC_PATTERN.exec(value);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    hour: Number.parseInt(match[1]!, 10),
+    minute: Number.parseInt(match[2]!, 10),
+  };
+};
+
+const normalizeWakeupScheduleEntry = (
+  value: unknown,
+  prompts: Readonly<Record<string, RuntimeWakeupPromptDefinition>>,
+): RuntimeWakeupScheduleEntry | null => {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const candidate = value as Partial<RuntimeWakeupScheduleEntry>;
+  const promptId = typeof candidate.promptId === "string" ? candidate.promptId.trim() : "";
+  const timeUtc = typeof candidate.timeUtc === "string" ? candidate.timeUtc.trim() : "";
+
+  if (!promptId || !prompts[promptId] || !parseRuntimeWakeupTimeUtc(timeUtc)) {
+    return null;
+  }
+
+  return {
+    promptId,
+    timeUtc,
+  };
+};
+
+export const normalizeRuntimeWakeupConfig = (value: unknown): RuntimeWakeupConfig | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const candidate = value as {
+    readonly prompts?: unknown;
+    readonly schedule?: unknown;
+  };
+
+  if (!candidate.prompts || typeof candidate.prompts !== "object" || Array.isArray(candidate.prompts)) {
+    return null;
+  }
+
+  const prompts = Object.entries(candidate.prompts as Record<string, unknown>).reduce<Record<string, RuntimeWakeupPromptDefinition>>(
+    (accumulator, [rawPromptId, entry]) => {
+      const promptId = rawPromptId.trim();
+      const prompt = normalizeWakeupPromptDefinition(entry);
+      if (!promptId || !prompt) {
+        return accumulator;
+      }
+
+      accumulator[promptId] = prompt;
+      return accumulator;
+    },
+    {},
+  );
+
+  const scheduleEntries = Array.isArray(candidate.schedule)
+    ? candidate.schedule
+        .map((entry) => normalizeWakeupScheduleEntry(entry, prompts))
+        .filter((entry): entry is RuntimeWakeupScheduleEntry => entry !== null)
+    : [];
+
+  if (Object.keys(prompts).length === 0 || scheduleEntries.length === 0) {
+    return null;
+  }
+
+  return {
+    prompts,
+    schedule: scheduleEntries,
   };
 };
 
@@ -105,18 +216,6 @@ const readOptionalJson = <T>(path: string): T | null => {
   } catch {
     return null;
   }
-};
-
-const formatWakeupInterval = (intervalMs: number): string => {
-  if (intervalMs % 60_000 === 0) {
-    return `${intervalMs / 60_000} minute${intervalMs === 60_000 ? "" : "s"}`;
-  }
-
-  if (intervalMs % 1_000 === 0) {
-    return `${intervalMs / 1_000} second${intervalMs === 1_000 ? "" : "s"}`;
-  }
-
-  return `${intervalMs}ms`;
 };
 
 const buildWakeupPrompt = (
@@ -134,12 +233,26 @@ const buildWakeupPrompt = (
   }
 
   if (runtimeWakeupConfig) {
+    const promptDefinitions = Object.entries(runtimeWakeupConfig.prompts).map(([promptId, definition]) => {
+      const threadTitle = definition.target.threadTitle
+        ? `system thread "${definition.target.threadTitle}"`
+        : "default system thread";
+      return [
+        `- ${promptId}:`,
+        `  - Target: ${threadTitle}`,
+        "  - Prompt:",
+        ...definition.prompt.split("\n").map((line) => `    ${line}`),
+      ].join("\n");
+    });
+    const scheduleEntries = runtimeWakeupConfig.schedule.map((entry) => `- ${entry.timeUtc} UTC -> ${entry.promptId}`);
+
     sections.push(
       [
         "Runtime wakeup config:",
-        `- Frequency: every ${formatWakeupInterval(runtimeWakeupConfig.intervalMs)} (${runtimeWakeupConfig.intervalMs}ms)`,
-        "- Operator message:",
-        runtimeWakeupConfig.message,
+        "- Prompt definitions:",
+        ...promptDefinitions,
+        "- Daily UTC schedule:",
+        ...scheduleEntries,
       ].join("\n"),
     );
   }
@@ -197,6 +310,7 @@ const buildToolPrompt = (tools: readonly ToolSummary[]): string => {
 
   const familyOrder: readonly ToolFamily[] = [
     "posthog",
+    "convex",
     "runtime",
     "notion",
     "shell",

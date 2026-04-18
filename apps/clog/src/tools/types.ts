@@ -1,6 +1,8 @@
 import type {
   ConversationMessage,
   ConversationThread,
+  ConvexQueryRequest,
+  SurfaceConvexQueryResponse,
   IntegrationCapabilitySnapshot,
   SurfaceNotionTodoResponse,
   PostHogCliCommandResponse,
@@ -102,6 +104,10 @@ export interface NotionToolServices {
     readonly limit?: number;
     readonly progress?: readonly string[];
   }): Promise<SurfaceNotionTodoResponse>;
+}
+
+export interface ConvexToolServices {
+  runQuery(input: ConvexQueryRequest): Promise<SurfaceConvexQueryResponse>;
 }
 
 export interface RuntimeToolServices {
@@ -257,6 +263,7 @@ export interface RuntimeToolServices {
 
 export interface ToolExecutionServices {
   readonly posthog: PostHogToolServices | null;
+  readonly convex?: ConvexToolServices | null;
   readonly notion: NotionToolServices | null;
   readonly runtime: RuntimeToolServices | null;
   readonly shell: ShellToolServices | null;

@@ -17,85 +17,110 @@ afterEach(() => {
 
 describe("loadAgentEnvironment", () => {
   test("parses PostHog runtime config and capabilities", () => {
-    const env = loadAgentEnvironment({
-      PORT: "3001",
-      CLOG_INSTANCE_ID: "config-test-1",
-      CLOG_CHANNELS: "telegram,web",
-      CLOG_POSTHOG_HOST: "https://eu.posthog.com/",
-      POSTHOG_PROJECT_ID: "12345",
-      POSTHOG_API_KEY: "phx_test",
-      POSTHOG_PROJECT_TOKEN: "phc_test",
-      CLOG_POSTHOG_MANAGE_ENDPOINTS: "true",
-      CLOG_POSTHOG_UPLOAD_SOURCEMAPS: "true",
-      CLOG_POSTHOG_ENABLE_FLAGS: "true",
-      CLOG_POSTHOG_READ_FLAGS: "true",
-      CLOG_POSTHOG_CLI_TIMEOUT_MS: "45000",
-      CLOG_POSTHOG_PRIMARY_INSIGHT_NAME: "Revenue monitor",
-      CLOG_POSTHOG_PRIMARY_INSIGHT_QUERY: "SELECT 80 AS current_value, 100 AS previous_value",
-      CLOG_POSTHOG_PRIMARY_INSIGHT_REGRESSION_THRESHOLD_PERCENT: "15",
-      CLOG_POSTHOG_PRIMARY_INSIGHT_MIN_PREVIOUS_VALUE: "20",
-      OPENROUTER_API_KEY: "sk-or-test",
-      CLOG_MODEL: "openrouter/test-model",
-      NOTION_SECRET: "ntn_test",
-      TELEGRAM_BOT_TOKEN: "123456:telegram-test-token",
-      TELEGRAM_ALLOWED_CHATS: "1001, 1002",
-    });
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "clog-config-settings-"));
+    cleanupPaths.push(workspaceRoot);
 
-    expect(env.port).toBe(3001);
-    expect(env.channels).toEqual(["telegram", "web"]);
-    expect(env.posthog.host).toBe("https://eu.posthog.com");
-    expect(env.posthog.projectId).toBe("12345");
-    expect(env.posthog.personalApiKey).toBe("phx_test");
-    expect(env.posthog.projectApiKey).toBe("phc_test");
-    expect(env.posthog.cliTimeoutMs).toBe(45_000);
-    expect(env.posthog.requestTimeoutMs).toBe(100_000);
-    expect(env.storage.instanceId).toBe("config-test-1");
-    expect(env.storage.stateDir.endsWith(".runtime/instances/config-test-1/storage/state")).toBe(true);
-    expect(env.posthog.endpointsDir.startsWith(env.storage.workspaceDir)).toBe(true);
-    expect(env.posthog.insightMonitors).toHaveLength(1);
-    expect(env.posthog.insightMonitors[0]).toMatchObject({
-      name: "Revenue monitor",
-      regressionThresholdPercent: 15,
-      minimumPreviousValue: 20,
-    });
-    expect(env.ai).toMatchObject({
-      provider: "openrouter",
-      apiKey: "sk-or-test",
-      model: "openrouter/test-model",
-      baseUrl: "https://openrouter.ai/api/v1",
-    });
-    expect(env.telegram).toMatchObject({
-      botToken: "123456:telegram-test-token",
-      userName: null,
-      allowedChatIds: [1001, 1002],
-    });
-    expect(env.notion).toMatchObject({
-      token: "ntn_test",
-      todoSearchTitle: "Pre Beta To Do",
-    });
-    expect(env.capabilities.posthog.canReadInsights).toBe(true);
-    expect(env.capabilities.posthog.canReadFlags).toBe(true);
-    expect(env.capabilities.posthog.canManageEndpoints).toBe(true);
-    expect(env.capabilities.posthog.canUploadSourcemaps).toBe(true);
-    expect(env.capabilities.notion.canReadTodo).toBe(true);
-    expect(env.availableTools.map((tool) => tool.name)).toEqual([
-      "posthog_list_errors",
-      "posthog_get_documented_tool_catalog",
-      "posthog_list_mcp_tools",
-      "posthog_call_mcp_tool",
-      "posthog_get_dashboard_snapshot",
-      "posthog_get_info",
-      "posthog_get_health_summary",
-      "posthog_get_asset_summary",
-      "posthog_get_release_summary",
-      "notion_get_todo_list",
-      "runtime_get_info",
-      "runtime_list_conversations",
-      "runtime_get_conversation",
-      "runtime_search_messages",
-      "runtime_read_knowledge",
-      "runtime_read_json",
-    ]);
+    const settingsDir = join(workspaceRoot, ".runtime", "instances", "config-test-1", "read-only");
+    mkdirSync(settingsDir, { recursive: true });
+    writeFileSync(join(settingsDir, "settings.json"), JSON.stringify({
+      telegram: {
+        allowedChatIds: [1001, 1002],
+      },
+    }));
+
+    const previousCwd = process.cwd();
+    process.chdir(workspaceRoot);
+
+    try {
+      const env = loadAgentEnvironment({
+        PORT: "3001",
+        CLOG_INSTANCE_ID: "config-test-1",
+        CLOG_CHANNELS: "telegram,web",
+        CLOG_POSTHOG_HOST: "https://eu.posthog.com/",
+        POSTHOG_PROJECT_ID: "12345",
+        POSTHOG_API_KEY: "phx_test",
+        POSTHOG_PROJECT_TOKEN: "phc_test",
+        CLOG_POSTHOG_MANAGE_ENDPOINTS: "true",
+        CLOG_POSTHOG_UPLOAD_SOURCEMAPS: "true",
+        CLOG_POSTHOG_ENABLE_FLAGS: "true",
+        CLOG_POSTHOG_READ_FLAGS: "true",
+        CLOG_POSTHOG_CLI_TIMEOUT_MS: "45000",
+        CLOG_POSTHOG_PRIMARY_INSIGHT_NAME: "Revenue monitor",
+        CLOG_POSTHOG_PRIMARY_INSIGHT_QUERY: "SELECT 80 AS current_value, 100 AS previous_value",
+        CLOG_POSTHOG_PRIMARY_INSIGHT_REGRESSION_THRESHOLD_PERCENT: "15",
+        CLOG_POSTHOG_PRIMARY_INSIGHT_MIN_PREVIOUS_VALUE: "20",
+        CLOG_CONVEX_URL: "https://happy-otter-123.convex.cloud",
+        OPENROUTER_API_KEY: "sk-or-test",
+        CLOG_MODEL: "openrouter/test-model",
+        NOTION_SECRET: "ntn_test",
+        TELEGRAM_BOT_TOKEN: "123456:telegram-test-token",
+      });
+
+      expect(env.port).toBe(3001);
+      expect(env.channels).toEqual(["telegram", "web"]);
+      expect(env.posthog.host).toBe("https://eu.posthog.com");
+      expect(env.posthog.projectId).toBe("12345");
+      expect(env.posthog.personalApiKey).toBe("phx_test");
+      expect(env.posthog.projectApiKey).toBe("phc_test");
+      expect(env.posthog.cliTimeoutMs).toBe(45_000);
+      expect(env.posthog.requestTimeoutMs).toBe(100_000);
+      expect(env.storage.instanceId).toBe("config-test-1");
+      expect(env.storage.stateDir.endsWith(".runtime/instances/config-test-1/storage/state")).toBe(true);
+      expect(env.posthog.endpointsDir.startsWith(env.storage.workspaceDir)).toBe(true);
+      expect(env.posthog.insightMonitors).toHaveLength(1);
+      expect(env.posthog.insightMonitors[0]).toMatchObject({
+        name: "Revenue monitor",
+        regressionThresholdPercent: 15,
+        minimumPreviousValue: 20,
+      });
+      expect(env.ai).toMatchObject({
+        provider: "openrouter",
+        apiKey: "sk-or-test",
+        model: "openrouter/test-model",
+        baseUrl: "https://openrouter.ai/api/v1",
+      });
+      expect(env.telegram).toMatchObject({
+        botToken: "123456:telegram-test-token",
+        userName: null,
+        allowedChatIds: [1001, 1002],
+      });
+      expect(env.notion).toMatchObject({
+        token: "ntn_test",
+        todoSearchTitle: "Pre Beta To Do",
+      });
+      expect(env.convex).toMatchObject({
+        deploymentUrl: "https://happy-otter-123.convex.cloud",
+        authToken: null,
+        requestTimeoutMs: 30_000,
+      });
+      expect(env.capabilities.posthog.canReadInsights).toBe(true);
+      expect(env.capabilities.posthog.canReadFlags).toBe(true);
+      expect(env.capabilities.posthog.canManageEndpoints).toBe(true);
+      expect(env.capabilities.posthog.canUploadSourcemaps).toBe(true);
+      expect(env.capabilities.convex.canReadData).toBe(true);
+      expect(env.capabilities.notion.canReadTodo).toBe(true);
+      expect(env.availableTools.map((tool) => tool.name)).toEqual([
+        "posthog_list_errors",
+        "posthog_get_documented_tool_catalog",
+        "posthog_list_mcp_tools",
+        "posthog_call_mcp_tool",
+        "posthog_get_dashboard_snapshot",
+        "posthog_get_info",
+        "posthog_get_health_summary",
+        "posthog_get_asset_summary",
+        "posthog_get_release_summary",
+        "convex_run_query",
+        "notion_get_todo_list",
+        "runtime_get_info",
+        "runtime_list_conversations",
+        "runtime_get_conversation",
+        "runtime_search_messages",
+        "runtime_read_knowledge",
+        "runtime_read_json",
+      ]);
+    } finally {
+      process.chdir(previousCwd);
+    }
   });
 
   test("disables PostHog management capabilities when credentials are missing", () => {
@@ -218,6 +243,10 @@ describe("loadAgentEnvironment", () => {
         requestTimeoutMs: 120000,
         enableLogs: true,
       },
+      convex: {
+        deploymentUrl: "https://small-rabbit-321.convex.cloud",
+        requestTimeoutMs: 4500,
+      },
       telegram: {
         userName: "@opsclog",
         allowedChatIds: [77, 88],
@@ -246,6 +275,8 @@ describe("loadAgentEnvironment", () => {
       expect(env.posthog.cliTimeoutMs).toBe(45_000);
       expect(env.posthog.requestTimeoutMs).toBe(120_000);
       expect(env.posthog.enableLogs).toBe(true);
+      expect(env.convex.deploymentUrl).toBe("https://small-rabbit-321.convex.cloud");
+      expect(env.convex.requestTimeoutMs).toBe(4_500);
       expect(env.telegram.userName).toBe("opsclog");
       expect(env.telegram.allowedChatIds).toEqual([77, 88]);
       expect(env.notion.requestTimeoutMs).toBe(4_000);

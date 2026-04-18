@@ -237,7 +237,7 @@ export class RuntimeReadService {
     this.store = config.store;
     this.storage = config.storage;
     this.knowledgeDir = config.knowledgeDir ?? defaultKnowledgeDir;
-    this.wakeupPath = config.wakeupPath ?? join(config.storage.instanceRoot, "wakeup.json");
+    this.wakeupPath = config.wakeupPath ?? join(config.storage.readOnlyDir, "wakeup.json");
     this.settingsPath = config.settingsPath ?? join(config.storage.readOnlyDir, "settings.json");
     this.toolsPath = config.toolsPath ?? join(config.storage.readOnlyDir, "tools.json");
   }
@@ -660,7 +660,7 @@ export class RuntimeReadService {
       ...knowledgeFiles.sort((left, right) => left.localeCompare(right)),
       "runtime/read-only/settings.json",
       "runtime/read-only/tools.json",
-      "runtime/wakeup.json",
+      "runtime/read-only/wakeup.json",
     ];
   }
 

@@ -27,11 +27,21 @@ describe("runtime startup", () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), "clog-startup-wakeup-"));
     cleanupPaths.push(workspaceRoot);
 
-    const wakeupDir = join(workspaceRoot, ".runtime", "instances", "personal-instance");
+    const wakeupDir = join(workspaceRoot, ".runtime", "instances", "personal-instance", "read-only");
     mkdirSync(wakeupDir, { recursive: true });
     writeFileSync(join(wakeupDir, "wakeup.json"), JSON.stringify({
-      intervalMs: 60_000,
-      message: "Check the latest signals and summarize the biggest change.",
+      prompts: {
+        daily: {
+          prompt: "Check the latest signals and summarize the biggest change.",
+          target: {
+            channel: "system",
+          },
+        },
+      },
+      schedule: [{
+        promptId: "daily",
+        timeUtc: "09:00",
+      }],
     }));
 
     const previousCwd = process.cwd();
@@ -56,35 +66,29 @@ describe("runtime startup", () => {
           },
         },
         gateway: {
-          runMonitorCycle: async () => {
+          runWakeupPass: async (input: { readonly message: string; readonly threadTitle?: string }) => {
             calls.push("monitor");
-            return {
-              observations: [],
-              integrationHealth: [],
-              findings: [],
-              checkedAt: 1,
-            };
-          },
-          sendMessage: async (input: { readonly threadId?: string; readonly message: string }) => {
             calls.push("send");
             sentMessage = input.message;
-            sentThreadId = input.threadId ?? null;
+            sentThreadId = "thread_startup";
             return {
-              thread: {
-                id: input.threadId ?? "thread_startup",
+              monitorResult: {
+                observations: [],
+                integrationHealth: [],
+                findings: [],
+                checkedAt: 1,
               },
-              replyMessage: {
-                content: "Startup wakeup reply",
+              response: {
+                thread: {
+                  id: "thread_startup",
+                },
+                replyMessage: {
+                  content: "Startup wakeup reply",
+                },
+                recommendedActions: [],
               },
-              recommendedActions: [],
             };
           },
-        },
-        store: {
-          seedOperatorThread: () => ({
-            id: "thread_startup",
-          }),
-          listThreads: () => [],
         },
       } as unknown as RuntimeBootstrap;
 

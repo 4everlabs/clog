@@ -16,6 +16,7 @@ import {
 } from "../../clog/src/runtime/settings";
 import { resolveBackendBaseUrl } from "../../frontends/tui/src/clog-api";
 import { startTuiFrontend } from "../../frontends/tui/src/index.ts";
+import { syncRuntimeInstanceTemplate } from "../../../tests/runtime-instance-template";
 
 const ANSI = {
   reset: "\u001B[0m",
@@ -32,6 +33,7 @@ const ANSI = {
 
 type FrontendChoice = "tui" | "web" | "settings" | "quit";
 type SettingsChoice = "model" | "instance" | "back";
+type InstanceSelectionKind = "select" | "create";
 
 interface RuntimeSession {
   readonly baseUrl: string;
@@ -78,10 +80,20 @@ interface Keypress {
   readonly ctrl?: boolean;
 }
 
+interface InstanceSelectionOption {
+  readonly kind: InstanceSelectionKind;
+  readonly label: string;
+  readonly marker: string;
+  readonly shortcut: string | null;
+  readonly instanceId?: string;
+}
+
 const WEB_FRONTEND_DIRECTORY = fileURLToPath(new URL("../../frontends/web/", import.meta.url));
+const WORKSPACE_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const REPO_ENV_FILE = fileURLToPath(new URL("../../../.env", import.meta.url));
 const RUNTIME_INSTANCES_DIRECTORY = fileURLToPath(new URL("../../../.runtime/instances/", import.meta.url));
-const DEFAULT_INSTANCE_ID = "personal-instance";
+const STARTER_INSTANCE_ID = "00";
+const DEFAULT_INSTANCE_ID = STARTER_INSTANCE_ID;
 const WEB_DEV_SERVER_URL = "http://127.0.0.1:4173";
 type ChildProcess = ReturnType<typeof Bun.spawn>;
 
@@ -112,6 +124,55 @@ const readOptionalEnvString = (key: string): string | null => {
 
 const resolveSelectedInstanceId = (): string => {
   return readOptionalEnvString("CLOG_INSTANCE_ID") ?? DEFAULT_INSTANCE_ID;
+};
+
+const isNumericInstanceId = (value: string): boolean => /^\d{2}$/u.test(value);
+
+export const compareRuntimeInstanceIds = (left: string, right: string): number => {
+  const leftNumeric = isNumericInstanceId(left);
+  const rightNumeric = isNumericInstanceId(right);
+  if (leftNumeric && rightNumeric) {
+    return Number.parseInt(left, 10) - Number.parseInt(right, 10);
+  }
+
+  if (leftNumeric) {
+    return -1;
+  }
+
+  if (rightNumeric) {
+    return 1;
+  }
+
+  return left.localeCompare(right);
+};
+
+export const getNextSequentialInstanceId = (instanceIds: readonly string[]): string => {
+  const numericIds = instanceIds
+    .filter((instanceId) => isNumericInstanceId(instanceId))
+    .map((instanceId) => Number.parseInt(instanceId, 10));
+  const nextValue = numericIds.length > 0
+    ? Math.max(...numericIds) + 1
+    : 0;
+  if (nextValue > 99) {
+    throw new Error("No two-digit runtime instance ids remain.");
+  }
+  return String(nextValue).padStart(2, "0");
+};
+
+export const getInstanceShortcutLabel = (instanceId: string): string | null => {
+  return isNumericInstanceId(instanceId) ? String(Number.parseInt(instanceId, 10)) : null;
+};
+
+const createNextSequentialInstance = (instanceIds: readonly string[]): string => {
+  const instanceId = getNextSequentialInstanceId(instanceIds);
+  syncRuntimeInstanceTemplate(
+    {
+      ...process.env,
+      CLOG_INSTANCE_ID: instanceId,
+    },
+    WORKSPACE_ROOT,
+  );
+  return instanceId;
 };
 
 const resolveRuntimeInstanceRoot = (instanceId: string): string => {
@@ -239,7 +300,7 @@ const listRuntimeInstances = (): string[] => {
     const entries = readdirSync(RUNTIME_INSTANCES_DIRECTORY, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name)
-      .sort((left, right) => left.localeCompare(right));
+      .sort(compareRuntimeInstanceIds);
     return entries.length > 0 ? entries : [DEFAULT_INSTANCE_ID];
   } catch {
     return [DEFAULT_INSTANCE_ID];
@@ -363,51 +424,157 @@ const waitForEnter = async (message = "Press Enter to continue."): Promise<void>
   await promptForLine(colorize(message, ANSI.dim));
 };
 
-const printInstanceSelectionScreen = (instances: readonly string[], currentInstanceId: string | null): void => {
+const buildInstanceSelectionOptions = (
+  instances: readonly string[],
+  currentInstanceId: string,
+): InstanceSelectionOption[] => {
+  return [
+    ...instances.map((instanceId) => ({
+      kind: "select" as const,
+      label: instanceId,
+      marker: instanceId === currentInstanceId ? "current" : "available",
+      shortcut: getInstanceShortcutLabel(instanceId),
+      instanceId,
+    })),
+    {
+      kind: "create" as const,
+      label: "Create new",
+      marker: "next instance",
+      shortcut: "n",
+    },
+  ];
+};
+
+const printInstanceSelectionScreen = (
+  options: readonly InstanceSelectionOption[],
+  selectedIndex: number,
+): void => {
   clearScreen();
   writeLine(runtimeBanner());
   writeLine();
   writeLine(colorize("CHOOSE INSTANCE", ANSI.bold, ANSI.white));
-  writeLine(colorize("Pick the runtime instance folder to use for this session", ANSI.dim, ANSI.white));
+  writeLine(colorize("What instance would you like to go to?", ANSI.dim, ANSI.white));
   writeLine();
 
-  instances.forEach((instanceId, index) => {
-    const marker = instanceId === currentInstanceId ? colorize("current", ANSI.green) : colorize("available", ANSI.dim);
-    writeLine(`  ${colorize(`[${index + 1}]`, ANSI.bgBlue, ANSI.white, ANSI.bold)} ${colorize(instanceId, ANSI.bold)} ${marker}`);
+  options.forEach((option, index) => {
+    const badge = option.shortcut ? `[${option.shortcut}]` : "[ ]";
+    if (index === selectedIndex) {
+      writeLine(colorize(`> ${badge} ${option.label} ${option.marker}`, ANSI.bgBlue, ANSI.white, ANSI.bold));
+      return;
+    }
+
+    const marker = option.marker === "current"
+      ? colorize(option.marker, ANSI.green)
+      : colorize(option.marker, ANSI.dim);
+    writeLine(`  ${colorize(badge, ANSI.bgBlue, ANSI.white, ANSI.bold)} ${colorize(option.label, ANSI.bold)} ${marker}`);
   });
 
   writeLine();
+  writeLine(colorize("Use Up/Down and Enter. Press a number for numeric instances, or n for Create new.", ANSI.dim));
+  writeLine();
+};
+
+const resolveInstanceSelection = (
+  option: InstanceSelectionOption,
+  instances: readonly string[],
+): string => {
+  if (option.kind === "create") {
+    const createdInstanceId = createNextSequentialInstance(instances);
+    process.env.CLOG_INSTANCE_ID = createdInstanceId;
+    return createdInstanceId;
+  }
+
+  const selected = option.instanceId ?? DEFAULT_INSTANCE_ID;
+  process.env.CLOG_INSTANCE_ID = selected;
+  return selected;
 };
 
 const chooseRuntimeInstance = async (): Promise<string> => {
-  const instances = listRuntimeInstances();
-  if (instances.length === 1) {
-    const selected = instances[0] ?? DEFAULT_INSTANCE_ID;
-    process.env.CLOG_INSTANCE_ID = selected;
-    return selected;
-  }
-
   while (true) {
-    const currentInstanceId = readOptionalEnvString("CLOG_INSTANCE_ID");
-    printInstanceSelectionScreen(instances, currentInstanceId);
-    const answer = await promptForLine(colorize("Choose an instance by number or folder name: ", ANSI.bold));
-    const trimmed = answer.trim();
-    const numericChoice = Number.parseInt(trimmed, 10);
+    const instances = listRuntimeInstances();
+    const currentInstanceId = readOptionalEnvString("CLOG_INSTANCE_ID") ?? instances[0] ?? DEFAULT_INSTANCE_ID;
+    const options = buildInstanceSelectionOptions(instances, currentInstanceId);
+    const initialIndex = Math.max(0, options.findIndex((option) => option.instanceId === currentInstanceId));
 
-    if (Number.isInteger(numericChoice) && numericChoice >= 1 && numericChoice <= instances.length) {
-      const selected = instances[numericChoice - 1] ?? DEFAULT_INSTANCE_ID;
-      process.env.CLOG_INSTANCE_ID = selected;
-      return selected;
-    }
+    return await new Promise<string>((resolve) => {
+      const stdin = process.stdin;
+      const restoreRawMode = stdin.isTTY ? stdin.isRaw : false;
+      let selectedIndex = initialIndex;
 
-    const matchedInstance = instances.find((instanceId) => instanceId === trimmed);
-    if (matchedInstance) {
-      process.env.CLOG_INSTANCE_ID = matchedInstance;
-      return matchedInstance;
-    }
+      const render = (): void => {
+        printInstanceSelectionScreen(options, selectedIndex);
+      };
 
-    writeLine(colorize(`Unknown instance "${trimmed}".`, ANSI.red, ANSI.bold));
-    await waitForEnter();
+      const cleanup = (): void => {
+        stdin.off("keypress", onKeypress);
+        if (stdin.isTTY) {
+          stdin.setRawMode(restoreRawMode);
+        }
+        stdin.pause();
+      };
+
+      const finish = (instanceId: string): void => {
+        cleanup();
+        writeLine();
+        resolve(instanceId);
+      };
+
+      const moveSelection = (delta: number): void => {
+        selectedIndex = (selectedIndex + delta + options.length) % options.length;
+        render();
+      };
+
+      const selectShortcut = (shortcut: string): boolean => {
+        const shortcutIndex = options.findIndex((option) => option.shortcut === shortcut);
+        if (shortcutIndex < 0) {
+          return false;
+        }
+        selectedIndex = shortcutIndex;
+        render();
+        finish(resolveInstanceSelection(options[shortcutIndex]!, instances));
+        return true;
+      };
+
+      const onKeypress = (_value: string, key: Keypress): void => {
+        if (key.ctrl && key.name === "c") {
+          cleanup();
+          process.exit(0);
+          return;
+        }
+
+        if (key.name === "up" || key.name === "k") {
+          moveSelection(-1);
+          return;
+        }
+
+        if (key.name === "down" || key.name === "j") {
+          moveSelection(1);
+          return;
+        }
+
+        if (key.name === "return" || key.name === "enter") {
+          finish(resolveInstanceSelection(options[selectedIndex]!, instances));
+          return;
+        }
+
+        if (key.name === "n") {
+          void selectShortcut("n");
+          return;
+        }
+
+        if (key.sequence && /^[0-9]$/u.test(key.sequence)) {
+          void selectShortcut(key.sequence);
+        }
+      };
+
+      emitKeypressEvents(stdin);
+      if (stdin.isTTY) {
+        stdin.setRawMode(true);
+      }
+      stdin.resume();
+      render();
+      stdin.on("keypress", onKeypress);
+    });
   }
 };
 

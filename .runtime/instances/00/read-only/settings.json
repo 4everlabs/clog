@@ -42,5 +42,11 @@
   "notion": {
     "requestTimeoutMs": 30000,
     "todoSearchTitle": "Pre Beta To Do"
+  },
+  "convex": {
+    "requestTimeoutMs": 30000
+  },
+  "ui": {
+    "timezone": "America/Los_Angeles"
   }
 }

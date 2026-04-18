@@ -3,6 +3,7 @@ import { z } from "zod";
 export const DEFAULT_RUNTIME_PORT = 6900;
 export const DEFAULT_MONITOR_INTERVAL_MS = 60_000;
 export const DEFAULT_CLOG_MODEL = "google/gemma-4-31b-it:free";
+export const DEFAULT_UI_TIMEZONE = "America/Los_Angeles";
 
 export const DEFAULT_MODEL_CHOICES = [
   DEFAULT_CLOG_MODEL,
@@ -62,7 +63,31 @@ export const RuntimeSettingsSchema = z.object({
     todoDataSourceId: z.string().trim().min(1).optional(),
     todoSearchTitle: z.string().trim().min(1).optional(),
   }).passthrough().optional(),
+  convex: z.object({
+    deploymentUrl: z.string().trim().min(1).optional(),
+    requestTimeoutMs: z.number().finite().positive().optional(),
+  }).passthrough().optional(),
+  ui: z.object({
+    timezone: z.string().trim().min(1).optional(),
+  }).passthrough().optional(),
 }).passthrough();
+
+export const isValidIanaTimezone = (value: string): boolean => {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const normalizeUiTimezone = (value: string | null | undefined): string => {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  if (trimmed && isValidIanaTimezone(trimmed)) {
+    return trimmed;
+  }
+  return DEFAULT_UI_TIMEZONE;
+};
 
 export type RuntimeSettings = z.infer<typeof RuntimeSettingsSchema>;
 

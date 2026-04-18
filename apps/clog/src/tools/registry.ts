@@ -1,6 +1,7 @@
 import { zodToJsonSchema } from "zod-to-json-schema";
 import type { IntegrationCapabilitySnapshot } from "@clog/types";
 import type { ZodTypeAny } from "zod";
+import { convexTools } from "./definitions/convex";
 import { ProviderFunctionToolSchema, type ProviderFunctionTool } from "../schema/provider";
 import { ToolSummarySchema, type AgentToolName, type ToolSummary } from "../schema/tools";
 import { githubTools } from "./definitions/github";
@@ -22,6 +23,7 @@ const posthogContextToolNames = new Set<AgentToolName>([
 
 const registeredTools: readonly AnyRegisteredTool[] = [
   ...posthogTools,
+  ...convexTools,
   ...notionTools,
   ...runtimeTools,
   ...shellTools,

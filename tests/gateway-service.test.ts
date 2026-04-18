@@ -76,6 +76,11 @@ const createEnvironment = (overrides: Partial<AgentEnvironment> = {}): AgentEnvi
     criticalErrorThreshold: 25,
     insightMonitors: [],
   },
+  convex: {
+    deploymentUrl: null,
+    authToken: null,
+    requestTimeoutMs: 30_000,
+  },
   ai: {
     provider: "openrouter",
     apiKey: "sk-or-test",
@@ -112,6 +117,9 @@ const createEnvironment = (overrides: Partial<AgentEnvironment> = {}): AgentEnvi
       canManageEndpoints: false,
       canUploadSourcemaps: false,
     },
+    convex: {
+      canReadData: false,
+    },
     github: {
       canReadRepository: false,
       canCreatePullRequest: false,
@@ -134,6 +142,9 @@ const createEnvironment = (overrides: Partial<AgentEnvironment> = {}): AgentEnvi
     },
   },
   availableTools: [],
+  preferences: {
+    timezone: "America/Los_Angeles",
+  },
   ...overrides,
 });
 
@@ -345,10 +356,21 @@ describe("AgentGateway", () => {
     cleanupPaths.push(workspaceRoot);
 
     const instanceRoot = join(workspaceRoot, "instance");
-    mkdirSync(instanceRoot, { recursive: true });
-    writeFileSync(join(instanceRoot, "wakeup.json"), JSON.stringify({
-      intervalMs: 900_000,
-      message: "Initial wakeup prompt",
+    const readOnlyDir = join(instanceRoot, "read-only");
+    mkdirSync(readOnlyDir, { recursive: true });
+    writeFileSync(join(readOnlyDir, "wakeup.json"), JSON.stringify({
+      prompts: {
+        daily: {
+          prompt: "Initial wakeup prompt",
+          target: {
+            channel: "system",
+          },
+        },
+      },
+      schedule: [{
+        promptId: "daily",
+        timeUtc: "09:00",
+      }],
     }, null, 2));
 
     const store = new InMemoryRuntimeStore();
@@ -367,7 +389,7 @@ describe("AgentGateway", () => {
         storage: {
           instanceId: "test-instance",
           instanceRoot,
-          readOnlyDir: join(instanceRoot, "read-only"),
+          readOnlyDir,
           workspaceDir: join(instanceRoot, "workspace"),
           storageDir: join(instanceRoot, "storage"),
           stateDir: join(instanceRoot, "storage", "state"),
@@ -399,22 +421,62 @@ describe("AgentGateway", () => {
 
     const bootstrap = await gateway.bootstrap();
     expect(bootstrap.wakeup).toEqual({
-      intervalMs: 900_000,
-      message: "Initial wakeup prompt",
+      prompts: {
+        daily: {
+          prompt: "Initial wakeup prompt",
+          target: {
+            channel: "system",
+          },
+        },
+      },
+      schedule: [{
+        promptId: "daily",
+        timeUtc: "09:00",
+      }],
     });
 
     const updated = await gateway.updateWakeupConfig({
-      intervalMs: 1_800_000,
-      message: "Updated wakeup prompt",
+      prompts: {
+        morning: {
+          prompt: "Updated wakeup prompt",
+          target: {
+            channel: "system",
+          },
+        },
+      },
+      schedule: [{
+        promptId: "morning",
+        timeUtc: "12:00",
+      }],
     });
 
     expect(updated.wakeup).toEqual({
-      intervalMs: 1_800_000,
-      message: "Updated wakeup prompt",
+      prompts: {
+        morning: {
+          prompt: "Updated wakeup prompt",
+          target: {
+            channel: "system",
+          },
+        },
+      },
+      schedule: [{
+        promptId: "morning",
+        timeUtc: "12:00",
+      }],
     });
-    expect(JSON.parse(readFileSync(join(instanceRoot, "wakeup.json"), "utf-8"))).toEqual({
-      intervalMs: 1_800_000,
-      message: "Updated wakeup prompt",
+    expect(JSON.parse(readFileSync(join(readOnlyDir, "wakeup.json"), "utf-8"))).toEqual({
+      prompts: {
+        morning: {
+          prompt: "Updated wakeup prompt",
+          target: {
+            channel: "system",
+          },
+        },
+      },
+      schedule: [{
+        promptId: "morning",
+        timeUtc: "12:00",
+      }],
     });
   });
 });

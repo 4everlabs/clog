@@ -12,6 +12,9 @@ const createCapabilities = (): IntegrationCapabilitySnapshot => ({
     canManageEndpoints: false,
     canUploadSourcemaps: false,
   },
+  convex: {
+    canReadData: false,
+  },
   github: {
     canReadRepository: false,
     canCreatePullRequest: false,

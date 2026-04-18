@@ -12,6 +12,9 @@ const createCapabilities = (): IntegrationCapabilitySnapshot => ({
     canManageEndpoints: false,
     canUploadSourcemaps: false,
   },
+  convex: {
+    canReadData: true,
+  },
   github: {
     canReadRepository: true,
     canCreatePullRequest: true,
@@ -60,6 +63,7 @@ describe("tool registry", () => {
       "posthog_read_data_warehouse_schema",
       "posthog_execute_sql",
       "posthog_search_docs",
+      "convex_run_query",
       "notion_get_todo_list",
       "runtime_get_state_snapshot",
       "runtime_get_info",
@@ -92,6 +96,7 @@ describe("tool registry", () => {
       "posthog_get_health_summary",
       "posthog_get_asset_summary",
       "posthog_get_release_summary",
+      "convex_run_query",
       "notion_get_todo_list",
       "runtime_get_info",
       "runtime_list_conversations",

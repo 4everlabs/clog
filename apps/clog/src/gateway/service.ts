@@ -28,15 +28,20 @@ import type {
   SurfaceSendMessageResponse,
   SurfaceShellCommandResponse,
   SurfaceThreadsResponse,
+  SurfaceUpdatePreferencesRequest,
+  SurfaceUpdatePreferencesResponse,
   SurfaceUpdateWakeupRequest,
   SurfaceUpdateWakeupResponse,
+  UserPreferences,
 } from "@clog/types";
 import type { AgentEnvironment } from "../config";
 import { normalizeRuntimeWakeupConfig } from "../brain/prompt-loader";
+import { isValidIanaTimezone } from "../runtime/settings";
 import type { NotionToolServices } from "../tools/types";
 import type { PostHogIntegrationClient } from "../integrations/posthog/client";
 import { BrainService } from "../brain/service";
 import type { MonitoringLoop } from "../runtime/monitor-loop";
+import type { MonitoringTickResult } from "../runtime/monitor-loop";
 import { ShellExecutor } from "../execution/shell-executor";
 import type { RuntimeStore } from "../storage/chat";
 import type { AgentGatewaySurface } from "./contracts";
@@ -66,7 +71,10 @@ export interface AgentGatewayDependencies {
 }
 
 const resolveWakeupConfigPath = (env: AgentEnvironment): string =>
-  join(env.storage.instanceRoot, "wakeup.json");
+  join(env.storage.readOnlyDir, "wakeup.json");
+
+const resolveSettingsPath = (env: AgentEnvironment): string =>
+  join(env.storage.readOnlyDir, "settings.json");
 
 const readWakeupConfig = (env: AgentEnvironment): RuntimeWakeupConfig | null => {
   try {
@@ -74,6 +82,35 @@ const readWakeupConfig = (env: AgentEnvironment): RuntimeWakeupConfig | null => 
   } catch {
     return null;
   }
+};
+
+interface SettingsJsonShape {
+  readonly ui?: {
+    readonly timezone?: string;
+    readonly [key: string]: unknown;
+  };
+  readonly [key: string]: unknown;
+}
+
+const readSettingsFile = (path: string): SettingsJsonShape => {
+  try {
+    const value = JSON.parse(readFileSync(path, "utf-8")) as unknown;
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value as SettingsJsonShape;
+    }
+    return {};
+  } catch {
+    return {};
+  }
+};
+
+const readPreferences = (env: AgentEnvironment): UserPreferences => {
+  const settings = readSettingsFile(resolveSettingsPath(env));
+  const timezone = typeof settings.ui?.timezone === "string" ? settings.ui.timezone.trim() : "";
+  if (timezone && isValidIanaTimezone(timezone)) {
+    return { timezone };
+  }
+  return env.preferences;
 };
 
 const writeJsonAtomically = (path: string, value: unknown): void => {
@@ -88,6 +125,16 @@ const writeJsonAtomically = (path: string, value: unknown): void => {
     throw error;
   }
 };
+
+export interface RunWakeupPassInput {
+  readonly message: string;
+  readonly threadTitle?: string;
+}
+
+export interface RunWakeupPassResult {
+  readonly monitorResult: MonitoringTickResult;
+  readonly response: SurfaceSendMessageResponse;
+}
 
 export class AgentGateway implements AgentGatewaySurface {
   private serialQueue: Promise<void> = Promise.resolve();
@@ -139,6 +186,7 @@ export class AgentGateway implements AgentGatewaySurface {
         updatedAt: thread.updatedAt,
       })),
       wakeup: readWakeupConfig(this.deps.env),
+      preferences: readPreferences(this.deps.env),
     };
   }
 
@@ -189,14 +237,56 @@ export class AgentGateway implements AgentGatewaySurface {
     });
   }
 
+  async runWakeupPass(input: RunWakeupPassInput): Promise<RunWakeupPassResult> {
+    const thread = this.deps.store.seedOperatorThread("system", input.threadTitle?.trim() || "Scheduled Wakeups");
+
+    return await this.runExclusive(async () => {
+      const monitorResult = await this.deps.monitorLoop.tick();
+      const response = await this.sendMessage({
+        channel: "system",
+        threadId: thread.id,
+        message: input.message,
+      });
+
+      return {
+        monitorResult,
+        response,
+      };
+    });
+  }
+
   async updateWakeupConfig(input: SurfaceUpdateWakeupRequest): Promise<SurfaceUpdateWakeupResponse> {
     const wakeup = normalizeRuntimeWakeupConfig(input);
     if (!wakeup) {
-      throw new Error("Wakeup config requires a numeric intervalMs and a non-empty message");
+      throw new Error("Wakeup config requires named prompts, valid daily UTC schedule entries, and non-empty prompt text");
     }
 
     writeJsonAtomically(resolveWakeupConfigPath(this.deps.env), wakeup);
     return { wakeup };
+  }
+
+  async updatePreferences(input: SurfaceUpdatePreferencesRequest): Promise<SurfaceUpdatePreferencesResponse> {
+    const timezone = typeof input.timezone === "string" ? input.timezone.trim() : "";
+    if (!timezone || !isValidIanaTimezone(timezone)) {
+      throw new Error("Invalid IANA timezone");
+    }
+
+    const settingsPath = resolveSettingsPath(this.deps.env);
+    const current = readSettingsFile(settingsPath);
+    const merged = {
+      ...current,
+      ui: {
+        ...(current.ui ?? {}),
+        timezone,
+      },
+    };
+
+    writeJsonAtomically(settingsPath, merged);
+    return {
+      preferences: {
+        timezone,
+      },
+    };
   }
 
   async acknowledgeFinding(input: SurfaceAcknowledgeFindingRequest): Promise<SurfaceFindingsResponse> {

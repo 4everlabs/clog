@@ -34,5 +34,8 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .DS_Store
 
 # runtime instances
+.runtime/instances/[0-9][0-9]/
+!.runtime/instances/00/
+!.runtime/instances/00/**
 .runtime/instances/personal-instance/
 .runtime/instances/*/storage/state/

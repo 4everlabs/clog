@@ -8,8 +8,10 @@ import {
   DEFAULT_MONITOR_INTERVAL_MS,
   DEFAULT_RUNTIME_PORT,
   RuntimeSettingsSchema,
+  normalizeUiTimezone,
   type RuntimeSettings,
 } from "./runtime/settings";
+import type { UserPreferences } from "@clog/types";
 import { summarizeAdvertisedTools } from "./tools/registry";
 
 const readBoolean = (value: string | undefined, fallback: boolean): boolean => {
@@ -176,6 +178,12 @@ export interface NotionRuntimeConfig {
   readonly todoSearchTitle: string;
 }
 
+export interface ConvexRuntimeConfig {
+  readonly deploymentUrl: string | null;
+  readonly authToken: string | null;
+  readonly requestTimeoutMs: number;
+}
+
 const readRuntimeSettings = (storage: RuntimeStorageConfig): RuntimeSettings | null => {
   const path = join(storage.readOnlyDir, "settings.json");
   const value = readOptionalJson<unknown>(path);
@@ -303,24 +311,14 @@ const createRuntimeStorageConfig = (env: NodeJS.ProcessEnv): RuntimeStorageConfi
 const readToolFlag = (value: boolean | undefined, fallback: boolean): boolean =>
   typeof value === "boolean" ? value : fallback;
 
-const readAllowedChatIds = (value: string | undefined): number[] => {
-  return (value ?? "")
-    .split(",")
-    .map((entry) => Number.parseInt(entry.trim(), 10))
-    .filter((entry) => Number.isFinite(entry));
-};
-
 const createTelegramConfig = (env: NodeJS.ProcessEnv, settings: RuntimeSettings | null): TelegramRuntimeConfig => {
   const userName = readOptionalString(env.TELEGRAM_BOT_USERNAME)
     ?? settings?.telegram?.userName?.trim()
     ?? null;
-  const allowedChatIds = readAllowedChatIds(env.TELEGRAM_ALLOWED_CHATS);
   return {
     botToken: readOptionalString(env.TELEGRAM_BOT_TOKEN),
     userName: userName?.replace(/^@/u, "") ?? null,
-    allowedChatIds: allowedChatIds.length > 0
-      ? allowedChatIds
-      : [...(settings?.telegram?.allowedChatIds ?? [])],
+    allowedChatIds: [...(settings?.telegram?.allowedChatIds ?? [])],
   };
 };
 
@@ -331,6 +329,20 @@ const createNotionConfig = (env: NodeJS.ProcessEnv, settings: RuntimeSettings | 
     todoPageUrl: readOptionalString(env.CLOG_NOTION_TODO_URL) ?? settings?.notion?.todoPageUrl?.trim() ?? null,
     todoDataSourceId: readOptionalString(env.CLOG_NOTION_TODO_DATA_SOURCE_ID) ?? settings?.notion?.todoDataSourceId?.trim() ?? null,
     todoSearchTitle: readOptionalString(env.CLOG_NOTION_TODO_TITLE) ?? settings?.notion?.todoSearchTitle?.trim() ?? "Pre Beta To Do",
+  };
+};
+
+const createConvexConfig = (env: NodeJS.ProcessEnv, settings: RuntimeSettings | null): ConvexRuntimeConfig => {
+  return {
+    deploymentUrl: normalizeHost(
+      env.CLOG_CONVEX_URL ?? env.CONVEX_URL ?? env.CONVEX_CLOUD_URL,
+      settings?.convex?.deploymentUrl ?? "",
+    ) || null,
+    authToken: readOptionalString(env.CLOG_CONVEX_AUTH_TOKEN),
+    requestTimeoutMs: Math.max(1_000, readInteger(
+      env.CLOG_CONVEX_REQUEST_TIMEOUT_MS,
+      settings?.convex?.requestTimeoutMs ?? 30_000,
+    )),
   };
 };
 
@@ -358,12 +370,14 @@ export interface AgentEnvironment {
   readonly hidePosthogContextTools: boolean;
   readonly channels: readonly SurfaceChannelKind[];
   readonly posthog: PostHogRuntimeConfig;
+  readonly convex: ConvexRuntimeConfig;
   readonly ai: AiRuntimeConfig;
   readonly telegram: TelegramRuntimeConfig;
   readonly notion: NotionRuntimeConfig;
   readonly storage: RuntimeStorageConfig;
   readonly capabilities: IntegrationCapabilitySnapshot;
   readonly availableTools: readonly ToolSummary[];
+  readonly preferences: UserPreferences;
 }
 
 export const loadAgentEnvironment = (env: NodeJS.ProcessEnv = getRuntimeProcessEnv()): AgentEnvironment => {
@@ -376,6 +390,7 @@ export const loadAgentEnvironment = (env: NodeJS.ProcessEnv = getRuntimeProcessE
     : [...(runtimeSettings?.runtime?.channels ?? ["tui"])];
   const requestedPort = readInteger(env.PORT, runtimeSettings?.runtime?.port ?? DEFAULT_RUNTIME_PORT);
   const posthog = createPostHogConfig(env, storage, runtimeSettings);
+  const convex = createConvexConfig(env, runtimeSettings);
   const ai = createAiConfig(env, runtimeSettings);
   const telegram = createTelegramConfig(env, runtimeSettings);
   const notion = createNotionConfig(env, runtimeSettings);
@@ -413,6 +428,12 @@ export const loadAgentEnvironment = (env: NodeJS.ProcessEnv = getRuntimeProcessE
       ),
       canUploadSourcemaps: hasPostHogAccess && readBoolean(env.CLOG_POSTHOG_UPLOAD_SOURCEMAPS, false),
     },
+    convex: {
+      canReadData: Boolean(convex.deploymentUrl) && readToolFlag(
+        runtimeTools?.convex?.readData,
+        readBoolean(env.CLOG_CONVEX_READ_DATA, true),
+      ),
+    },
     github: {
       canReadRepository: readToolFlag(runtimeTools?.github?.readRepository, readBoolean(env.CLOG_GITHUB_READ, false)),
       canCreatePullRequest: readToolFlag(runtimeTools?.github?.createPullRequests, canCreatePullRequest),
@@ -444,6 +465,10 @@ export const loadAgentEnvironment = (env: NodeJS.ProcessEnv = getRuntimeProcessE
     hidePosthogContextTools,
   });
 
+  const preferences: UserPreferences = {
+    timezone: normalizeUiTimezone(env.CLOG_UI_TIMEZONE ?? runtimeSettings?.ui?.timezone ?? null),
+  };
+
   return {
     appName: env.CLOG_APP_NAME?.trim() || runtimeSettings?.app?.name?.trim() || "Clog",
     port: Number.isFinite(requestedPort) ? requestedPort : DEFAULT_RUNTIME_PORT,
@@ -453,11 +478,13 @@ export const loadAgentEnvironment = (env: NodeJS.ProcessEnv = getRuntimeProcessE
     hidePosthogContextTools,
     channels,
     posthog,
+    convex,
     ai,
     telegram,
     notion,
     storage,
     capabilities,
     availableTools,
+    preferences,
   };
 };

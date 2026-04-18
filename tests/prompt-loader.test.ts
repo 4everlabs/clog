@@ -30,8 +30,18 @@ describe("prompt loader", () => {
     writeFileSync(
       wakeupPath,
       JSON.stringify({
-        intervalMs: 60_000,
-        message: "Check the latest signals.",
+        prompts: {
+          daily: {
+            prompt: "Check the latest signals.",
+            target: {
+              channel: "system",
+            },
+          },
+        },
+        schedule: [{
+          promptId: "daily",
+          timeUtc: "09:00",
+        }],
       }, null, 2),
     );
 
@@ -46,8 +56,9 @@ describe("prompt loader", () => {
     expect(bundle.integrationKnowledgePrompts.posthog).toContain("PostHog MCP Tool Catalog");
     expect(bundle.primaryModePrompt).toContain("Operating mode");
     expect(bundle.wakeupPrompt).toContain("Wakeup is the periodic monitoring pass");
+    expect(bundle.wakeupPrompt).toContain("Runtime wakeup config:");
     expect(bundle.wakeupPrompt).toContain("Check the latest signals");
-    expect(bundle.wakeupPrompt).toContain("60000ms");
+    expect(bundle.wakeupPrompt).toContain("09:00 UTC -> daily");
     expect(buildSystemPrompt(bundle)).toContain("Project Context:");
     expect(buildSystemPrompt(bundle)).toContain("Knowledge Context:");
     expect(buildSystemPrompt(bundle)).toContain("4ever.ai");

@@ -7,6 +7,9 @@
     "readExperiments": false,
     "manageEndpoints": true
   },
+  "convex": {
+    "readData": true
+  },
   "github": {
     "readRepository": false,
     "createPullRequests": false,

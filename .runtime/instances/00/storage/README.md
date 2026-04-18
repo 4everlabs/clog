@@ -7,4 +7,4 @@ The runtime store writes:
 - structured runtime state under `storage/state/`
 - per-conversation folders under `storage/conversations/`
 
-The tracked `example-instance` should stay clean as a starter template. Local development should use the ignored `personal-instance` path instead of writing runtime state here.
+The tracked `00` instance should stay clean as the starter template. Local development should use the ignored `personal-instance` path instead of writing runtime state here.

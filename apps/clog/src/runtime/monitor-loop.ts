@@ -14,6 +14,7 @@ export interface MonitoringIntegration {
 export interface MonitoringLoopDependencies {
   readonly store: RuntimeStore;
   readonly posthog: MonitoringIntegration;
+  readonly convex: MonitoringIntegration;
   readonly github: MonitoringIntegration;
   readonly vercel: MonitoringIntegration;
   readonly notion: MonitoringIntegration;
@@ -142,6 +143,7 @@ export class MonitoringLoop {
     try {
       const integrations = [
         this.deps.posthog,
+        this.deps.convex,
         this.deps.github,
         this.deps.vercel,
         this.deps.notion,

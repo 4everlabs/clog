@@ -15,6 +15,7 @@
     "start": "bun run apps/launcher/src/index.ts",
     "launcher": "bun run apps/launcher/src/index.ts",
     "runtime": "bun run apps/clog/src/index.ts",
+    "bundle:gce": "bun run scripts/create-gce-bundle.ts",
     "tui": "bun run apps/frontends/tui/src/index.ts",
     "web": "bun run --cwd apps/frontends/web dev",
     "web:build": "bun run --cwd apps/frontends/web build",

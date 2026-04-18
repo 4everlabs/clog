@@ -6,6 +6,7 @@ import type {
   ShellCommandRequest,
   SurfaceAcknowledgeFindingRequest,
   SurfaceSendMessageRequest,
+  SurfaceUpdatePreferencesRequest,
   SurfaceUpdateWakeupRequest,
 } from "@clog/types";
 import type { RuntimeBootstrap } from "./bootstrap";
@@ -69,6 +70,10 @@ export class AgentSurfaceTransport {
 
     if (pathname === "/api/wakeup" && request.method === "POST") {
       return json(await this.runtime.gateway.updateWakeupConfig(await parseJson<SurfaceUpdateWakeupRequest>(request)));
+    }
+
+    if (pathname === "/api/preferences" && request.method === "POST") {
+      return json(await this.runtime.gateway.updatePreferences(await parseJson<SurfaceUpdatePreferencesRequest>(request)));
     }
 
     if (pathname === "/api/shell" && request.method === "POST") {

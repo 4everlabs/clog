@@ -14,39 +14,42 @@ describe("syncRuntimeInstanceTemplate", () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), "clog-instance-template-"));
 
     try {
-      const exampleRoot = join(workspaceRoot, ".runtime", "instances", "example-instance");
-      const personalRoot = join(workspaceRoot, ".runtime", "instances", "personal-instance");
+      const starterRoot = join(workspaceRoot, ".runtime", "instances", "00");
+      const targetRoot = join(workspaceRoot, ".runtime", "instances", "01");
 
-      writeFile(join(exampleRoot, "read-only", "settings.json"), "{\n  \"starter\": true,\n  \"ai\": {\n    \"model\": \"google/gemma-4-31b-it:free\"\n  }\n}\n");
-      writeFile(join(exampleRoot, "read-only", "tools.json"), "{\n  \"starter\": true\n}\n");
-      writeFile(join(exampleRoot, "wakeup.json"), "{\n  \"intervalMs\": 60000,\n  \"message\": \"starter\"\n}\n");
-      writeFile(join(exampleRoot, "storage", "README.md"), "storage\n");
-      writeFile(join(exampleRoot, "workspace", "README.md"), "workspace\n");
+      writeFile(join(starterRoot, "read-only", "settings.json"), "{\n  \"starter\": true,\n  \"ai\": {\n    \"model\": \"google/gemma-4-31b-it:free\"\n  }\n}\n");
+      writeFile(join(starterRoot, "read-only", "tools.json"), "{\n  \"starter\": true\n}\n");
+      writeFile(join(starterRoot, "read-only", "wakeup.json"), "{\n  \"prompts\": {},\n  \"schedule\": []\n}\n");
+      writeFile(join(starterRoot, "storage", "README.md"), "storage\n");
+      writeFile(join(starterRoot, "storage", "conversations", "timestamp.jsonl"), "\n");
+      writeFile(join(starterRoot, "workspace", "README.md"), "workspace\n");
 
-      writeFile(join(personalRoot, "settings.json"), "{\n  \"legacy\": true,\n  \"monitor\": {\n    \"intervalMs\": 5000\n  }\n}\n");
-      writeFile(join(personalRoot, "settings", "wakeup.json"), "{\n  \"intervalMs\": 5000,\n  \"message\": \"legacy\"\n}\n");
-      writeFile(join(personalRoot, "settings", "ai.json"), "{}\n");
-      writeFile(join(personalRoot, "settings", "tools.json"), "{ broken json\n");
-      writeFile(join(personalRoot, "brain", "README.md"), "legacy brain\n");
-      writeFile(join(personalRoot, "storage", "runtime.sqlite"), "legacy sqlite\n");
+      writeFile(join(targetRoot, "settings.json"), "{\n  \"legacy\": true,\n  \"monitor\": {\n    \"intervalMs\": 5000\n  }\n}\n");
+      writeFile(join(targetRoot, "wakeup.json"), "{\n  \"prompts\": {},\n  \"schedule\": []\n}\n");
+      writeFile(join(targetRoot, "settings", "ai.json"), "{}\n");
+      writeFile(join(targetRoot, "settings", "tools.json"), "{ broken json\n");
+      writeFile(join(targetRoot, "brain", "README.md"), "legacy brain\n");
+      writeFile(join(targetRoot, "storage", "runtime.sqlite"), "legacy sqlite\n");
 
       syncRuntimeInstanceTemplate(
         {
-          CLOG_INSTANCE_ID: "personal-instance",
+          CLOG_INSTANCE_ID: "01",
         },
         workspaceRoot,
       );
 
-      expect(existsSync(join(personalRoot, "read-only", "settings.json"))).toBe(true);
-      expect(existsSync(join(personalRoot, "read-only", "tools.json"))).toBe(true);
-      expect(existsSync(join(personalRoot, "wakeup.json"))).toBe(true);
-      expect(existsSync(join(personalRoot, "settings"))).toBe(false);
-      expect(existsSync(join(personalRoot, "settings.json"))).toBe(false);
-      expect(existsSync(join(personalRoot, "brain"))).toBe(false);
-      expect(existsSync(join(personalRoot, "storage", "runtime.sqlite"))).toBe(false);
-      expect(readFileSync(join(personalRoot, "read-only", "settings.json"), "utf-8")).toContain("\"model\": \"google/gemma-4-31b-it:free\"");
-      expect(readFileSync(join(personalRoot, "read-only", "settings.json"), "utf-8")).toContain("\"intervalMs\": 5000");
-      expect(readFileSync(join(personalRoot, "read-only", "tools.json"), "utf-8")).toBe("{\n  \"starter\": true\n}\n");
+      expect(existsSync(join(targetRoot, "read-only", "settings.json"))).toBe(true);
+      expect(existsSync(join(targetRoot, "read-only", "tools.json"))).toBe(true);
+      expect(existsSync(join(targetRoot, "read-only", "wakeup.json"))).toBe(true);
+      expect(existsSync(join(targetRoot, "wakeup.json"))).toBe(false);
+      expect(existsSync(join(targetRoot, "storage", "conversations", "timestamp.jsonl"))).toBe(true);
+      expect(existsSync(join(targetRoot, "settings"))).toBe(false);
+      expect(existsSync(join(targetRoot, "settings.json"))).toBe(false);
+      expect(existsSync(join(targetRoot, "brain"))).toBe(false);
+      expect(existsSync(join(targetRoot, "storage", "runtime.sqlite"))).toBe(false);
+      expect(readFileSync(join(targetRoot, "read-only", "settings.json"), "utf-8")).toContain("\"model\": \"google/gemma-4-31b-it:free\"");
+      expect(readFileSync(join(targetRoot, "read-only", "settings.json"), "utf-8")).toContain("\"intervalMs\": 5000");
+      expect(readFileSync(join(targetRoot, "read-only", "tools.json"), "utf-8")).toBe("{\n  \"starter\": true\n}\n");
     } finally {
       rmSync(workspaceRoot, { recursive: true, force: true });
     }

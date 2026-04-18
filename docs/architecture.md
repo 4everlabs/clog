@@ -63,7 +63,7 @@ The transport-agnostic typed surface. This is the layer web, Telegram, and CLI s
 
 ### `ai bridge`
 
-`apps/clog/src/brain/service.ts` is the shared chat entrypoint. It loads app-owned prompts from `apps/clog/src/brain/prompts`, plus the per-instance wakeup config from `.runtime/instances/<instance>/wakeup.json`, then serves the same reply path to the gateway and Telegram transport bridge.
+`apps/clog/src/brain/service.ts` is the shared chat entrypoint. It loads app-owned prompts from `apps/clog/src/brain/prompts`, plus the per-instance wakeup config from `.runtime/instances/<instance>/read-only/wakeup.json`, then serves the same reply path to the gateway and Telegram transport bridge.
 
 ### `telegram transport`
 
@@ -81,7 +81,7 @@ The transport-agnostic typed surface. This is the layer web, Telegram, and CLI s
 
 - `read-only/settings.json` – runtime-facing settings kept out of model access, including optional pinned PostHog context hints used to scope tool exposure.
 - `read-only/tools.json` – tool visibility and enablement for the model/runtime surface.
-- `wakeup.json` – per-instance wakeup message and frequency in one editable file.
+- `read-only/wakeup.json` – per-instance daily wakeup prompts and UTC schedule.
 - `storage/` – per-instance runtime state such as `storage/state/*.json`.
 - `workspace/` – per-instance workspaces kept outside the tracked runtime contract.
 

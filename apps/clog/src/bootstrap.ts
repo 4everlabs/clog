@@ -2,6 +2,8 @@ import type { AgentRuntimeSummary } from "@clog/types";
 import { loadAgentEnvironment, type AgentEnvironment } from "./config";
 import { BrainService } from "./brain/service";
 import { AgentGateway } from "./gateway/service";
+import { ConvexApiClient } from "./integrations/convex/api-client";
+import { ConvexIntegrationClient } from "./integrations/convex/client";
 import { GitHubIntegrationClient } from "./integrations/github/client";
 import { NotionApiClient } from "./integrations/notion/api-client";
 import { NotionIntegrationClient } from "./integrations/notion/client";
@@ -40,6 +42,7 @@ export const bootstrapRuntime = (): RuntimeBootstrap => {
   const store = new FileRuntimeStore(env.storage);
   store.setStatus("booting");
   const posthogApi = new PostHogApiClient(env.posthog);
+  const convexApi = new ConvexApiClient(env.convex);
   const notionApi = new NotionApiClient(env.notion);
   const posthogCli = new PostHogCliTool(env.posthog);
   const posthogWorkspaceReporter = new PostHogWorkspaceReporter(env.storage.workspaceDir);
@@ -52,6 +55,7 @@ export const bootstrapRuntime = (): RuntimeBootstrap => {
     config: env.posthog,
     capabilities: env.capabilities.posthog,
   });
+  const convex = new ConvexIntegrationClient(env.convex);
   const notion = new NotionIntegrationClient(env.notion);
   let toolExecutor: ToolExecutor | null = null;
   const posthogServices = createPostHogToolServices({
@@ -87,6 +91,9 @@ export const bootstrapRuntime = (): RuntimeBootstrap => {
     capabilities: env.capabilities,
     services: {
       posthog: posthogServices,
+      convex: {
+        runQuery: async (input) => await convexApi.runQuery(input),
+      },
       notion: {
         getTodoList: async (input) => await notionApi.getTodoList(input),
       },
@@ -117,6 +124,7 @@ export const bootstrapRuntime = (): RuntimeBootstrap => {
   const monitorLoop = new MonitoringLoop({
     store,
     posthog,
+    convex,
     github,
     vercel,
     notion,
@@ -153,9 +161,14 @@ export const bootstrapRuntime = (): RuntimeBootstrap => {
       executionMode: env.executionMode,
       monitorIntervalMs: env.monitorIntervalMs,
       bootedAt,
-      activeIntegrations: env.capabilities.notion.canReadTodo
-        ? ["posthog", "github", "vercel", "chat", "notion"]
-        : ["posthog", "github", "vercel", "chat"],
+      activeIntegrations: [
+        "posthog",
+        ...(env.capabilities.convex.canReadData ? ["convex"] as const : []),
+        "github",
+        "vercel",
+        "chat",
+        ...(env.capabilities.notion.canReadTodo ? ["notion"] as const : []),
+      ],
     },
     posthogApi,
     posthogCli,

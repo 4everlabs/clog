@@ -16,6 +16,9 @@ const createCapabilities = (): IntegrationCapabilitySnapshot => ({
     canManageEndpoints: false,
     canUploadSourcemaps: false,
   },
+  convex: {
+    canReadData: false,
+  },
   github: {
     canReadRepository: false,
     canCreatePullRequest: false,
@@ -264,6 +267,7 @@ describe("BrainService tool loop", () => {
             throw new Error("not used");
           },
         },
+        convex: null,
         notion: null,
         runtime: createRuntimeServices(),
         shell: null,

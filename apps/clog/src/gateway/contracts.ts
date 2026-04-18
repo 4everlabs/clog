@@ -21,6 +21,8 @@ import type {
   SurfaceSendMessageRequest,
   SurfaceSendMessageResponse,
   SurfaceThreadsResponse,
+  SurfaceUpdatePreferencesRequest,
+  SurfaceUpdatePreferencesResponse,
   SurfaceUpdateWakeupRequest,
   SurfaceUpdateWakeupResponse,
   ShellCommandRequest,
@@ -35,6 +37,7 @@ export interface AgentGatewaySurface {
   listThreads(): Promise<SurfaceThreadsResponse>;
   sendMessage(input: SurfaceSendMessageRequest): Promise<SurfaceSendMessageResponse>;
   updateWakeupConfig(input: SurfaceUpdateWakeupRequest): Promise<SurfaceUpdateWakeupResponse>;
+  updatePreferences(input: SurfaceUpdatePreferencesRequest): Promise<SurfaceUpdatePreferencesResponse>;
   acknowledgeFinding(input: SurfaceAcknowledgeFindingRequest): Promise<SurfaceFindingsResponse>;
   executeAction(input: ActionExecutionRequest): Promise<SurfaceActionExecutionResponse>;
   runShellCommand(input: ShellCommandRequest): Promise<SurfaceShellCommandResponse>;

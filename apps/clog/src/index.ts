@@ -2,9 +2,10 @@ import { parseArgs } from "node:util";
 import { bootstrapRuntime } from "./bootstrap";
 import { loadRuntimeWakeupConfig } from "./brain/prompt-loader";
 import { PostHogPerformanceReporter } from "./integrations/posthog/performance-reporter";
+import { DailyWakeupScheduler, resolveStartupWakeupRun, runResolvedWakeup } from "./runtime/wakeup-scheduler";
 import { startRuntimeServer, type RuntimeServerInfo } from "./server";
 import { initializeRuntimeLogCapture } from "./storage/logs";
-import { sendTelegramOperatorNotifications, startTelegramSurface } from "../../frontends/telegram/src";
+import { startTelegramSurface } from "../../frontends/telegram/src";
 import type { RuntimeBootstrap } from "./bootstrap";
 
 const writeStdoutLine = (value: string): void => {
@@ -58,23 +59,16 @@ export const runStartupWakeup = async (
     return false;
   }
 
-  const wakeupThread = runtime.store.seedOperatorThread("system", "Startup Wakeups");
-  const monitorResult = await runtime.gateway.runMonitorCycle();
-  const response = await runtime.gateway.sendMessage({
-    channel: "system",
-    threadId: wakeupThread.id,
-    message: wakeupConfig.message,
-  });
-  const notifyTelegramReply = hooks.notifyTelegramReply ?? sendTelegramOperatorNotifications;
-  const telegramNotifications = runtime.env.capabilities.chat.canSendOperatorMessages
-    ? await notifyTelegramReply(runtime, response.replyMessage.content)
-    : 0;
-
-  writeStdoutLine(`[clog] startup wakeup checked ${monitorResult.integrationHealth.length} integrations and ${monitorResult.findings.length} findings`);
-  writeStdoutLine(`[clog] startup wakeup reply: ${response.replyMessage.content.slice(0, 240)}`);
-  if (telegramNotifications > 0) {
-    writeStdoutLine(`[clog] startup wakeup sent ${telegramNotifications} Telegram notification${telegramNotifications === 1 ? "" : "s"}`);
+  const run = resolveStartupWakeupRun(wakeupConfig);
+  if (!run) {
+    return false;
   }
+
+  await runResolvedWakeup(runtime, run, "startup", {
+    ...hooks,
+    logInfo: writeStdoutLine,
+    logError: writeStderrLine,
+  });
   return true;
 };
 
@@ -101,6 +95,14 @@ export const startDefaultRuntimeServer = async (
       writeStderrLine(`[clog] telegram surface stopped: ${message}`);
     });
   }
+
+  const wakeupScheduler = new DailyWakeupScheduler({
+    runtime,
+    logInfo: writeStdoutLine,
+    logError: writeStderrLine,
+  });
+  wakeupScheduler.start();
+  writeStdoutLine("[clog] daily wakeup scheduler enabled");
 
   writeStdoutLine(`[clog] runtime ready on ${server.url}`);
   if (options.wakeup) {

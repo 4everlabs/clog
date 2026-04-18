@@ -2,7 +2,7 @@ export type AgentExecutionMode = "observe" | "propose" | "execute";
 
 export type AgentStatus = "booting" | "idle" | "monitoring" | "degraded";
 
-export type IntegrationKind = "posthog" | "github" | "vercel" | "chat" | "notion";
+export type IntegrationKind = "posthog" | "convex" | "github" | "vercel" | "chat" | "notion";
 
 export type IntegrationStatus = "ready" | "degraded" | "missing-config";
 
@@ -34,6 +34,9 @@ export interface IntegrationCapabilitySnapshot {
     readonly canReadExperiments: boolean;
     readonly canManageEndpoints: boolean;
     readonly canUploadSourcemaps: boolean;
+  };
+  readonly convex: {
+    readonly canReadData: boolean;
   };
   readonly github: {
     readonly canReadRepository: boolean;
@@ -134,9 +137,28 @@ export interface AgentRuntimeSummary {
   readonly activeIntegrations: readonly IntegrationKind[];
 }
 
+export interface RuntimeWakeupPromptTarget {
+  readonly channel: "system";
+  readonly threadTitle?: string;
+}
+
+export interface RuntimeWakeupPromptDefinition {
+  readonly prompt: string;
+  readonly target: RuntimeWakeupPromptTarget;
+}
+
+export interface RuntimeWakeupScheduleEntry {
+  readonly promptId: string;
+  readonly timeUtc: string;
+}
+
 export interface RuntimeWakeupConfig {
-  readonly intervalMs: number;
-  readonly message: string;
+  readonly prompts: Readonly<Record<string, RuntimeWakeupPromptDefinition>>;
+  readonly schedule: readonly RuntimeWakeupScheduleEntry[];
+}
+
+export interface UserPreferences {
+  readonly timezone: string;
 }
 
 export interface SurfaceBootstrapResponse {
@@ -147,6 +169,7 @@ export interface SurfaceBootstrapResponse {
   readonly openFindings: number;
   readonly threads: readonly Pick<ConversationThread, "id" | "title" | "channel" | "createdAt" | "updatedAt">[];
   readonly wakeup: RuntimeWakeupConfig | null;
+  readonly preferences: UserPreferences;
 }
 
 export interface SurfaceFindingsResponse {
@@ -171,12 +194,20 @@ export interface SurfaceSendMessageResponse {
 }
 
 export interface SurfaceUpdateWakeupRequest {
-  readonly intervalMs: number;
-  readonly message: string;
+  readonly prompts: Readonly<Record<string, RuntimeWakeupPromptDefinition>>;
+  readonly schedule: readonly RuntimeWakeupScheduleEntry[];
 }
 
 export interface SurfaceUpdateWakeupResponse {
   readonly wakeup: RuntimeWakeupConfig;
+}
+
+export interface SurfaceUpdatePreferencesRequest {
+  readonly timezone?: string;
+}
+
+export interface SurfaceUpdatePreferencesResponse {
+  readonly preferences: UserPreferences;
 }
 
 export interface SurfaceAcknowledgeFindingRequest {
@@ -322,6 +353,26 @@ export interface NotionTodoSummary {
 export interface SurfaceNotionTodoResponse {
   readonly summary: NotionTodoSummary;
   readonly items: readonly NotionTodoItem[];
+  readonly printout: string;
+}
+
+export interface ConvexQueryRequest {
+  readonly path: string;
+  readonly args?: Record<string, unknown>;
+}
+
+export interface ConvexQuerySummary {
+  readonly valueType: "object" | "array" | "string" | "number" | "boolean" | "null";
+  readonly childKeys: readonly string[];
+  readonly itemCount: number | null;
+  readonly hasLogs: boolean;
+}
+
+export interface SurfaceConvexQueryResponse {
+  readonly path: string;
+  readonly summary: ConvexQuerySummary;
+  readonly value: unknown;
+  readonly logLines: readonly string[];
   readonly printout: string;
 }
 

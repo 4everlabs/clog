@@ -9,7 +9,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-6.0-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Oxlint](https://img.shields.io/badge/Lint-Oxlint-111111)](https://oxc.rs/docs/guide/usage/linter.html)
 
-`clog` is a runtime-first oversight agent for watching product and runtime health, pulling evidence from systems like PostHog, GitHub, and Vercel, and surfacing clear findings through a shared backend.
+`clog` is a runtime-first oversight agent for watching product and runtime health, pulling evidence from systems like PostHog, Convex, GitHub, and Vercel, and surfacing clear findings through a shared backend.
 
 ## What is here
 
@@ -64,7 +64,7 @@ bun run update-all       # update workspace deps to latest
 - `src/brain/service.ts`: shared chat entrypoint used by the gateway and transports.
 - `src/monitoring`: turns observations into findings.
 - `src/gateway`: transport-agnostic API surface.
-- `src/integrations`: PostHog, GitHub, Vercel, and other external boundaries.
+- `src/integrations`: PostHog, Convex, GitHub, Vercel, and other external boundaries.
 - `src/execution/shell-executor.ts`: restricted read-only shell access for runtime inspection.
 
 ## Runtime layout
@@ -73,7 +73,7 @@ The runtime expects per-instance state under `.runtime/instances/<instance>/`:
 
 - `read-only/settings.json`: runtime-owned settings.
 - `read-only/tools.json`: tool visibility and enablement.
-- `wakeup.json`: wakeup prompt and frequency.
+- `read-only/wakeup.json`: daily wakeup prompts and UTC schedule.
 - `storage/`: structured runtime state.
 - `workspace/`: model-targeted writable workspace.
 
