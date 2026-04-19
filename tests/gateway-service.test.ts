@@ -211,7 +211,7 @@ describe("AgentGateway", () => {
     const store = new InMemoryRuntimeStore();
     store.setStatus("idle");
 
-    const replyPromise = Promise.withResolvers<{ readonly text: string; readonly reasoning: string | null }>();
+    const replyPromise = Promise.withResolvers<Awaited<ReturnType<BrainService["replyDetailed"]>>>();
     const brain = {
       replyDetailed: async () => await replyPromise.promise,
     } as unknown as BrainService;
@@ -268,10 +268,25 @@ describe("AgentGateway", () => {
     replyPromise.resolve({
       text: "All clear.",
       reasoning: "Checked the latest open findings and nothing looks urgent.",
+      thoughts: [{
+        stepNumber: 1,
+        reasoning: "Checked the latest open findings and nothing looks urgent.",
+        toolCalls: [{
+          toolCallId: "call_1",
+          toolName: "runtime_get_conversation",
+          input: "{\"threadId\":\"thread_1\"}",
+        }],
+        toolResults: [{
+          toolCallId: "call_1",
+          toolName: "runtime_get_conversation",
+          output: "{\"messages\":[]}",
+        }],
+      }],
     });
     const sendResult = await sendPromise;
     expect(sendResult.replyMessage.content).toBe("All clear.");
     expect(sendResult.replyMessage.reasoning).toBe("Checked the latest open findings and nothing looks urgent.");
+    expect(sendResult.replyMessage.thoughts?.[0]?.toolCalls?.[0]?.toolName).toBe("runtime_get_conversation");
 
     await monitorPromise;
     expect(monitorStarted).toBe(true);

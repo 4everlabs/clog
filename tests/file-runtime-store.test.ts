@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { ActionExecutionResult, AgentFinding } from "@clog/types";
@@ -124,6 +124,20 @@ describe("FileRuntimeStore", () => {
       "telegram",
       "hello from clog",
       "Checked the most recent thread context before replying.",
+      [{
+        stepNumber: 1,
+        reasoning: "Checked the most recent thread context before replying.",
+        toolCalls: [{
+          toolCallId: "call_1",
+          toolName: "runtime_get_conversation",
+          input: "{\"threadId\":\"thread_1\"}",
+        }],
+        toolResults: [{
+          toolCallId: "call_1",
+          toolName: "runtime_get_conversation",
+          output: "{\"messages\":[]}",
+        }],
+      }],
     );
     store.appendMessages(telegramThread.id, [telegramUserMessage, telegramReplyMessage]);
     store.close();
@@ -167,6 +181,13 @@ describe("FileRuntimeStore", () => {
       entry.type === "message"
       && entry.content === "hello from clog"
       && entry.reasoning === "Checked the most recent thread context before replying."
+    ))).toBe(true);
+    expect(telegramChatEntries.some((entry) => (
+      entry.type === "message"
+      && entry.content === "hello from clog"
+      && Array.isArray(entry.thoughts)
+      && entry.thoughts[0]?.toolCalls?.[0]?.toolName === "runtime_get_conversation"
+      && entry.thoughts[0]?.toolResults?.[0]?.output === "{\"messages\":[]}"
     ))).toBe(true);
   });
 });

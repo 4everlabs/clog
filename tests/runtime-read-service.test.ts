@@ -453,6 +453,20 @@ describe("RuntimeReadService", () => {
         "web",
         "The latest deploy looks healthy.",
         "Checked the deploy health first, then confirmed there are no active alerts.",
+        [{
+          stepNumber: 1,
+          reasoning: "Checked the deploy health first, then confirmed there are no active alerts.",
+          toolCalls: [{
+            toolCallId: "call_deploy_health",
+            toolName: "runtime_read_json",
+            input: "{\"path\":\"workspace/deploy.json\"}",
+          }],
+          toolResults: [{
+            toolCallId: "call_deploy_health",
+            toolName: "runtime_read_json",
+            output: "{\"status\":\"healthy\"}",
+          }],
+        }],
       ),
     ]);
 
@@ -475,6 +489,8 @@ describe("RuntimeReadService", () => {
     expect(conversation.messages[1]?.reasoning).toBe(
       "Checked the deploy health first, then confirmed there are no active alerts.",
     );
+    expect(conversation.messages[1]?.thoughts?.[0]?.toolCalls?.[0]?.toolName).toBe("runtime_read_json");
+    expect(conversation.messages[1]?.thoughts?.[0]?.toolResults?.[0]?.output).toBe("{\"status\":\"healthy\"}");
 
     const snapshot = service.getStateSnapshot({
       threadLimit: 10,
@@ -483,5 +499,6 @@ describe("RuntimeReadService", () => {
     expect(snapshot.recentThreads[0]?.messages[1]?.reasoning).toBe(
       "Checked the deploy health first, then confirmed there are no active alerts.",
     );
+    expect(snapshot.recentThreads[0]?.messages[1]?.thoughts?.[0]?.toolCalls?.[0]?.toolName).toBe("runtime_read_json");
   });
 });

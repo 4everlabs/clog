@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, extname, join, relative, resolve, sep } from "node:path";
+import { dirname, extname, join, resolve, sep } from "node:path";
 import type { RuntimeStorageConfig } from "./config";
 import {
   POSTHOG_PERFORMANCE_REPORT_DIRECTORY_NAME,
@@ -269,6 +269,7 @@ export class RuntimeReadService {
           role: message.role,
           content: message.content,
           ...(message.reasoning ? { reasoning: message.reasoning } : {}),
+          ...(message.thoughts?.length ? { thoughts: message.thoughts } : {}),
           createdAt: message.createdAt,
         })),
       })),
@@ -512,6 +513,7 @@ export class RuntimeReadService {
         channel: message.channel,
         content: message.content,
         ...(message.reasoning ? { reasoning: message.reasoning } : {}),
+        ...(message.thoughts?.length ? { thoughts: message.thoughts } : {}),
         createdAt: message.createdAt,
       })),
       totalMessages,

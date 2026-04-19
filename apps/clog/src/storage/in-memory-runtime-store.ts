@@ -3,6 +3,7 @@ import type {
   AgentFinding,
   AgentStatus,
   ConversationMessage,
+  ConversationThoughtStep,
   ConversationThread,
   FindingState,
   ProposedAction,
@@ -128,6 +129,7 @@ export class InMemoryRuntimeStore implements RuntimeStore {
     channel: SurfaceChannelKind,
     content: string,
     reasoning?: string | null,
+    thoughts?: readonly ConversationThoughtStep[] | null,
   ): ConversationMessage {
     return {
       id: createId("msg"),
@@ -135,6 +137,7 @@ export class InMemoryRuntimeStore implements RuntimeStore {
       channel,
       content,
       ...(reasoning?.trim() ? { reasoning: reasoning.trim() } : {}),
+      ...(thoughts && thoughts.length > 0 ? { thoughts: [...thoughts] } : {}),
       createdAt: Date.now(),
     };
   }

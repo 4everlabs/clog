@@ -3,6 +3,7 @@ import type {
   AgentFinding,
   AgentStatus,
   ConversationMessage,
+  ConversationThoughtStep,
   ConversationThread,
   FindingState,
   ProposedAction,
@@ -34,6 +35,7 @@ export interface RuntimeStore {
     channel: SurfaceChannelKind,
     content: string,
     reasoning?: string | null,
+    thoughts?: readonly ConversationThoughtStep[] | null,
   ): ConversationMessage;
   listActionResults(): ActionExecutionResult[];
   rememberActionResult(result: ActionExecutionResult): void;

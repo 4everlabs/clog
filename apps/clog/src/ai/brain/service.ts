@@ -1,6 +1,12 @@
 import { generateText, stepCountIs, tool, type ModelMessage, type ToolSet } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import type { AgentExecutionMode, AgentFinding, ConversationMessage, ConversationThread } from "@clog/types";
+import type {
+  AgentExecutionMode,
+  AgentFinding,
+  ConversationMessage,
+  ConversationThread,
+  ConversationThoughtStep,
+} from "@clog/types";
 import type { AiRuntimeConfig } from "../../runtime/config";
 import type { ProviderFunctionTool, ProviderRequestMessage } from "../tools/schema/provider";
 import type { ToolSummary } from "../tools/schema/tools";
@@ -38,6 +44,7 @@ export interface BrainReplyInput {
 export interface BrainReplyResult {
   readonly text: string;
   readonly reasoning: string | null;
+  readonly thoughts: readonly ConversationThoughtStep[];
 }
 
 type BrainFallbackReason = "missing_api_key" | "model_unavailable";
@@ -45,6 +52,28 @@ type BrainFallbackReason = "missing_api_key" | "model_unavailable";
 interface BrainModelPayload {
   readonly systemPrompt: string;
   readonly messages: readonly ModelMessage[];
+}
+
+interface BrainTraceToolCall {
+  readonly toolCallId: string;
+  readonly toolName: string;
+  readonly input?: unknown;
+}
+
+interface BrainTraceToolResult {
+  readonly toolCallId: string;
+  readonly toolName: string;
+  readonly output?: unknown;
+  readonly result?: unknown;
+  readonly success?: boolean;
+  readonly error?: unknown;
+}
+
+interface BrainTraceStep {
+  readonly stepNumber: number;
+  readonly reasoningText?: string;
+  readonly toolCalls?: readonly BrainTraceToolCall[];
+  readonly toolResults?: readonly BrainTraceToolResult[];
 }
 
 type FetchFn = (input: URL | RequestInfo, init?: RequestInit) => Promise<Response>;
@@ -74,6 +103,7 @@ export class BrainService {
   private readonly maxToolRounds = 20;
   private readonly maxOutputTokens = 12_000;
   private readonly maxConversationContextTokens = 1_000;
+  private readonly maxThoughtPayloadChars = 1_600;
 
   constructor(config: BrainServiceConfig = {}) {
     const aiConfig = config.aiConfig;
@@ -225,6 +255,7 @@ export class BrainService {
       return {
         text: response.text.trim(),
         reasoning: response.reasoning,
+        thoughts: response.thoughts,
       };
     }
 
@@ -291,6 +322,87 @@ export class BrainService {
       : null;
   }
 
+  private stringifyThoughtPayload(value: unknown): string | null {
+    if (value === null || value === undefined) {
+      return null;
+    }
+
+    const truncate = (text: string): string => text.length > this.maxThoughtPayloadChars
+      ? `${text.slice(0, this.maxThoughtPayloadChars)}\n...[truncated]`
+      : text;
+
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      return trimmed ? truncate(trimmed) : null;
+    }
+
+    try {
+      const serialized = JSON.stringify(value, null, 2);
+      if (!serialized) {
+        return null;
+      }
+      const trimmed = serialized.trim();
+      return trimmed ? truncate(trimmed) : null;
+    } catch {
+      const fallback = String(value).trim();
+      return fallback ? truncate(fallback) : null;
+    }
+  }
+
+  private buildThoughtsFromSteps(
+    steps: readonly BrainTraceStep[] | undefined,
+    stepOffset = 0,
+  ): ConversationThoughtStep[] {
+    if (!steps || steps.length === 0) {
+      return [];
+    }
+
+    return steps.flatMap((step) => {
+      const reasoning = this.stringifyThoughtPayload(step.reasoningText);
+      const toolCalls = (step.toolCalls ?? []).flatMap((toolCall) => {
+        const input = this.stringifyThoughtPayload(toolCall.input);
+        return [{
+          toolCallId: toolCall.toolCallId,
+          toolName: toolCall.toolName,
+          ...(input ? { input } : {}),
+        }];
+      });
+      const toolResults = (step.toolResults ?? []).flatMap((toolResult) => {
+        const output = this.stringifyThoughtPayload(toolResult.output ?? toolResult.result ?? toolResult.error);
+        if (!output) {
+          return [];
+        }
+
+        return [{
+          toolCallId: toolResult.toolCallId,
+          toolName: toolResult.toolName,
+          output,
+          ...(toolResult.success === false ? { isError: true } : {}),
+        }];
+      });
+
+      if (!reasoning && toolCalls.length === 0 && toolResults.length === 0) {
+        return [];
+      }
+
+      return [{
+        stepNumber: stepOffset + step.stepNumber + 1,
+        ...(reasoning ? { reasoning } : {}),
+        ...(toolCalls.length > 0 ? { toolCalls } : {}),
+        ...(toolResults.length > 0 ? { toolResults } : {}),
+      }];
+    });
+  }
+
+  private buildFallbackThoughts(reasoning: string | null, stepNumber = 1): ConversationThoughtStep[] {
+    return reasoning
+      ? [{
+          stepNumber,
+          reasoning,
+        }]
+      : [];
+  }
+
   private async callOpenRouter(systemPrompt: string, messages: readonly ModelMessage[]): Promise<BrainReplyResult> {
     const openrouter = createOpenRouter({
       apiKey: this.apiKey,
@@ -314,11 +426,18 @@ export class BrainService {
     });
     const primaryReasoning = await this.readReasoningText(result.reasoningText);
     const primaryText = (await Promise.resolve(result.text)).trim();
+    const primaryThoughts = this.buildThoughtsFromSteps(
+      result.steps as readonly BrainTraceStep[] | undefined,
+    );
+    const normalizedPrimaryThoughts = primaryThoughts.length > 0
+      ? primaryThoughts
+      : this.buildFallbackThoughts(primaryReasoning);
 
     if (primaryText) {
       return {
         text: primaryText,
         reasoning: primaryReasoning,
+        thoughts: normalizedPrimaryThoughts,
       };
     }
 
@@ -326,6 +445,7 @@ export class BrainService {
       return {
         text: "",
         reasoning: primaryReasoning,
+        thoughts: normalizedPrimaryThoughts,
       };
     }
 
@@ -346,10 +466,18 @@ export class BrainService {
     });
     const followupText = (await Promise.resolve(followup.text)).trim();
     const followupReasoning = await this.readReasoningText(followup.reasoningText);
+    const followupThoughts = this.buildThoughtsFromSteps(
+      followup.steps as readonly BrainTraceStep[] | undefined,
+      normalizedPrimaryThoughts.length,
+    );
+    const normalizedFollowupThoughts = followupThoughts.length > 0
+      ? followupThoughts
+      : this.buildFallbackThoughts(followupReasoning, normalizedPrimaryThoughts.length + 1);
 
     return {
       text: followupText,
       reasoning: followupReasoning ?? primaryReasoning,
+      thoughts: [...normalizedPrimaryThoughts, ...normalizedFollowupThoughts],
     };
   }
 
@@ -384,6 +512,7 @@ export class BrainService {
         return {
           text: assistantContent,
           reasoning: null,
+          thoughts: [],
         };
       }
 
@@ -453,12 +582,14 @@ export class BrainService {
       return {
         text: `${lead} There are no active findings right now. Ask me to inspect runtime health or run another monitoring cycle if you want a fresh check.`,
         reasoning: null,
+        thoughts: [],
       };
     }
 
     return {
       text: `${lead} The highest-priority open finding is "${highestPriority.title}". The safest next step is to review that finding and decide whether to investigate, notify, or prepare a follow-up action.`,
       reasoning: null,
+      thoughts: [],
     };
   }
 }

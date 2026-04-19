@@ -224,7 +224,13 @@ export class AgentGateway implements AgentGatewaySurface {
         message: input.message,
         findings,
       });
-      const replyMessage = this.deps.store.createMessage("agent", input.channel, reply.text, reply.reasoning);
+      const replyMessage = this.deps.store.createMessage(
+        "agent",
+        input.channel,
+        reply.text,
+        reply.reasoning,
+        reply.thoughts,
+      );
       const updatedThread = this.deps.store.appendMessages(thread.id, [replyMessage]);
       const recommendedActions = findings.filter((finding) => finding.state === "open")[0]?.proposedActions ?? [];
 
@@ -275,7 +281,7 @@ export class AgentGateway implements AgentGatewaySurface {
     const merged = {
       ...current,
       ui: {
-        ...(current.ui ?? {}),
+        ...current.ui,
         timezone,
       },
     };

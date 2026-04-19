@@ -1058,12 +1058,33 @@ export const RuntimeGetConversationInputSchema = z.object({
   windowMinutes: z.number().int().positive().max(1_440).optional(),
 }).strict();
 
+const RuntimeConversationThoughtToolCallSchema = z.object({
+  toolCallId: z.string().min(1),
+  toolName: z.string().min(1),
+  input: z.string().min(1).optional(),
+}).strict();
+
+const RuntimeConversationThoughtToolResultSchema = z.object({
+  toolCallId: z.string().min(1),
+  toolName: z.string().min(1),
+  output: z.string().min(1),
+  isError: z.boolean().optional(),
+}).strict();
+
+const RuntimeConversationThoughtStepSchema = z.object({
+  stepNumber: z.number().int().nonnegative(),
+  reasoning: z.string().min(1).optional(),
+  toolCalls: z.array(RuntimeConversationThoughtToolCallSchema).min(1).optional(),
+  toolResults: z.array(RuntimeConversationThoughtToolResultSchema).min(1).optional(),
+}).strict();
+
 export const RuntimeConversationMessageSchema = z.object({
   id: z.string().min(1),
   role: z.enum(["system", "user", "agent"]),
   channel: z.enum(["web", "telegram", "tui", "system"]),
   content: z.string(),
   reasoning: z.string().min(1).optional(),
+  thoughts: z.array(RuntimeConversationThoughtStepSchema).min(1).optional(),
   createdAt: z.number().int().nonnegative(),
 }).strict();
 

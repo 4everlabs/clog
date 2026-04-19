@@ -64,11 +64,6 @@ const readOptionalJson = <T>(path: string): T | null => {
   }
 };
 
-const resolveWorkspacePath = (value: string | undefined, fallback: string): string => {
-  const target = readOptionalString(value) ?? fallback;
-  return resolve(process.cwd(), target);
-};
-
 export const resolveRuntimeInstanceRoot = (
   env: NodeJS.ProcessEnv,
   workspaceRoot = process.cwd(),

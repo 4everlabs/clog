@@ -111,12 +111,33 @@ export interface AgentFinding {
   readonly proposedActions: readonly ProposedAction[];
 }
 
+export interface ConversationThoughtToolCall {
+  readonly toolCallId: string;
+  readonly toolName: string;
+  readonly input?: string;
+}
+
+export interface ConversationThoughtToolResult {
+  readonly toolCallId: string;
+  readonly toolName: string;
+  readonly output: string;
+  readonly isError?: boolean;
+}
+
+export interface ConversationThoughtStep {
+  readonly stepNumber: number;
+  readonly reasoning?: string;
+  readonly toolCalls?: readonly ConversationThoughtToolCall[];
+  readonly toolResults?: readonly ConversationThoughtToolResult[];
+}
+
 export interface ConversationMessage {
   readonly id: string;
   readonly role: "system" | "user" | "agent";
   readonly channel: SurfaceChannelKind;
   readonly content: string;
   readonly reasoning?: string;
+  readonly thoughts?: readonly ConversationThoughtStep[];
   readonly createdAt: number;
 }
 

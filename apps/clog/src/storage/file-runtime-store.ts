@@ -5,6 +5,7 @@ import type {
   AgentFinding,
   AgentStatus,
   ConversationMessage,
+  ConversationThoughtStep,
   ConversationThread,
 } from "@clog/types";
 import type { RuntimeStorageConfig } from "../runtime/config";
@@ -157,6 +158,7 @@ const createChatEntries = (thread: ConversationThread, conversationId: string): 
     channel: message.channel,
     content: message.content,
     ...(message.reasoning ? { reasoning: message.reasoning } : {}),
+    ...(message.thoughts?.length ? { thoughts: message.thoughts } : {}),
     createdAt: message.createdAt,
   })),
 ];
@@ -233,8 +235,9 @@ export class FileRuntimeStore implements RuntimeStore {
     channel: ConversationMessage["channel"],
     content: string,
     reasoning?: string | null,
+    thoughts?: readonly ConversationThoughtStep[] | null,
   ): ConversationMessage {
-    return this.memoryStore.createMessage(role, channel, content, reasoning);
+    return this.memoryStore.createMessage(role, channel, content, reasoning, thoughts);
   }
 
   listActionResults(): ActionExecutionResult[] {

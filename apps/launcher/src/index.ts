@@ -239,9 +239,9 @@ const persistAiModelSelection = (instanceId: string, model: string): void => {
 
   const current = loadLauncherRuntimeSettingsState(instanceId).settings;
   const validated = RuntimeSettingsSchema.parse({
-    ...(current ?? {}),
+    ...current,
     ai: {
-      ...(current?.ai ?? {}),
+      ...current?.ai,
       model: trimmedModel,
       modelChoices: Array.from(new Set([trimmedModel, ...getModelChoices(current)])),
     },

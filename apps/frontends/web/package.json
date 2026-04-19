@@ -12,7 +12,8 @@
     "typecheck": "bun --bun svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {
-    "@clog/types": "workspace:*"
+    "@clog/types": "workspace:*",
+    "chat": "^4.22.0"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.0.0",
