@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { loadAgentEnvironment } from "../apps/clog/src/config";
+import { loadAgentEnvironment } from "../apps/clog/src/runtime/config";
 
 const cleanupPaths: string[] = [];
 
@@ -117,6 +117,7 @@ describe("loadAgentEnvironment", () => {
         "runtime_search_messages",
         "runtime_read_knowledge",
         "runtime_read_json",
+        "runtime_write_workspace_file",
       ]);
     } finally {
       process.chdir(previousCwd);
@@ -145,6 +146,7 @@ describe("loadAgentEnvironment", () => {
       "runtime_search_messages",
       "runtime_read_knowledge",
       "runtime_read_json",
+      "runtime_write_workspace_file",
     ]);
   });
 
@@ -330,6 +332,7 @@ describe("loadAgentEnvironment", () => {
         "runtime_search_messages",
         "runtime_read_knowledge",
         "runtime_read_json",
+        "runtime_write_workspace_file",
       ]);
     } finally {
       process.chdir(previousCwd);
@@ -406,10 +409,10 @@ describe("loadAgentEnvironment", () => {
         "runtime_search_messages",
         "runtime_read_knowledge",
         "runtime_read_json",
+        "runtime_write_workspace_file",
       ]);
       expect(env.capabilities.shell.safeRoots).toEqual([
         env.storage.workspaceDir,
-        env.storage.storageDir,
       ]);
     } finally {
       process.chdir(previousCwd);

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { createGceBundle } from "../apps/clog/src/deploy/gce-bundle";
+import { createGceBundle } from "./gce-bundle";
 
 const outputArgument = process.argv
   .slice(2)

@@ -3,7 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { mkdtempSync } from "node:fs";
-import type { RuntimeBootstrap } from "../apps/clog/src/bootstrap";
+import type { RuntimeBootstrap } from "../apps/clog/src/runtime/bootstrap";
 import { parseRuntimeStartupOptions, runStartupWakeup } from "../apps/clog/src/index";
 
 const cleanupPaths: string[] = [];
@@ -30,16 +30,15 @@ describe("runtime startup", () => {
     const wakeupDir = join(workspaceRoot, ".runtime", "instances", "personal-instance", "read-only");
     mkdirSync(wakeupDir, { recursive: true });
     writeFileSync(join(wakeupDir, "wakeup.json"), JSON.stringify({
+      enabled: true,
       prompts: {
-        daily: {
+        checkIn: {
+          title: "Check in",
           prompt: "Check the latest signals and summarize the biggest change.",
-          target: {
-            channel: "system",
-          },
         },
       },
       schedule: [{
-        promptId: "daily",
+        promptId: "checkIn",
         timeUtc: "09:00",
       }],
     }));
@@ -66,7 +65,7 @@ describe("runtime startup", () => {
           },
         },
         gateway: {
-          runWakeupPass: async (input: { readonly message: string; readonly threadTitle?: string }) => {
+          runWakeupPass: async (input: { readonly message: string; readonly title?: string }) => {
             calls.push("monitor");
             calls.push("send");
             sentMessage = input.message;

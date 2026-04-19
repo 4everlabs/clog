@@ -4,7 +4,8 @@ import { format } from "node:util";
 import { resolveRuntimeStorageRoot } from "../../../../tests/runtime-instance-template";
 import { RuntimeTerminalOutputFormatter, type RuntimeTerminalStreamName } from "./runtime-terminal-output";
 
-const LOG_DIRECTORY_NAME = "logs";
+const SESSIONS_DIRECTORY_NAME = "sessions";
+const SESSION_LOG_FILE_NAME = "system.log";
 const LOG_FILE_BUFFER_SIZE = 1024 * 1024;
 const LOG_FLUSH_INTERVAL_MS = 1_000;
 
@@ -26,6 +27,7 @@ interface ConsoleMethodSet {
 export interface RuntimeLogSession {
   readonly startedAt: number;
   readonly startedAtIso: string;
+  readonly sessionTitle: string;
   readonly filePath: string;
 }
 
@@ -46,8 +48,30 @@ let activeCapture: RuntimeLogCapture | null = null;
 let hooksRegistered = false;
 let mirroredConsoleDepth = 0;
 
-const toLogFileName = (timestamp: number): string =>
-  `${new Date(timestamp).toISOString().replaceAll(":", "-").replaceAll(".", "-")}.log`;
+export interface RuntimeLogSessionPaths {
+  readonly sessionTitle: string;
+  readonly sessionDirectoryName: string;
+  readonly filePath: string;
+}
+
+export const createRuntimeLogSessionTitle = (timestamp: number): string =>
+  new Date(timestamp).toISOString();
+
+const createRuntimeLogSessionDirectoryName = (timestamp: number): string =>
+  createRuntimeLogSessionTitle(timestamp).replaceAll(":", "-").replaceAll(".", "-");
+
+export const createRuntimeLogSessionPaths = (
+  storageRoot: string,
+  timestamp: number,
+): RuntimeLogSessionPaths => {
+  const sessionTitle = createRuntimeLogSessionTitle(timestamp);
+  const sessionDirectoryName = createRuntimeLogSessionDirectoryName(timestamp);
+  return {
+    sessionTitle,
+    sessionDirectoryName,
+    filePath: join(storageRoot, SESSIONS_DIRECTORY_NAME, sessionDirectoryName, SESSION_LOG_FILE_NAME),
+  };
+};
 
 const reportCaptureError = (error: unknown): void => {
   const capture = activeCapture;
@@ -181,16 +205,17 @@ export const initializeRuntimeLogCapture = (
     return {
       startedAt: existingCapture.startedAt,
       startedAtIso: existingCapture.startedAtIso,
+      sessionTitle: existingCapture.sessionTitle,
       filePath: existingCapture.filePath,
     };
   }
 
   const storageRoot = resolveRuntimeStorageRoot(env, workspaceRoot);
-  const logsDirectory = join(storageRoot, LOG_DIRECTORY_NAME);
-  mkdirSync(logsDirectory, { recursive: true });
-
   const startedAt = Date.now();
-  const filePath = join(logsDirectory, toLogFileName(startedAt));
+  const session = createRuntimeLogSessionPaths(storageRoot, startedAt);
+  mkdirSync(join(storageRoot, SESSIONS_DIRECTORY_NAME), { recursive: true });
+  mkdirSync(join(storageRoot, SESSIONS_DIRECTORY_NAME, session.sessionDirectoryName), { recursive: true });
+  const filePath = session.filePath;
   const sink = Bun.file(filePath).writer({ highWaterMark: LOG_FILE_BUFFER_SIZE });
   const terminalFormatter = new RuntimeTerminalOutputFormatter(startedAt);
   const originalStdoutWrite = process.stdout.write.bind(process.stdout) as WriteMethod;
@@ -210,7 +235,8 @@ export const initializeRuntimeLogCapture = (
 
   activeCapture = {
     startedAt,
-    startedAtIso: new Date(startedAt).toISOString(),
+    startedAtIso: session.sessionTitle,
+    sessionTitle: session.sessionTitle,
     filePath,
     sink,
     terminalFormatter,
@@ -237,6 +263,7 @@ export const initializeRuntimeLogCapture = (
   writeToSink(
     [
       `=== clog runtime log started ${activeCapture.startedAtIso} ===`,
+      `session=${activeCapture.sessionTitle}`,
       `pid=${process.pid}`,
       `cwd=${process.cwd()}`,
       `storage=${storageRoot}`,
@@ -247,6 +274,7 @@ export const initializeRuntimeLogCapture = (
   return {
     startedAt: activeCapture.startedAt,
     startedAtIso: activeCapture.startedAtIso,
+    sessionTitle: activeCapture.sessionTitle,
     filePath: activeCapture.filePath,
   };
 };

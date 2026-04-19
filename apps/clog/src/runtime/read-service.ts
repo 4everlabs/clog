@@ -1,16 +1,15 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { extname, join, relative, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
-import type { RuntimeStorageConfig } from "../config";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, extname, join, relative, resolve, sep } from "node:path";
+import type { RuntimeStorageConfig } from "./config";
 import {
   POSTHOG_PERFORMANCE_REPORT_DIRECTORY_NAME,
-} from "../integrations/posthog/performance-reporter";
+} from "../ai/integrations/posthog/performance-reporter";
 import {
   POSTHOG_WORKSPACE_SNAPSHOT_FILE_NAME,
-} from "../integrations/posthog/workspace-reporter";
+} from "../ai/integrations/posthog/workspace-reporter";
 import type { SurfaceChannelKind } from "@clog/types";
 import type { RuntimeStore } from "../storage/chat";
-import { resolveSinceTimestamp } from "../tools/time-range";
+import { resolveSinceTimestamp } from "../ai/tools/time-range";
 
 const DEFAULT_THREAD_LIMIT = 3;
 const DEFAULT_MESSAGE_LIMIT = 6;
@@ -30,6 +29,8 @@ const DEFAULT_CONVERSATION_TOKEN_BUDGET = 3_000;
 const DEFAULT_MESSAGE_SEARCH_LIMIT = 30;
 const MESSAGE_SNIPPET_MAX_CHARS = 280;
 const APPROX_CHARS_PER_TOKEN = 4;
+const WORKSPACE_PREFIX = "workspace/";
+const WORKSPACE_TEXT_EXTENSIONS = new Set([".md", ".txt", ".text", ".log", ".yaml", ".yml"]);
 
 const readTextIfExists = (path: string): string | null => {
   if (!existsSync(path)) {
@@ -141,16 +142,9 @@ const getJsonChildCount = (value: unknown): number | null => {
   return null;
 };
 
-const runtimeDir = fileURLToPath(new URL("../", import.meta.url));
-const defaultKnowledgeDir = join(runtimeDir, "brain", "knowledge");
-
 export interface RuntimeReadServiceConfig {
   readonly storage: RuntimeStorageConfig;
   readonly store: RuntimeStore;
-  readonly knowledgeDir?: string;
-  readonly wakeupPath?: string;
-  readonly settingsPath?: string;
-  readonly toolsPath?: string;
 }
 
 export interface RuntimeStateSnapshotInput {
@@ -211,14 +205,21 @@ export interface RuntimeSearchMessagesInput {
 }
 
 interface WorkspaceOperationHistoryEntry {
-  readonly recordedAt?: number;
+  readonly recordedAt: number;
   readonly data?: unknown;
 }
 
-type WorkspaceOperationSnapshot = {
-  readonly lastRecordedAt?: number;
-  readonly history?: readonly WorkspaceOperationHistoryEntry[];
-} | WorkspaceOperationHistoryEntry;
+interface RuntimeLogFileDescriptor {
+  readonly fileName: string;
+  readonly relativePath: string;
+  readonly fullPath: string;
+  readonly sortKey: string;
+}
+
+interface WorkspaceOperationSnapshot {
+  readonly lastRecordedAt: number;
+  readonly history: readonly WorkspaceOperationHistoryEntry[];
+}
 
 interface WorkspaceMonitoringSnapshot {
   readonly updatedAt?: number;
@@ -228,18 +229,10 @@ interface WorkspaceMonitoringSnapshot {
 export class RuntimeReadService {
   private readonly store: RuntimeStore;
   private readonly storage: RuntimeStorageConfig;
-  private readonly knowledgeDir: string;
-  private readonly wakeupPath: string;
-  private readonly settingsPath: string;
-  private readonly toolsPath: string;
 
   constructor(config: RuntimeReadServiceConfig) {
     this.store = config.store;
     this.storage = config.storage;
-    this.knowledgeDir = config.knowledgeDir ?? defaultKnowledgeDir;
-    this.wakeupPath = config.wakeupPath ?? join(config.storage.readOnlyDir, "wakeup.json");
-    this.settingsPath = config.settingsPath ?? join(config.storage.readOnlyDir, "settings.json");
-    this.toolsPath = config.toolsPath ?? join(config.storage.readOnlyDir, "tools.json");
   }
 
   getStateSnapshot(input: RuntimeStateSnapshotInput = {}) {
@@ -292,27 +285,23 @@ export class RuntimeReadService {
   getRecentLogs(input: RuntimeRecentLogsInput = {}) {
     const fileLimit = clamp(input.fileLimit, DEFAULT_LOG_FILE_LIMIT, 10);
     const lineLimit = clamp(input.lineLimit, DEFAULT_LOG_LINE_LIMIT, 400);
-    const logsDir = join(this.storage.storageDir, "logs");
     const pathContains = input.pathContains?.trim().toLowerCase() ?? "";
-    const files = existsSync(logsDir)
-      ? readdirSync(logsDir, { withFileTypes: true })
-        .filter((entry) => entry.isFile() && entry.name.endsWith(".log"))
-        .map((entry) => entry.name)
-        .filter((name) => !pathContains || name.toLowerCase().includes(pathContains))
-        .sort((left, right) => right.localeCompare(left))
-        .slice(0, fileLimit)
-      : [];
+    const files = [
+      ...this.listSessionLogFiles(),
+      ...this.listLegacyLogFiles(),
+    ]
+      .filter((file) => !pathContains || file.relativePath.toLowerCase().includes(pathContains))
+      .sort((left, right) => right.sortKey.localeCompare(left.sortKey))
+      .slice(0, fileLimit);
 
     return {
       generatedAt: Date.now(),
-      files: files.map((fileName) => {
-        const relativePath = join("logs", fileName);
-        const fullPath = join(logsDir, fileName);
-        const fileContent = readTextIfExists(fullPath) ?? "";
+      files: files.map((file) => {
+        const fileContent = readTextIfExists(file.fullPath) ?? "";
         const tailed = tailLines(fileContent, lineLimit);
         return {
-          fileName,
-          relativePath,
+          fileName: file.fileName,
+          relativePath: file.relativePath.replaceAll(sep, "/"),
           totalLines: tailed.totalLines,
           returnedLines: tailed.returnedLines,
           truncated: tailed.truncated,
@@ -326,8 +315,9 @@ export class RuntimeReadService {
     const maxChars = clamp(input.maxChars, DEFAULT_KNOWLEDGE_MAX_CHARS, 20_000);
     const availablePaths = this.listKnowledgePaths();
     const selectedPath = input.path?.trim() ?? null;
+    const normalizedSelectedPath = selectedPath ? this.normalizeWorkspaceDisplayPath(selectedPath) : null;
 
-    if (!selectedPath) {
+    if (!normalizedSelectedPath) {
       return {
         availablePaths,
         selectedPath: null,
@@ -336,16 +326,16 @@ export class RuntimeReadService {
       };
     }
 
-    const resolvedPath = this.resolveKnowledgePath(selectedPath, availablePaths);
+    const resolvedPath = this.resolveKnowledgePath(normalizedSelectedPath, availablePaths);
     const content = readTextIfExists(resolvedPath);
     if (content === null) {
-      throw new Error(`Knowledge path not found: ${selectedPath}`);
+      throw new Error(`Workspace text path not found: ${normalizedSelectedPath}`);
     }
 
     const truncatedContent = truncateContent(content, maxChars);
     return {
       availablePaths,
-      selectedPath,
+      selectedPath: normalizedSelectedPath,
       content: truncatedContent.content,
       truncated: truncatedContent.truncated,
     };
@@ -358,18 +348,16 @@ export class RuntimeReadService {
       throw new Error("JSON path is required");
     }
 
-    const resolvedPath = resolve(this.storage.instanceRoot, requestedPath);
-    if (!isWithinRoot(resolvedPath, this.storage.instanceRoot)) {
-      throw new Error(`JSON path must stay inside ${this.storage.instanceRoot}`);
-    }
+    const normalizedPath = this.normalizeWorkspaceDisplayPath(requestedPath);
+    const resolvedPath = this.resolveWorkspaceAbsolutePath(normalizedPath);
 
     if (extname(resolvedPath).toLowerCase() !== ".json") {
-      throw new Error(`JSON path must point to a .json file. Received: ${requestedPath}`);
+      throw new Error(`JSON path must point to a .json file. Received: ${normalizedPath}`);
     }
 
     const rawContent = readTextIfExists(resolvedPath);
     if (rawContent === null) {
-      throw new Error(`JSON path not found: ${requestedPath}`);
+      throw new Error(`JSON path not found: ${normalizedPath}`);
     }
 
     let parsed: unknown;
@@ -386,7 +374,7 @@ export class RuntimeReadService {
     const childKeys = getJsonChildKeys(selectedValue);
 
     return {
-      path: relative(this.storage.instanceRoot, resolvedPath).replaceAll(sep, "/"),
+      path: normalizedPath,
       fieldPath,
       valueType: getJsonValueType(selectedValue),
       childKeys,
@@ -395,6 +383,20 @@ export class RuntimeReadService {
         ? { preview: truncatedContent.content }
         : { value: selectedValue }),
       truncated: truncatedContent.truncated,
+    };
+  }
+
+  writeWorkspaceFile(input: { readonly path: string; readonly content: string }) {
+    const normalizedPath = this.normalizeWorkspaceDisplayPath(input.path);
+    const resolvedPath = this.resolveWorkspaceAbsolutePath(normalizedPath);
+    const created = !existsSync(resolvedPath);
+    mkdirSync(dirname(resolvedPath), { recursive: true });
+    writeFileSync(resolvedPath, input.content, "utf-8");
+
+    return {
+      path: normalizedPath,
+      created,
+      bytesWritten: Buffer.byteLength(input.content, "utf-8"),
     };
   }
 
@@ -600,29 +602,23 @@ export class RuntimeReadService {
     const performanceReportsDir = join(this.storage.workspaceDir, POSTHOG_PERFORMANCE_REPORT_DIRECTORY_NAME);
     const workspaceSnapshot = readOptionalJson<WorkspaceMonitoringSnapshot>(workspaceSnapshotPath);
     const recentPostHogOperations = Object.entries(workspaceSnapshot?.operations ?? {})
-      .map(([operation, snapshot]) => {
-        let history: Array<{ recordedAt: number; data: unknown }> = [];
-        if ("history" in snapshot && Array.isArray(snapshot.history)) {
-          history = snapshot.history
-            .filter((entry) => typeof entry?.recordedAt === "number")
-            .map((entry) => ({
-              recordedAt: entry.recordedAt as number,
-              data: entry.data,
-            }));
-        } else if ("recordedAt" in snapshot && typeof snapshot.recordedAt === "number") {
-          history = [{
-            recordedAt: snapshot.recordedAt,
-            data: snapshot.data,
-          }];
+      .flatMap(([operation, snapshot]) => {
+        if (!Array.isArray(snapshot.history) || typeof snapshot.lastRecordedAt !== "number") {
+          return [];
         }
 
-        return {
+        const history = snapshot.history
+          .filter((entry): entry is WorkspaceOperationHistoryEntry => typeof entry?.recordedAt === "number")
+          .map((entry) => ({
+            recordedAt: entry.recordedAt,
+            data: entry.data,
+          }));
+
+        return [{
           operation,
-          lastRecordedAt: "lastRecordedAt" in snapshot && typeof snapshot.lastRecordedAt === "number"
-            ? snapshot.lastRecordedAt
-            : (history.at(-1)?.recordedAt ?? 0),
+          lastRecordedAt: snapshot.lastRecordedAt,
           history: history.slice(-operationHistoryLimit).reverse(),
-        };
+        }];
       })
       .sort((left, right) => right.lastRecordedAt - left.lastRecordedAt);
     const recentPerformanceReports = existsSync(performanceReportsDir)
@@ -649,19 +645,46 @@ export class RuntimeReadService {
     };
   }
 
-  private listKnowledgePaths(): string[] {
-    const knowledgeFiles = existsSync(this.knowledgeDir)
-      ? readdirSync(this.knowledgeDir, { withFileTypes: true })
-        .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
-        .map((entry) => `knowledge/${entry.name}`)
-      : [];
+  private listSessionLogFiles(): RuntimeLogFileDescriptor[] {
+    const sessionsDir = join(this.storage.storageDir, "sessions");
+    if (!existsSync(sessionsDir)) {
+      return [];
+    }
 
-    return [
-      ...knowledgeFiles.sort((left, right) => left.localeCompare(right)),
-      "runtime/read-only/settings.json",
-      "runtime/read-only/tools.json",
-      "runtime/read-only/wakeup.json",
-    ];
+    return readdirSync(sessionsDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .flatMap((sessionEntry) => {
+        const sessionDirPath = join(sessionsDir, sessionEntry.name);
+        return readdirSync(sessionDirPath, { withFileTypes: true })
+          .filter((entry) => entry.isFile() && entry.name.endsWith(".log"))
+          .map((entry) => ({
+            fileName: entry.name,
+            relativePath: join("sessions", sessionEntry.name, entry.name),
+            fullPath: join(sessionDirPath, entry.name),
+            sortKey: `${sessionEntry.name}/${entry.name}`,
+          }));
+      });
+  }
+
+  private listLegacyLogFiles(): RuntimeLogFileDescriptor[] {
+    const logsDir = join(this.storage.storageDir, "logs");
+    if (!existsSync(logsDir)) {
+      return [];
+    }
+
+    return readdirSync(logsDir, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".log"))
+      .map((entry) => ({
+        fileName: entry.name,
+        relativePath: join("logs", entry.name),
+        fullPath: join(logsDir, entry.name),
+        sortKey: entry.name,
+      }));
+  }
+
+  private listKnowledgePaths(): string[] {
+    const paths = this.listWorkspaceTextPaths(this.storage.workspaceDir);
+    return paths.sort((left, right) => left.localeCompare(right));
   }
 
   private resolveKnowledgePath(path: string, availablePaths: readonly string[]): string {
@@ -669,19 +692,52 @@ export class RuntimeReadService {
       throw new Error(`Unknown knowledge path "${path}". Available paths: ${availablePaths.join(", ")}`);
     }
 
-    if (path.startsWith("knowledge/")) {
-      return join(this.knowledgeDir, path.replace(/^knowledge\//u, ""));
+    return this.resolveWorkspaceAbsolutePath(path);
+  }
+
+  private normalizeWorkspaceDisplayPath(path: string): string {
+    const trimmed = path.trim().replaceAll("\\", "/");
+    const relativePath = trimmed.replace(/^workspace\//u, "").replace(/^\/+/u, "");
+    if (!relativePath) {
+      throw new Error("Workspace path is required");
     }
 
-    if (path === "runtime/read-only/settings.json") {
-      return this.settingsPath;
+    return `${WORKSPACE_PREFIX}${relativePath}`;
+  }
+
+  private resolveWorkspaceAbsolutePath(path: string): string {
+    const relativePath = path.replace(/^workspace\//u, "");
+    const resolvedPath = resolve(this.storage.workspaceDir, relativePath);
+    if (!isWithinRoot(resolvedPath, this.storage.workspaceDir)) {
+      throw new Error(`Workspace path must stay inside ${this.storage.workspaceDir}`);
     }
 
-    if (path === "runtime/read-only/tools.json") {
-      return this.toolsPath;
+    return resolvedPath;
+  }
+
+  private listWorkspaceTextPaths(root: string, prefix = ""): string[] {
+    if (!existsSync(root)) {
+      return [];
     }
 
-    return this.wakeupPath;
+    const currentDir = prefix ? join(root, prefix) : root;
+    return readdirSync(currentDir, { withFileTypes: true }).flatMap((entry) => {
+      const relativePath = prefix ? join(prefix, entry.name) : entry.name;
+      if (entry.isDirectory()) {
+        return this.listWorkspaceTextPaths(root, relativePath);
+      }
+
+      if (!entry.isFile()) {
+        return [];
+      }
+
+      const extension = extname(entry.name).toLowerCase();
+      if (!WORKSPACE_TEXT_EXTENSIONS.has(extension)) {
+        return [];
+      }
+
+      return [`${WORKSPACE_PREFIX}${relativePath.replaceAll(sep, "/")}`];
+    });
   }
 
   private selectJsonValue(value: unknown, fieldPath: string | null): unknown {

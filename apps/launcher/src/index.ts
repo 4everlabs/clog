@@ -13,7 +13,7 @@ import {
   getModelChoices,
   RuntimeSettingsSchema,
   type RuntimeSettings,
-} from "../../clog/src/runtime/settings";
+} from "../../clog/src/runtime/config/settings";
 import { resolveBackendBaseUrl } from "../../frontends/tui/src/clog-api";
 import { startTuiFrontend } from "../../frontends/tui/src/index.ts";
 import { syncRuntimeInstanceTemplate } from "../../../tests/runtime-instance-template";

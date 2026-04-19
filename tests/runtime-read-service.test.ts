@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { RuntimeReadService } from "../apps/clog/src/runtime/read-service";
@@ -17,6 +17,86 @@ afterEach(() => {
 });
 
 describe("RuntimeReadService", () => {
+  test("reads recent runtime logs from session directories and legacy log files", () => {
+    const instanceRoot = mkdtempSync(join(tmpdir(), "clog-runtime-logs-"));
+    cleanupPaths.push(instanceRoot);
+    const storageDir = join(instanceRoot, "storage");
+    const stateDir = join(storageDir, "state");
+    const workspaceDir = join(instanceRoot, "workspace");
+    const readOnlyDir = join(instanceRoot, "read-only");
+    mkdirSync(stateDir, { recursive: true });
+    mkdirSync(workspaceDir, { recursive: true });
+    mkdirSync(readOnlyDir, { recursive: true });
+
+    const newestSessionDir = join(storageDir, "sessions", "2026-04-19T02-29-45-655Z");
+    const olderSessionDir = join(storageDir, "sessions", "2026-04-18T22-34-18-530Z");
+    const legacyLogsDir = join(storageDir, "logs");
+    mkdirSync(newestSessionDir, { recursive: true });
+    mkdirSync(olderSessionDir, { recursive: true });
+    mkdirSync(legacyLogsDir, { recursive: true });
+    writeFileSync(join(newestSessionDir, "system.log"), "first\nsecond\nthird\n");
+    writeFileSync(join(olderSessionDir, "system.log"), "older one\nolder two\n");
+    writeFileSync(join(legacyLogsDir, "2026-04-17T00-00-00-000Z.log"), "legacy one\nlegacy two\n");
+
+    const service = new RuntimeReadService({
+      storage: {
+        instanceId: "test",
+        instanceRoot,
+        readOnlyDir,
+        workspaceDir,
+        storageDir,
+        stateDir,
+      },
+      store: new InMemoryRuntimeStore(),
+    });
+
+    const recentLogs = service.getRecentLogs({
+      fileLimit: 3,
+      lineLimit: 2,
+    });
+
+    expect(recentLogs.files).toEqual([
+      {
+        fileName: "system.log",
+        relativePath: "sessions/2026-04-19T02-29-45-655Z/system.log",
+        totalLines: 3,
+        returnedLines: 2,
+        truncated: true,
+        content: "second\nthird",
+      },
+      {
+        fileName: "system.log",
+        relativePath: "sessions/2026-04-18T22-34-18-530Z/system.log",
+        totalLines: 2,
+        returnedLines: 2,
+        truncated: false,
+        content: "older one\nolder two",
+      },
+      {
+        fileName: "2026-04-17T00-00-00-000Z.log",
+        relativePath: "logs/2026-04-17T00-00-00-000Z.log",
+        totalLines: 2,
+        returnedLines: 2,
+        truncated: false,
+        content: "legacy one\nlegacy two",
+      },
+    ]);
+
+    const filteredLogs = service.getRecentLogs({
+      pathContains: "2026-04-18",
+    });
+    expect(filteredLogs.files).toEqual([
+      {
+        fileName: "system.log",
+        relativePath: "sessions/2026-04-18T22-34-18-530Z/system.log",
+        totalLines: 2,
+        returnedLines: 2,
+        truncated: false,
+        content: "older one\nolder two",
+      },
+    ]);
+  });
+
   test("reads retained monitoring artifacts from the workspace", () => {
     const instanceRoot = mkdtempSync(join(tmpdir(), "clog-runtime-read-"));
     cleanupPaths.push(instanceRoot);
@@ -86,6 +166,43 @@ describe("RuntimeReadService", () => {
     }]);
   });
 
+  test("ignores obsolete PostHog workspace operation shapes", () => {
+    const instanceRoot = mkdtempSync(join(tmpdir(), "clog-runtime-read-obsolete-"));
+    cleanupPaths.push(instanceRoot);
+    const storageDir = join(instanceRoot, "storage");
+    const stateDir = join(storageDir, "state");
+    const workspaceDir = join(instanceRoot, "workspace");
+    const readOnlyDir = join(instanceRoot, "read-only");
+    mkdirSync(stateDir, { recursive: true });
+    mkdirSync(workspaceDir, { recursive: true });
+    mkdirSync(readOnlyDir, { recursive: true });
+
+    writeFileSync(join(workspaceDir, "posthog-tool-output.json"), JSON.stringify({
+      updatedAt: 30,
+      operations: {
+        obsoleteDashboardSnapshot: {
+          recordedAt: 30,
+          data: { id: 3 },
+        },
+      },
+    }, null, 2));
+
+    const service = new RuntimeReadService({
+      storage: {
+        instanceId: "test",
+        instanceRoot,
+        readOnlyDir,
+        workspaceDir,
+        storageDir,
+        stateDir,
+      },
+      store: new InMemoryRuntimeStore(),
+    });
+
+    const snapshot = service.getMonitoringSnapshot();
+    expect(snapshot.recentPostHogOperations).toEqual([]);
+  });
+
   test("reads a runtime json artifact and supports nested field selection", () => {
     const instanceRoot = mkdtempSync(join(tmpdir(), "clog-runtime-json-"));
     cleanupPaths.push(instanceRoot);
@@ -147,6 +264,58 @@ describe("RuntimeReadService", () => {
       recordedAt: 20,
       data: { id: 2 },
     });
+  });
+
+  test("lists, reads, and writes workspace text files while keeping json reads inside workspace", () => {
+    const instanceRoot = mkdtempSync(join(tmpdir(), "clog-runtime-workspace-"));
+    cleanupPaths.push(instanceRoot);
+    const storageDir = join(instanceRoot, "storage");
+    const stateDir = join(storageDir, "state");
+    const workspaceDir = join(instanceRoot, "workspace");
+    const readOnlyDir = join(instanceRoot, "read-only");
+    const projectDir = join(workspaceDir, "project");
+    mkdirSync(stateDir, { recursive: true });
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(readOnlyDir, { recursive: true });
+
+    writeFileSync(join(projectDir, "about.md"), "# About\nCurrent workspace note.\n");
+    writeFileSync(join(stateDir, "status.json"), JSON.stringify({ ok: true }, null, 2));
+
+    const service = new RuntimeReadService({
+      storage: {
+        instanceId: "test",
+        instanceRoot,
+        readOnlyDir,
+        workspaceDir,
+        storageDir,
+        stateDir,
+      },
+      store: new InMemoryRuntimeStore(),
+    });
+
+    const listing = service.readKnowledge();
+    expect(listing.availablePaths).toContain("workspace/project/about.md");
+
+    const knowledge = service.readKnowledge({
+      path: "project/about.md",
+    });
+    expect(knowledge.selectedPath).toBe("workspace/project/about.md");
+    expect(knowledge.content).toContain("Current workspace note.");
+
+    const writeResult = service.writeWorkspaceFile({
+      path: "project/notes.md",
+      content: "Fresh workspace note.\n",
+    });
+    expect(writeResult).toEqual({
+      path: "workspace/project/notes.md",
+      created: true,
+      bytesWritten: 22,
+    });
+    expect(readFileSync(join(projectDir, "notes.md"), "utf-8")).toBe("Fresh workspace note.\n");
+
+    expect(() => service.readJson({
+      path: "../storage/state/status.json",
+    })).toThrow(`Workspace path must stay inside ${workspaceDir}`);
   });
 
   test("lists conversations, reads paginated messages, and searches message bodies", () => {

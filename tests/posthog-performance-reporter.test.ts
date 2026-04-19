@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { PostHogInsightQueryResult } from "../apps/clog/types";
-import { PostHogPerformanceReporter } from "../apps/clog/src/integrations/posthog/performance-reporter";
+import { PostHogPerformanceReporter } from "../apps/clog/src/ai/integrations/posthog/performance-reporter";
 
 const cleanupPaths: string[] = [];
 

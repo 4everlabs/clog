@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { IntegrationCapabilitySnapshot } from "@clog/types";
-import { buildProviderTools, summarizeAdvertisedTools, summarizeEnabledTools } from "../apps/clog/src/tools/registry";
+import { buildProviderTools, summarizeAdvertisedTools, summarizeEnabledTools } from "../apps/clog/src/ai/tools/registry";
 
 const createCapabilities = (): IntegrationCapabilitySnapshot => ({
   posthog: {
@@ -78,6 +78,7 @@ describe("tool registry", () => {
       "runtime_run_routine",
       "runtime_read_knowledge",
       "runtime_read_json",
+      "runtime_write_workspace_file",
       "shell_execute_command",
     ]);
   });
@@ -104,6 +105,7 @@ describe("tool registry", () => {
       "runtime_search_messages",
       "runtime_read_knowledge",
       "runtime_read_json",
+      "runtime_write_workspace_file",
       "shell_execute_command",
     ]);
     expect(summaries.map((tool) => tool.name)).toEqual(tools.map((tool) => tool.function.name));

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { PostHogApiClient } from "../apps/clog/src/integrations/posthog/api-client";
+import { PostHogApiClient } from "../apps/clog/src/ai/integrations/posthog/api-client";
 
 const toEventStreamBody = (payload: unknown): string => (
   `event: message\ndata: ${JSON.stringify(payload)}\n\n`
@@ -155,7 +155,7 @@ describe("PostHogApiClient", () => {
     ]);
     expect(JSON.parse(String(requests[0]?.init?.body ?? "{}")).method).toBe("initialize");
     expect(JSON.parse(String(requests[1]?.init?.body ?? "{}")).method).toBe("notifications/initialized");
-    expect(JSON.parse(String(requests[2]?.init?.body ?? "{}")).params.name).toBe("organizations-get");
+    expect(JSON.parse(String(requests[2]?.init?.body ?? "{}")).params.name).toBe("organizations-list");
     expect(JSON.parse(String(requests[3]?.init?.body ?? "{}")).params.name).toBe("projects-get");
     expect(new Headers(requests[3]?.init?.headers).get("mcp-session-id")).toBe("session-1");
   });
@@ -223,6 +223,79 @@ describe("PostHogApiClient", () => {
       source: {
         kind: "HogQLQuery",
         query: "select event, count() from events limit 2",
+      },
+    });
+  });
+
+  test("resolves legacy tool aliases and reshapes query-logs requests once at the MCP boundary", async () => {
+    const { client, requests } = createClient([
+      createEventStreamResponse({
+        jsonrpc: "2.0",
+        id: 1,
+        result: {
+          protocolVersion: "2025-06-18",
+          capabilities: {
+            tools: {
+              listChanged: true,
+            },
+          },
+          serverInfo: {
+            name: "PostHog",
+            version: "1.0.0",
+          },
+        },
+      }, {
+        "mcp-session-id": "session-3",
+      }),
+      new Response(null, { status: 202 }),
+      createEventStreamResponse({
+        jsonrpc: "2.0",
+        id: 2,
+        result: {
+          content: [{ type: "text", text: "listed insights" }],
+        },
+      }),
+      createEventStreamResponse({
+        jsonrpc: "2.0",
+        id: 3,
+        result: {
+          content: [{ type: "text", text: "queried logs" }],
+        },
+      }),
+    ]);
+
+    await expect(client.callMcpTool("insights-get-all", { limit: 5 })).resolves.toMatchObject({
+      toolName: "insights-list",
+      text: "listed insights",
+    });
+    await expect(client.callMcpTool("logs-query", {
+      query: "timeout",
+      service: "web",
+      level: "ERROR",
+      from: "-1h",
+      to: "now",
+      limit: 50,
+    })).resolves.toMatchObject({
+      toolName: "query-logs",
+      text: "queried logs",
+    });
+
+    const insightCall = JSON.parse(String(requests[2]?.init?.body ?? "{}"));
+    expect(insightCall.params.name).toBe("insights-list");
+    expect(insightCall.params.arguments).toEqual({ limit: 5 });
+
+    const logsCall = JSON.parse(String(requests[3]?.init?.body ?? "{}"));
+    expect(logsCall.params.name).toBe("query-logs");
+    expect(logsCall.params.arguments).toEqual({
+      query: {
+        searchTerm: "timeout",
+        serviceNames: ["web"],
+        severityLevels: ["error"],
+        dateRange: {
+          date_from: "-1h",
+          date_to: "now",
+        },
+        limit: 50,
       },
     });
   });

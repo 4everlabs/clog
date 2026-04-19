@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ConvexApiClient } from "../apps/clog/src/integrations/convex/api-client";
+import { ConvexApiClient } from "../apps/clog/src/ai/integrations/convex/api-client";
 
 describe("ConvexApiClient", () => {
   test("runs a query through the Convex HTTP API and normalizes the response", async () => {

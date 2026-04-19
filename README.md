@@ -60,12 +60,12 @@ bun run update-all       # update workspace deps to latest
 
 `apps/clog` is the authority. Frontends are adapters.
 
-- `src/config.ts`: environment parsing and capability shaping.
-- `src/brain/service.ts`: shared chat entrypoint used by the gateway and transports.
-- `src/monitoring`: turns observations into findings.
-- `src/gateway`: transport-agnostic API surface.
+- `src/runtime/config.ts`: environment parsing and capability shaping.
+- `src/ai/brain/service.ts`: shared chat entrypoint used by the gateway and transports.
+- `src/runtime`: runtime bootstrap/server/config plus monitoring, wakeup scheduling, and runtime read/orchestration services.
+- `src/runtime/gateway`: transport-agnostic API surface.
 - `src/integrations`: PostHog, Convex, GitHub, Vercel, and other external boundaries.
-- `src/execution/shell-executor.ts`: restricted read-only shell access for runtime inspection.
+- `src/tools/shell-executor.ts`: restricted read-only shell access for runtime inspection.
 
 ## Runtime layout
 
@@ -73,7 +73,7 @@ The runtime expects per-instance state under `.runtime/instances/<instance>/`:
 
 - `read-only/settings.json`: runtime-owned settings.
 - `read-only/tools.json`: tool visibility and enablement.
-- `read-only/wakeup.json`: daily wakeup prompts and UTC schedule.
+- `read-only/wakeup.json`: wakeup enabled flag, prompt titles/prompts, and UTC daily schedule.
 - `storage/`: structured runtime state.
 - `workspace/`: model-targeted writable workspace.
 

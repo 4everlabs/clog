@@ -3,7 +3,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import { collectGceBundleFiles, createGceBundle } from "../apps/clog/src/deploy/gce-bundle";
+import { collectGceBundleFiles, createGceBundle } from "../scripts/gce-bundle";
 
 const cleanupPaths: string[] = [];
 

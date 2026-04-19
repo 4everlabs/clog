@@ -1,11 +1,18 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
 const STARTER_INSTANCE_ID = "00";
+const NUMERIC_INSTANCE_ID_PATTERN = /^\d{2}$/u;
 
 const readOptionalString = (value: string | undefined): string | null => {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+};
+
+const resolveRuntimeInstanceId = (
+  env: NodeJS.ProcessEnv = process.env,
+): string => {
+  return readOptionalString(env.CLOG_INSTANCE_ID) ?? "personal-instance";
 };
 
 export const resolveRuntimeInstanceRoot = (
@@ -17,7 +24,7 @@ export const resolveRuntimeInstanceRoot = (
     return resolve(workspaceRoot, explicitRoot);
   }
 
-  const instanceId = readOptionalString(env.CLOG_INSTANCE_ID) ?? "personal-instance";
+  const instanceId = resolveRuntimeInstanceId(env);
   return resolve(workspaceRoot, `.runtime/instances/${instanceId}`);
 };
 
@@ -153,34 +160,23 @@ const mergeMissingJsonFileDefaults = (sourcePath: string, targetPath: string): b
   return true;
 };
 
-const moveLegacyFile = (from: string, to: string): void => {
-  if (!existsSync(from)) {
-    return;
-  }
-
-  ensureDirectory(dirname(to));
-  if (!existsSync(to)) {
-    renameSync(from, to);
-    return;
-  }
-
-  rmSync(from, { force: true });
-};
-
-const removeLegacyPaths = (instanceRoot: string): void => {
+const removeObsoletePaths = (instanceRoot: string): void => {
   rmSync(join(instanceRoot, "brain"), { recursive: true, force: true });
   rmSync(join(instanceRoot, "wakeup.md"), { force: true });
-  rmSync(join(instanceRoot, "settings", "ai.json"), { force: true });
-  rmSync(join(instanceRoot, "settings", "keys.json"), { force: true });
-  rmSync(join(instanceRoot, "settings", "wakeup.md"), { force: true });
   rmSync(join(instanceRoot, "storage", "runtime.sqlite"), { force: true });
-  moveLegacyFile(join(instanceRoot, "settings", "settings.json"), join(instanceRoot, "read-only", "settings.json"));
-  moveLegacyFile(join(instanceRoot, "settings", "tools.json"), join(instanceRoot, "read-only", "tools.json"));
-  moveLegacyFile(join(instanceRoot, "settings", "wakeup.json"), join(instanceRoot, "read-only", "wakeup.json"));
-  moveLegacyFile(join(instanceRoot, "settings.json"), join(instanceRoot, "read-only", "settings.json"));
-  moveLegacyFile(join(instanceRoot, "tools.json"), join(instanceRoot, "read-only", "tools.json"));
-  moveLegacyFile(join(instanceRoot, "wakeup.json"), join(instanceRoot, "read-only", "wakeup.json"));
+  rmSync(join(instanceRoot, "settings.json"), { force: true });
+  rmSync(join(instanceRoot, "tools.json"), { force: true });
+  rmSync(join(instanceRoot, "wakeup.json"), { force: true });
   rmSync(join(instanceRoot, "settings"), { recursive: true, force: true });
+};
+
+const isStarterManagedInstanceId = (instanceId: string): boolean => {
+  return instanceId !== STARTER_INSTANCE_ID && NUMERIC_INSTANCE_ID_PATTERN.test(instanceId);
+};
+
+const isStarterManagedReadOnlyPath = (relativePath: string): boolean => {
+  const [rootSegment, fileName] = relativePath.split(/[/\\]/u);
+  return rootSegment === "read-only" && fileName !== "settings.json";
 };
 
 export interface SyncRuntimeInstanceTemplateOptions {
@@ -193,13 +189,15 @@ export const syncRuntimeInstanceTemplate = (
   options: SyncRuntimeInstanceTemplateOptions = {},
 ): void => {
   const starterRoot = resolveStarterInstanceRoot(workspaceRoot);
+  const instanceId = resolveRuntimeInstanceId(env);
   const instanceRoot = resolveRuntimeInstanceRoot(env, workspaceRoot);
+  const shouldRefreshStarterManagedReadOnlyFiles = isStarterManagedInstanceId(instanceId);
 
   ensureDirectory(instanceRoot);
   ensureDirectory(join(instanceRoot, "read-only"));
   ensureDirectory(join(instanceRoot, "storage"));
   ensureDirectory(join(instanceRoot, "workspace"));
-  removeLegacyPaths(instanceRoot);
+  removeObsoletePaths(instanceRoot);
 
   if (!existsSync(starterRoot) || starterRoot === instanceRoot) {
     return;
@@ -213,6 +211,16 @@ export const syncRuntimeInstanceTemplate = (
     ensureDirectory(dirname(targetPath));
     const targetExists = existsSync(targetPath);
     const shouldOverwriteInvalidJson = targetExists && isJsonFile(targetPath) && !hasValidJson(targetPath);
+
+    if (
+      targetExists
+      && !options.overwriteExisting
+      && shouldRefreshStarterManagedReadOnlyFiles
+      && isStarterManagedReadOnlyPath(relativePath)
+    ) {
+      copyFileSync(sourcePath, targetPath);
+      continue;
+    }
 
     if (
       targetExists

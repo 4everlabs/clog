@@ -1,11 +1,17 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import type { ConversationMessage, ConversationThread, SurfaceBootstrapResponse } from "@clog/types";
+  import type {
+    ConversationMessage,
+    ConversationThread,
+    SurfaceBootstrapResponse,
+    SurfaceUpdateWakeupRequest,
+  } from "@clog/types";
   import { ClogApiClient, resolveBackendBaseUrl } from "./clog-api";
   import ChatPanel from "./components/ChatPanel.svelte";
   import ConsolePanel from "./components/ConsolePanel.svelte";
   import SettingsPanel from "./components/SettingsPanel.svelte";
   import Sidebar from "./components/Sidebar.svelte";
+  import WakeupPanel from "./components/WakeupPanel.svelte";
 
   type ConsoleEntryKind = "observation" | "finding" | "health" | "info" | "error";
 
@@ -17,7 +23,7 @@
     readonly body?: string;
   }
 
-  type MainView = "chat" | "settings";
+  type MainView = "chat" | "wakeup" | "settings";
   type ThreadSelectionMode = "auto" | "existing" | "new";
   interface ThreadSnapshot {
     readonly threads: ConversationThread[];
@@ -29,11 +35,6 @@
     readonly reportError?: boolean;
     readonly skipIfSending?: boolean;
   }
-  interface WakeupFormInput {
-    readonly intervalMinutes: number;
-    readonly message: string;
-  }
-
   const CHAT_CHANNEL: ConversationThread["channel"] = "web";
   const CHAT_POLL_INTERVAL_MS = 900;
 
@@ -271,22 +272,11 @@
     }
   }
 
-  async function handleWakeupSave(input: WakeupFormInput): Promise<void> {
-    const intervalMinutes = Math.floor(input.intervalMinutes);
-    const message = input.message.trim();
-
-    if (!Number.isFinite(intervalMinutes) || intervalMinutes < 1 || !message) {
-      wakeupSaveError = "Enter a valid interval and prompt.";
-      return;
-    }
-
+  async function handleWakeupSave(input: SurfaceUpdateWakeupRequest): Promise<void> {
     wakeupSaveBusy = true;
     wakeupSaveError = null;
     try {
-      const response = await client.updateWakeupConfig({
-        intervalMs: intervalMinutes * 60_000,
-        message,
-      });
+      const response = await client.updateWakeupConfig(input);
 
       if (bootstrap) {
         bootstrap = { ...bootstrap, wakeup: response.wakeup };
@@ -297,7 +287,7 @@
       pushConsole({
         kind: "info",
         title: "Wakeup updated",
-        body: `Every ${response.wakeup.intervalMs / 60_000} min`,
+        body: `${response.wakeup.schedule.length} entr${response.wakeup.schedule.length === 1 ? "y" : "ies"}`,
       });
     } catch (error) {
       const messageText = describeError(error);
@@ -408,13 +398,9 @@
   <div class="layout">
     <Sidebar
       runtime={bootstrap?.runtime ?? null}
-      wakeup={bootstrap?.wakeup ?? null}
       {sessionStartedAt}
       activeView={activeView}
-      {wakeupSaveBusy}
-      {wakeupSaveError}
       onSelectView={handleSelectView}
-      onSaveWakeup={(input: WakeupFormInput) => void handleWakeupSave(input)}
     />
     <main class="main">
       {#if activeView === "chat"}
@@ -434,6 +420,13 @@
             <ConsolePanel entries={consoleEntries} />
           </aside>
         </div>
+      {:else if activeView === "wakeup"}
+        <WakeupPanel
+          wakeup={bootstrap?.wakeup ?? null}
+          busy={wakeupSaveBusy}
+          error={wakeupSaveError}
+          onSave={(input) => handleWakeupSave(input)}
+        />
       {:else}
         <SettingsPanel
           runtime={bootstrap?.runtime ?? null}

@@ -2,8 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { PostHogCliTool } from "../apps/clog/src/integrations/posthog/cli-tool";
-import type { PostHogRuntimeConfig } from "../apps/clog/src/config";
+import { PostHogCliTool } from "../apps/clog/src/ai/integrations/posthog/cli-tool";
+import type { PostHogRuntimeConfig } from "../apps/clog/src/runtime/config";
 
 const cleanupPaths: string[] = [];
 

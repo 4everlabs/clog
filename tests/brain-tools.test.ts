@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentFinding, ConversationThread, IntegrationCapabilitySnapshot } from "@clog/types";
-import { BrainService } from "../apps/clog/src/brain/service";
-import { ToolExecutor } from "../apps/clog/src/execution/tool-executor";
-import type { PostHogDocumentedFeatureCatalog, PostHogDocumentedToolCatalog } from "../apps/clog/src/integrations/posthog/documented-tool-catalog";
-import { buildProviderTools, summarizeAdvertisedTools } from "../apps/clog/src/tools/registry";
-import type { RuntimeToolServices } from "../apps/clog/src/tools/types";
+import { BrainService } from "../apps/clog/src/ai/brain/service";
+import { ToolExecutor } from "../apps/clog/src/ai/tools/tool-executor";
+import type { PostHogDocumentedFeatureCatalog, PostHogDocumentedToolCatalog } from "../apps/clog/src/ai/integrations/posthog/documented-tool-catalog";
+import { buildProviderTools, summarizeAdvertisedTools } from "../apps/clog/src/ai/tools/registry";
+import type { RuntimeToolServices } from "../apps/clog/src/ai/tools/types";
 
 const createCapabilities = (): IntegrationCapabilitySnapshot => ({
   posthog: {
@@ -141,7 +141,7 @@ const createRuntimeServices = (): RuntimeToolServices => ({
     steps: [],
   }),
   readKnowledge: () => ({
-    availablePaths: ["knowledge/example.md"],
+    availablePaths: ["workspace/project/about.md"],
     selectedPath: null,
     content: null,
     truncated: false,
@@ -154,6 +154,11 @@ const createRuntimeServices = (): RuntimeToolServices => ({
     childCount: 1,
     value: { operations: {} },
     truncated: false,
+  }),
+  writeWorkspaceFile: () => ({
+    path: "workspace/project/notes.md",
+    created: true,
+    bytesWritten: 24,
   }),
   listConversations: () => ({
     generatedAt: 1,
@@ -356,6 +361,7 @@ describe("BrainService tool loop", () => {
       "runtime_search_messages",
       "runtime_read_knowledge",
       "runtime_read_json",
+      "runtime_write_workspace_file",
     ]);
     expect(JSON.stringify(requests[1]?.messages)).toContain("posthog_run_query");
     expect(JSON.stringify(requests[1]?.messages)).toContain("Revenue monitor");

@@ -2,8 +2,17 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import { buildSystemPrompt, loadAiPromptBundle, resolveRuntimeWakeupConfigPath } from "../apps/clog/src/brain/prompt-loader";
-import type { ToolSummary } from "../apps/clog/src/schema/tools";
+import {
+  buildSystemPrompt,
+  loadAiPromptBundle,
+} from "../apps/clog/src/ai/brain/prompt-loader";
+import {
+  loadRuntimeWakeupPrompt,
+  normalizeRuntimeWakeupConfig,
+  parseRuntimeWakeupTimeUtc,
+  resolveRuntimeWakeupConfigPath,
+} from "../apps/clog/src/runtime/config/wakeup";
+import type { ToolSummary } from "../apps/clog/src/ai/tools/schema/tools";
 
 const cleanupPaths: string[] = [];
 
@@ -30,22 +39,22 @@ describe("prompt loader", () => {
     writeFileSync(
       wakeupPath,
       JSON.stringify({
+        enabled: true,
         prompts: {
-          daily: {
+          morning: {
+            title: "Morning check",
             prompt: "Check the latest signals.",
-            target: {
-              channel: "system",
-            },
           },
         },
         schedule: [{
-          promptId: "daily",
+          promptId: "morning",
           timeUtc: "09:00",
         }],
       }, null, 2),
     );
 
     const bundle = loadAiPromptBundle(env, workspaceRoot);
+    const wakeupPrompt = loadRuntimeWakeupPrompt(bundle.wakeupPrompt, env, workspaceRoot);
 
     expect(bundle.systemPrompt).toContain("You are `clog`");
     expect(bundle.projectPrompt).toContain("4ever.ai");
@@ -56,13 +65,15 @@ describe("prompt loader", () => {
     expect(bundle.integrationKnowledgePrompts.posthog).toContain("PostHog MCP Tool Catalog");
     expect(bundle.primaryModePrompt).toContain("Operating mode");
     expect(bundle.wakeupPrompt).toContain("Wakeup is the periodic monitoring pass");
-    expect(bundle.wakeupPrompt).toContain("Runtime wakeup config:");
-    expect(bundle.wakeupPrompt).toContain("Check the latest signals");
-    expect(bundle.wakeupPrompt).toContain("09:00 UTC -> daily");
-    expect(buildSystemPrompt(bundle)).toContain("Project Context:");
-    expect(buildSystemPrompt(bundle)).toContain("Knowledge Context:");
-    expect(buildSystemPrompt(bundle)).toContain("4ever.ai");
-    expect(buildSystemPrompt(bundle)).not.toContain("PostHog MCP Tool Catalog");
+    expect(wakeupPrompt).toContain("Runtime wakeup config:");
+    expect(wakeupPrompt).toContain("Enabled: yes");
+    expect(wakeupPrompt).toContain("Title: Morning check");
+    expect(wakeupPrompt).toContain("Check the latest signals");
+    expect(wakeupPrompt).toContain("09:00 UTC -> morning");
+    expect(buildSystemPrompt(bundle, { wakeupPrompt })).toContain("Project Context:");
+    expect(buildSystemPrompt(bundle, { wakeupPrompt })).toContain("Knowledge Context:");
+    expect(buildSystemPrompt(bundle, { wakeupPrompt })).toContain("4ever.ai");
+    expect(buildSystemPrompt(bundle, { wakeupPrompt })).not.toContain("PostHog MCP Tool Catalog");
     const toolSummary: ToolSummary = {
       name: "posthog_run_query",
       title: "PostHog HogQL Query",
@@ -75,15 +86,17 @@ describe("prompt loader", () => {
     };
     expect(buildSystemPrompt(bundle, {
       runtimeContext: "PostHog context: 4ever.ai / app.4ever.ai",
+      wakeupPrompt,
     })).toContain("Runtime Context:");
     expect(buildSystemPrompt(bundle, {
       runtimeContext: "PostHog context: 4ever.ai / app.4ever.ai",
+      wakeupPrompt,
     })).toContain("4ever.ai / app.4ever.ai");
-    expect(buildSystemPrompt(bundle, { tools: [toolSummary] })).toContain("Tool access:");
-    expect(buildSystemPrompt(bundle, { tools: [toolSummary] })).toContain("Advertised tools: 1");
-    expect(buildSystemPrompt(bundle, { tools: [toolSummary] })).toContain("Advertised families: PostHog (1)");
-    expect(buildSystemPrompt(bundle, { tools: [toolSummary] })).toContain("Capability groups: Analytics Buildout (1)");
-    expect(buildSystemPrompt(bundle, { tools: [toolSummary] })).toContain("PostHog MCP Tool Catalog");
+    expect(buildSystemPrompt(bundle, { tools: [toolSummary], wakeupPrompt })).toContain("Tool access:");
+    expect(buildSystemPrompt(bundle, { tools: [toolSummary], wakeupPrompt })).toContain("Advertised tools: 1");
+    expect(buildSystemPrompt(bundle, { tools: [toolSummary], wakeupPrompt })).toContain("Advertised families: PostHog (1)");
+    expect(buildSystemPrompt(bundle, { tools: [toolSummary], wakeupPrompt })).toContain("Capability groups: Analytics Buildout (1)");
+    expect(buildSystemPrompt(bundle, { tools: [toolSummary], wakeupPrompt })).toContain("PostHog MCP Tool Catalog");
   });
 
   test("keeps runtime wakeup config optional", () => {
@@ -98,6 +111,92 @@ describe("prompt loader", () => {
     );
 
     expect(bundle.knowledgePrompt).toContain("Clog Role And Boundaries");
-    expect(bundle.wakeupPrompt).toContain("Wakeup is the periodic monitoring pass");
+    expect(loadRuntimeWakeupPrompt(bundle.wakeupPrompt, { CLOG_INSTANCE_ID: "missing-instance" }, workspaceRoot)).toContain("Wakeup is the periodic monitoring pass");
+  });
+
+  test("accepts an explicitly empty wakeup config", () => {
+    expect(normalizeRuntimeWakeupConfig({
+      enabled: false,
+      prompts: {},
+      schedule: [],
+    })).toEqual({
+      enabled: false,
+      prompts: {},
+      schedule: [],
+    });
+  });
+
+  test("still rejects partial or invalid wakeup configs", () => {
+    expect(normalizeRuntimeWakeupConfig({
+      enabled: true,
+      prompts: {
+        daily: {
+          title: "Daily check",
+          prompt: "Check the latest signals.",
+        },
+      },
+      schedule: [],
+    })).toBeNull();
+
+    expect(normalizeRuntimeWakeupConfig({
+      enabled: true,
+      prompts: {},
+      schedule: [{
+        promptId: "daily",
+        timeUtc: "09:00",
+      }],
+    })).toBeNull();
+
+    expect(normalizeRuntimeWakeupConfig({
+      enabled: true,
+      prompts: {
+        daily: {
+          title: "Daily check",
+          message: "Old wakeup field",
+        },
+      },
+      schedule: [{
+        promptId: "daily",
+        timeUtc: "09:00",
+      }],
+    })).toBeNull();
+
+    expect(normalizeRuntimeWakeupConfig({
+      prompts: {
+        daily: {
+          prompt: "Missing target",
+        },
+      },
+      schedule: [{
+        promptId: "daily",
+        timeUtc: "09:00",
+      }],
+    })).toBeNull();
+
+    expect(normalizeRuntimeWakeupConfig({
+      enabled: true,
+      prompts: {
+        daily: {
+          prompt: "Missing title",
+        },
+      },
+      schedule: [{
+        promptId: "daily",
+        timeUtc: "09:00",
+      }],
+    })).toBeNull();
+  });
+
+  test("parses UTC wakeup times", () => {
+    expect(parseRuntimeWakeupTimeUtc("10:00")).toEqual({
+      hour: 10,
+      minute: 0,
+    });
+    expect(parseRuntimeWakeupTimeUtc("23:59")).toEqual({
+      hour: 23,
+      minute: 59,
+    });
+    expect(parseRuntimeWakeupTimeUtc("24:00")).toBeNull();
+    expect(parseRuntimeWakeupTimeUtc("9:00")).toBeNull();
   });
 });

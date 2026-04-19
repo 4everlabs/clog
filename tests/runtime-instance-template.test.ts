@@ -10,22 +10,27 @@ const writeFile = (path: string, content: string): void => {
 };
 
 describe("syncRuntimeInstanceTemplate", () => {
-  test("copies missing starter files and removes legacy runtime paths", () => {
+  test("copies starter files, overwrites starter-managed read-only files, and removes obsolete paths", () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), "clog-instance-template-"));
 
     try {
       const starterRoot = join(workspaceRoot, ".runtime", "instances", "00");
       const targetRoot = join(workspaceRoot, ".runtime", "instances", "01");
+      const starterWakeup = "{\n  \"enabled\": true,\n  \"prompts\": {\n    \"checkIn\": {\n      \"title\": \"Check in\",\n      \"prompt\": \"Check in.\"\n    }\n  },\n  \"schedule\": [\n    {\n      \"promptId\": \"checkIn\",\n      \"timeUtc\": \"10:00\"\n    }\n  ]\n}\n";
+      const instanceWakeup = "{\n  \"enabled\": true,\n  \"prompts\": {\n    \"morning\": {\n      \"title\": \"Morning check\",\n      \"prompt\": \"Instance wakeup prompt\"\n    }\n  },\n  \"schedule\": [\n    {\n      \"promptId\": \"morning\",\n      \"timeUtc\": \"07:30\"\n    }\n  ]\n}\n";
 
       writeFile(join(starterRoot, "read-only", "settings.json"), "{\n  \"starter\": true,\n  \"ai\": {\n    \"model\": \"google/gemma-4-31b-it:free\"\n  }\n}\n");
       writeFile(join(starterRoot, "read-only", "tools.json"), "{\n  \"starter\": true\n}\n");
-      writeFile(join(starterRoot, "read-only", "wakeup.json"), "{\n  \"prompts\": {},\n  \"schedule\": []\n}\n");
+      writeFile(join(starterRoot, "read-only", "wakeup.json"), starterWakeup);
       writeFile(join(starterRoot, "storage", "README.md"), "storage\n");
       writeFile(join(starterRoot, "storage", "conversations", "timestamp.jsonl"), "\n");
       writeFile(join(starterRoot, "workspace", "README.md"), "workspace\n");
 
-      writeFile(join(targetRoot, "settings.json"), "{\n  \"legacy\": true,\n  \"monitor\": {\n    \"intervalMs\": 5000\n  }\n}\n");
-      writeFile(join(targetRoot, "wakeup.json"), "{\n  \"prompts\": {},\n  \"schedule\": []\n}\n");
+      writeFile(join(targetRoot, "read-only", "settings.json"), "{\n  \"monitor\": {\n    \"intervalMs\": 5000\n  }\n}\n");
+      writeFile(join(targetRoot, "read-only", "wakeup.json"), instanceWakeup);
+      writeFile(join(targetRoot, "settings.json"), "{\n  \"obsolete\": true\n}\n");
+      writeFile(join(targetRoot, "wakeup.json"), "{\n  \"obsolete\": true\n}\n");
+      writeFile(join(targetRoot, "tools.json"), "{\n  \"obsolete\": true\n}\n");
       writeFile(join(targetRoot, "settings", "ai.json"), "{}\n");
       writeFile(join(targetRoot, "settings", "tools.json"), "{ broken json\n");
       writeFile(join(targetRoot, "brain", "README.md"), "legacy brain\n");
@@ -50,6 +55,30 @@ describe("syncRuntimeInstanceTemplate", () => {
       expect(readFileSync(join(targetRoot, "read-only", "settings.json"), "utf-8")).toContain("\"model\": \"google/gemma-4-31b-it:free\"");
       expect(readFileSync(join(targetRoot, "read-only", "settings.json"), "utf-8")).toContain("\"intervalMs\": 5000");
       expect(readFileSync(join(targetRoot, "read-only", "tools.json"), "utf-8")).toBe("{\n  \"starter\": true\n}\n");
+      expect(readFileSync(join(targetRoot, "read-only", "wakeup.json"), "utf-8")).toBe(starterWakeup);
+      expect(readFileSync(join(targetRoot, "read-only", "wakeup.json"), "utf-8")).not.toBe(instanceWakeup);
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("does not overwrite personal-instance wakeup config from the starter", () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "clog-instance-template-personal-"));
+
+    try {
+      const starterRoot = join(workspaceRoot, ".runtime", "instances", "00");
+      const targetRoot = join(workspaceRoot, ".runtime", "instances", "personal-instance");
+      const starterWakeup = "{\n  \"enabled\": true,\n  \"prompts\": {\n    \"checkIn\": {\n      \"title\": \"Check in\",\n      \"prompt\": \"Check in.\"\n    }\n  },\n  \"schedule\": [\n    {\n      \"promptId\": \"checkIn\",\n      \"timeUtc\": \"10:00\"\n    }\n  ]\n}\n";
+      const personalWakeup = "{\n  \"enabled\": true,\n  \"prompts\": {\n    \"personal\": {\n      \"title\": \"Personal check\",\n      \"prompt\": \"Keep my personal wakeup.\"\n    }\n  },\n  \"schedule\": [\n    {\n      \"promptId\": \"personal\",\n      \"timeUtc\": \"06:45\"\n    }\n  ]\n}\n";
+
+      writeFile(join(starterRoot, "read-only", "settings.json"), "{\n  \"starter\": true\n}\n");
+      writeFile(join(starterRoot, "read-only", "tools.json"), "{\n  \"starter\": true\n}\n");
+      writeFile(join(starterRoot, "read-only", "wakeup.json"), starterWakeup);
+      writeFile(join(targetRoot, "read-only", "wakeup.json"), personalWakeup);
+
+      syncRuntimeInstanceTemplate({}, workspaceRoot);
+
+      expect(readFileSync(join(targetRoot, "read-only", "wakeup.json"), "utf-8")).toBe(personalWakeup);
     } finally {
       rmSync(workspaceRoot, { recursive: true, force: true });
     }

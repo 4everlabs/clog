@@ -30,7 +30,27 @@ Copy [`.env.example`](../.env.example) to `/etc/clog.env` or local `.env` and fi
 - optional insight monitor HogQL queries
 - Telegram and any other integration secrets you need outside the PostHog rollout
 
-The repo keeps the tracked starter instance under `.runtime/instances/00`. Local development writes to `personal-instance`, which is ignored by git so your personal runtime state does not dirty the starter instance. App-owned prompts and knowledge live in `apps/clog/src/brain`, while each instance keeps `read-only/settings.json`, `read-only/tools.json`, `read-only/wakeup.json`, `storage/state/*.json`, and `workspace/`. `read-only/settings.json` is where you pin runtime-only context such as the active PostHog workspace so the runtime can scope tool exposure without showing the model a big discovery workflow. Runtime bootstrap now fills in missing starter files from the tracked starter instance so you do not have to copy new files by hand. Set `CLOG_INSTANCE_ID` to a fresh value on a new host when you want it to seed a clean instance from that tracked starter. Secrets still stay in `.env` for now rather than in tracked instance JSON files.
+The repo keeps the tracked starter instance under `.runtime/instances/00`. Local development writes to `personal-instance`, which is ignored by git so your personal runtime state does not dirty the starter instance. App-owned prompts and knowledge live in `apps/clog/src/ai/brain`, while each instance keeps `read-only/settings.json`, `read-only/tools.json`, `read-only/wakeup.json`, `storage/state/*.json`, and `workspace/`. `read-only/settings.json` is where you pin runtime-only context such as the active PostHog workspace so the runtime can scope tool exposure without showing the model a big discovery workflow. Runtime bootstrap now fills in missing starter files from the tracked starter instance so you do not have to copy new files by hand. Set `CLOG_INSTANCE_ID` to a fresh value on a new host when you want it to seed a clean instance from that tracked starter. Secrets still stay in `.env` for now rather than in tracked instance JSON files.
+
+Starter `read-only/wakeup.json`:
+
+```json
+{
+  "enabled": true,
+  "prompts": {
+    "checkIn": {
+      "title": "Check in",
+      "prompt": "Check in."
+    }
+  },
+  "schedule": [
+    {
+      "promptId": "checkIn",
+      "timeUtc": "10:00"
+    }
+  ]
+}
+```
 
 ## 4. Install the service unit
 

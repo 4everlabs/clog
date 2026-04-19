@@ -7,7 +7,7 @@ import type {
   ConversationMessage,
   ConversationThread,
 } from "@clog/types";
-import type { RuntimeStorageConfig } from "../config";
+import type { RuntimeStorageConfig } from "../runtime/config";
 import { createEmptyRuntimeState, InMemoryRuntimeStore, type PersistedRuntimeState } from "./in-memory-runtime-store";
 import type { MemoryEntry, RuntimeStore } from "./chat";
 
@@ -33,7 +33,6 @@ interface ConversationPaths {
 const CONVERSATIONS_DIRECTORY_NAME = "conversations";
 const NOTES_FILE_NAME = "notes.jsonl";
 const CHAT_FILE_NAME = "chat.jsonl";
-const LEGACY_RUNTIME_SQLITE_FILE_NAME = "runtime.sqlite";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -171,7 +170,6 @@ export class FileRuntimeStore implements RuntimeStore {
     this.paths = createStatePaths(config.stateDir);
     mkdirSync(config.stateDir, { recursive: true });
     mkdirSync(join(config.storageDir, CONVERSATIONS_DIRECTORY_NAME), { recursive: true });
-    rmSync(join(config.storageDir, LEGACY_RUNTIME_SQLITE_FILE_NAME), { force: true });
     this.restore();
   }
 

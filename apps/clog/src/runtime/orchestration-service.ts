@@ -1,7 +1,7 @@
 import type { IntegrationCapabilitySnapshot } from "@clog/types";
-import { getRegisteredTool } from "../tools/registry";
-import type { ExecutedToolCall } from "../tools/types";
-import type { AgentToolName } from "../schema/tools";
+import { getRegisteredTool } from "../ai/tools/registry";
+import type { ExecutedToolCall } from "../ai/tools/types";
+import type { AgentToolName } from "../ai/tools/schema/tools";
 
 type JsonObject = Record<string, unknown>;
 

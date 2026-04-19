@@ -33,7 +33,7 @@ External-system boundaries:
 
 Chat surfaces are not part of `integrations/`. They live under `apps/frontends/*` and attach to the gateway as transports or clients.
 
-### `runtime monitoring`
+### `runtime`
 
 The monitoring loop lives with the other runtime services.
 
@@ -51,19 +51,19 @@ Runtime state lives in structured JSON files today. This layer owns:
 - scheduled jobs
 - integration checkpoints
 
-### `gateway`
+### `runtime/gateway`
 
 The transport-agnostic typed surface. This is the layer web, Telegram, and CLI should all target.
 
 ### `server`
 
-`apps/clog/src/bootstrap.ts` is the composition root that wires env, storage, integrations, tools, monitoring, and the gateway together.
+`apps/clog/src/runtime/bootstrap.ts` is the composition root that wires env, storage, integrations, tools, monitoring, and the gateway together.
 
-`apps/clog/src/server.ts` is the HTTP and websocket transport. It stays thin and delegates requests into the gateway.
+`apps/clog/src/runtime/server.ts` is the HTTP and websocket transport. It stays thin and delegates requests into the gateway.
 
-### `ai bridge`
+### `ai/brain`
 
-`apps/clog/src/brain/service.ts` is the shared chat entrypoint. It loads app-owned prompts from `apps/clog/src/brain/prompts`, plus the per-instance wakeup config from `.runtime/instances/<instance>/read-only/wakeup.json`, then serves the same reply path to the gateway and Telegram transport bridge.
+`apps/clog/src/ai/brain/service.ts` is the shared chat entrypoint. It loads app-owned prompts from `apps/clog/src/ai/brain/prompts`, while runtime-side wakeup config is loaded separately from `.runtime/instances/<instance>/read-only/wakeup.json`, then serves the same reply path to the gateway and Telegram transport bridge.
 
 ### `telegram transport`
 
@@ -73,7 +73,7 @@ The transport-agnostic typed surface. This is the layer web, Telegram, and CLI s
 
 ### `shell tooling`
 
-`apps/clog/src/execution/shell-executor.ts` is the safe command runner. It only allows a small read-only command set (`ls`, `cat`, `rg`, etc.), enforces that the requested working directory lives inside the permitted runtime roots, and streams the captured stdout/stderr back through `/api/shell`. Every frontend should go through that endpoint instead of spawning arbitrary shells.
+`apps/clog/src/tools/shell-executor.ts` is the safe command runner. It only allows a small read-only command set (`ls`, `cat`, `rg`, etc.), enforces that the requested working directory lives inside the permitted runtime roots, and streams the captured stdout/stderr back through `/api/shell`. Every frontend should go through that endpoint instead of spawning arbitrary shells.
 
 ## `.runtime` contract
 
@@ -81,11 +81,11 @@ The transport-agnostic typed surface. This is the layer web, Telegram, and CLI s
 
 - `read-only/settings.json` – runtime-facing settings kept out of model access, including optional pinned PostHog context hints used to scope tool exposure.
 - `read-only/tools.json` – tool visibility and enablement for the model/runtime surface.
-- `read-only/wakeup.json` – per-instance daily wakeup prompts and UTC schedule.
+- `read-only/wakeup.json` – per-instance wakeup enabled flag, prompt titles/prompts, and UTC daily schedule.
 - `storage/` – per-instance runtime state such as `storage/state/*.json`.
 - `workspace/` – per-instance workspaces kept outside the tracked runtime contract.
 
-App-owned prompts, knowledge, skills, and MCP references stay in the repo-level `apps/clog/src/brain` tree. `.runtime` is for per-instance state and guidance, with `workspace/` as the only model-targeted writable area, `storage/` as runtime-owned persistence, and `read-only/` reserved for runtime-owned files the model should not browse directly.
+App-owned prompts, knowledge, skills, and MCP references stay in the repo-level `apps/clog/src/ai/brain` tree. `.runtime` is for per-instance state and guidance, with `workspace/` as the only model-targeted writable area, `storage/` as runtime-owned persistence, and `read-only/` reserved for runtime-owned files the model should not browse directly.
 
 ## Execution Modes
 

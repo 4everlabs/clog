@@ -4,7 +4,7 @@ import type {
   PostHogEndpointRunRequest,
   RuntimeObservation,
 } from "@clog/types";
-import { createPostHogToolServices } from "../apps/clog/src/integrations/posthog/tool-services";
+import { createPostHogToolServices } from "../apps/clog/src/ai/integrations/posthog/tool-services";
 
 const createCliResponse = (command: string): PostHogCliCommandResponse => ({
   ok: true,
@@ -54,7 +54,7 @@ describe("createPostHogToolServices", () => {
           total: 1,
           returned: 1,
           tools: [{
-            name: "insights-get-all",
+            name: "insights-list",
             title: "List insights",
             description: "List PostHog insights",
           }],
@@ -92,8 +92,8 @@ describe("createPostHogToolServices", () => {
 
     expect(await services.getOrganizations()).toHaveLength(1);
     expect((await services.getProjects("org_99")).organizationId).toBe("org_99");
-    expect((await services.listMcpTools({ limit: 5 })).tools[0]?.name).toBe("insights-get-all");
-    expect((await services.callMcpTool("insights-get-all", { limit: 5 })).toolName).toBe("insights-get-all");
+    expect((await services.listMcpTools({ limit: 5 })).tools[0]?.name).toBe("insights-list");
+    expect((await services.callMcpTool("insights-list", { limit: 5 })).toolName).toBe("insights-list");
     expect((await services.runQuery("health", "SELECT 1")).results[0]).toEqual({ value: 1 });
     expect(await services.listErrors()).toEqual([observation]);
     expect((await services.getDocumentedToolCatalog()).verifiedAt).toBe("2026-04-01");

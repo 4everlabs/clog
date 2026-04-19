@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { PostHogDashboardSnapshot } from "../apps/clog/src/integrations/posthog/dashboard-snapshot";
+import type { PostHogDashboardSnapshot } from "../apps/clog/src/ai/integrations/posthog/dashboard-snapshot";
 import {
   buildPostHogAssetSummary,
   buildPostHogHealthSummary,
   buildPostHogReleaseSummary,
-} from "../apps/clog/src/integrations/posthog/summary-builders";
+} from "../apps/clog/src/ai/integrations/posthog/summary-builders";
 
 const dashboardFixture = (): PostHogDashboardSnapshot => ({
   generatedAt: 1_700_000_000_000,

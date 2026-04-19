@@ -158,19 +158,4 @@ describe("FileRuntimeStore", () => {
     });
     expect(telegramChatEntries.some((entry) => entry.type === "message" && entry.content === "hello from telegram")).toBe(true);
   });
-
-  test("removes legacy runtime sqlite when the file store starts", () => {
-    const root = mkdtempSync(join(tmpdir(), "clog-file-store-"));
-    cleanupPaths.push(root);
-    const config = createStorageConfig(root);
-    const legacySqlitePath = join(config.storageDir, "runtime.sqlite");
-
-    mkdirSync(config.storageDir, { recursive: true });
-    writeFileSync(legacySqlitePath, "legacy sqlite placeholder", "utf-8");
-    expect(existsSync(legacySqlitePath)).toBe(true);
-
-    const store = new FileRuntimeStore(config);
-    expect(existsSync(legacySqlitePath)).toBe(false);
-    store.close();
-  });
 });

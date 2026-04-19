@@ -41,4 +41,4 @@ Recommended future note entries:
 {"type":"message","conversationId":"conversation-2026-03-26T01-32-20-418Z-thread_abc123","threadId":"thread_abc123","messageId":"msg_02","role":"user","channel":"tui","content":"what errors happened today?","createdAt":1774402350000}
 ```
 
-Legacy `storage/runtime.sqlite` files are not used anymore and are removed during runtime setup.
+`storage/runtime.sqlite` is no longer part of the runtime layout. The runtime only reads and writes the structured files under `storage/state/` and `storage/conversations/`.

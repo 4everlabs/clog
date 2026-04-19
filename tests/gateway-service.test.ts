@@ -2,14 +2,14 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { AgentEnvironment } from "../apps/clog/src/config";
-import { AgentGateway } from "../apps/clog/src/gateway/service";
+import type { AgentEnvironment } from "../apps/clog/src/runtime/config";
+import { AgentGateway } from "../apps/clog/src/runtime/gateway/service";
 import type { MonitoringTickResult } from "../apps/clog/src/runtime/monitor-loop";
 import { InMemoryRuntimeStore } from "../apps/clog/src/storage/in-memory-runtime-store";
-import type { BrainService } from "../apps/clog/src/brain/service";
-import type { PostHogIntegrationClient } from "../apps/clog/src/integrations/posthog/client";
-import type { PostHogDocumentedToolCatalog, PostHogDocumentedFeatureCatalog } from "../apps/clog/src/integrations/posthog/documented-tool-catalog";
-import type { PostHogToolServices } from "../apps/clog/src/tools/types";
+import type { BrainService } from "../apps/clog/src/ai/brain/service";
+import type { PostHogIntegrationClient } from "../apps/clog/src/ai/integrations/posthog/client";
+import type { PostHogDocumentedToolCatalog, PostHogDocumentedFeatureCatalog } from "../apps/clog/src/ai/integrations/posthog/documented-tool-catalog";
+import type { PostHogToolServices } from "../apps/clog/src/ai/tools/types";
 import type { MonitoringLoop } from "../apps/clog/src/runtime/monitor-loop";
 
 const cleanupPaths: string[] = [];
@@ -359,12 +359,11 @@ describe("AgentGateway", () => {
     const readOnlyDir = join(instanceRoot, "read-only");
     mkdirSync(readOnlyDir, { recursive: true });
     writeFileSync(join(readOnlyDir, "wakeup.json"), JSON.stringify({
+      enabled: true,
       prompts: {
         daily: {
+          title: "Daily check",
           prompt: "Initial wakeup prompt",
-          target: {
-            channel: "system",
-          },
         },
       },
       schedule: [{
@@ -421,12 +420,11 @@ describe("AgentGateway", () => {
 
     const bootstrap = await gateway.bootstrap();
     expect(bootstrap.wakeup).toEqual({
+      enabled: true,
       prompts: {
         daily: {
+          title: "Daily check",
           prompt: "Initial wakeup prompt",
-          target: {
-            channel: "system",
-          },
         },
       },
       schedule: [{
@@ -436,12 +434,11 @@ describe("AgentGateway", () => {
     });
 
     const updated = await gateway.updateWakeupConfig({
+      enabled: true,
       prompts: {
         morning: {
+          title: "Morning check",
           prompt: "Updated wakeup prompt",
-          target: {
-            channel: "system",
-          },
         },
       },
       schedule: [{
@@ -451,12 +448,11 @@ describe("AgentGateway", () => {
     });
 
     expect(updated.wakeup).toEqual({
+      enabled: true,
       prompts: {
         morning: {
+          title: "Morning check",
           prompt: "Updated wakeup prompt",
-          target: {
-            channel: "system",
-          },
         },
       },
       schedule: [{
@@ -465,18 +461,109 @@ describe("AgentGateway", () => {
       }],
     });
     expect(JSON.parse(readFileSync(join(readOnlyDir, "wakeup.json"), "utf-8"))).toEqual({
+      enabled: true,
       prompts: {
         morning: {
+          title: "Morning check",
           prompt: "Updated wakeup prompt",
-          target: {
-            channel: "system",
-          },
         },
       },
       schedule: [{
         promptId: "morning",
         timeUtc: "12:00",
       }],
+    });
+  });
+
+  test("allows clearing the wakeup config", async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "clog-gateway-wakeup-empty-"));
+    cleanupPaths.push(workspaceRoot);
+
+    const instanceRoot = join(workspaceRoot, "instance");
+    const readOnlyDir = join(instanceRoot, "read-only");
+    mkdirSync(readOnlyDir, { recursive: true });
+    writeFileSync(join(readOnlyDir, "wakeup.json"), JSON.stringify({
+      enabled: true,
+      prompts: {
+        daily: {
+          title: "Daily check",
+          prompt: "Initial wakeup prompt",
+        },
+      },
+      schedule: [{
+        promptId: "daily",
+        timeUtc: "09:00",
+      }],
+    }, null, 2));
+
+    const store = new InMemoryRuntimeStore();
+    store.setStatus("idle");
+    const monitorLoop = {
+      tick: async (): Promise<MonitoringTickResult> => ({
+        observations: [],
+        integrationHealth: [],
+        findings: [],
+        checkedAt: Date.now(),
+      }),
+    } as MonitoringLoop;
+
+    const gateway = new AgentGateway({
+      env: createEnvironment({
+        storage: {
+          instanceId: "test-instance",
+          instanceRoot,
+          readOnlyDir,
+          workspaceDir: join(instanceRoot, "workspace"),
+          storageDir: join(instanceRoot, "storage"),
+          stateDir: join(instanceRoot, "storage", "state"),
+        },
+      }),
+      bootedAt: 1,
+      brain: {
+        reply: async () => "ok",
+      } as unknown as BrainService,
+      monitorLoop,
+      posthog: {} as PostHogIntegrationClient,
+      posthogServices: createPostHogServices(),
+      notionServices: {
+        getTodoList: async () => ({
+          summary: {
+            title: "Pre Beta To Do",
+            dataSourceId: "todo_1",
+            generatedAt: 1,
+            total: 1,
+            openCount: 1,
+            statusCounts: [{ progress: "Not started", count: 1 }],
+          },
+          items: [],
+          printout: "todo",
+        }),
+      },
+      store,
+    });
+
+    const updated = await gateway.updateWakeupConfig({
+      enabled: false,
+      prompts: {},
+      schedule: [],
+    });
+
+    expect(updated.wakeup).toEqual({
+      enabled: false,
+      prompts: {},
+      schedule: [],
+    });
+    expect(JSON.parse(readFileSync(join(readOnlyDir, "wakeup.json"), "utf-8"))).toEqual({
+      enabled: false,
+      prompts: {},
+      schedule: [],
+    });
+
+    const bootstrap = await gateway.bootstrap();
+    expect(bootstrap.wakeup).toEqual({
+      enabled: false,
+      prompts: {},
+      schedule: [],
     });
   });
 });

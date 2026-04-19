@@ -137,14 +137,9 @@ export interface AgentRuntimeSummary {
   readonly activeIntegrations: readonly IntegrationKind[];
 }
 
-export interface RuntimeWakeupPromptTarget {
-  readonly channel: "system";
-  readonly threadTitle?: string;
-}
-
 export interface RuntimeWakeupPromptDefinition {
+  readonly title: string;
   readonly prompt: string;
-  readonly target: RuntimeWakeupPromptTarget;
 }
 
 export interface RuntimeWakeupScheduleEntry {
@@ -153,6 +148,7 @@ export interface RuntimeWakeupScheduleEntry {
 }
 
 export interface RuntimeWakeupConfig {
+  readonly enabled: boolean;
   readonly prompts: Readonly<Record<string, RuntimeWakeupPromptDefinition>>;
   readonly schedule: readonly RuntimeWakeupScheduleEntry[];
 }
@@ -194,6 +190,7 @@ export interface SurfaceSendMessageResponse {
 }
 
 export interface SurfaceUpdateWakeupRequest {
+  readonly enabled: boolean;
   readonly prompts: Readonly<Record<string, RuntimeWakeupPromptDefinition>>;
   readonly schedule: readonly RuntimeWakeupScheduleEntry[];
 }

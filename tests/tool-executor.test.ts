@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { IntegrationCapabilitySnapshot, RuntimeObservation } from "@clog/types";
-import { ToolExecutor } from "../apps/clog/src/execution/tool-executor";
-import type { PostHogDocumentedFeatureCatalog, PostHogDocumentedToolCatalog } from "../apps/clog/src/integrations/posthog/documented-tool-catalog";
-import type { RuntimeToolServices } from "../apps/clog/src/tools/types";
+import { ToolExecutor } from "../apps/clog/src/ai/tools/tool-executor";
+import type { PostHogDocumentedFeatureCatalog, PostHogDocumentedToolCatalog } from "../apps/clog/src/ai/integrations/posthog/documented-tool-catalog";
+import type { RuntimeToolServices } from "../apps/clog/src/ai/tools/types";
 
 const createCapabilities = (): IntegrationCapabilitySnapshot => ({
   posthog: {
@@ -149,9 +149,9 @@ const createRuntimeServices = (): RuntimeToolServices => ({
     steps: [],
   }),
   readKnowledge: () => ({
-    availablePaths: ["knowledge/example.md"],
-    selectedPath: "knowledge/example.md",
-    content: "Knowledge content",
+    availablePaths: ["workspace/project/about.md"],
+    selectedPath: "workspace/project/about.md",
+    content: "Workspace knowledge content",
     truncated: false,
   }),
   readJson: () => ({
@@ -164,6 +164,11 @@ const createRuntimeServices = (): RuntimeToolServices => ({
       history: [],
     },
     truncated: false,
+  }),
+  writeWorkspaceFile: () => ({
+    path: "workspace/project/notes.md",
+    created: true,
+    bytesWritten: 24,
   }),
   listConversations: () => ({
     generatedAt: 1,
@@ -710,11 +715,11 @@ describe("ToolExecutor", () => {
     });
 
     const result = await executor.execute("runtime_read_knowledge", {
-      path: "knowledge/example.md",
+      path: "workspace/project/about.md",
     });
 
     expect(result.ok).toBe(true);
-    expect(result.content).toContain("Knowledge content");
+    expect(result.content).toContain("Workspace knowledge content");
   });
 
   test("executes the runtime json reader tool", async () => {
@@ -740,6 +745,29 @@ describe("ToolExecutor", () => {
     expect(result.content).toContain("\"fieldPath\": \"operations.dashboardSnapshot\"");
     expect(result.content).toContain("\"value\": {");
     expect(result.content).toContain("\"history\": []");
+  });
+
+  test("executes the workspace file writer tool", async () => {
+    const executor = new ToolExecutor({
+      capabilities: createCapabilities(),
+      services: {
+        posthog: null,
+        notion: null,
+        runtime: createRuntimeServices(),
+        shell: null,
+        github: null,
+        vercel: null,
+      },
+    });
+
+    const result = await executor.execute("runtime_write_workspace_file", {
+      path: "workspace/project/notes.md",
+      content: "hello",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.content).toContain("\"path\": \"workspace/project/notes.md\"");
+    expect(result.content).toContain("\"bytesWritten\": 24");
   });
 
   test("executes the generic PostHog MCP catalog tool", async () => {

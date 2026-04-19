@@ -1,7 +1,7 @@
 import type { RuntimeWakeupConfig, RuntimeWakeupPromptDefinition } from "@clog/types";
 import { sendTelegramOperatorNotifications } from "../../../frontends/telegram/src";
-import type { RuntimeBootstrap } from "../bootstrap";
-import { loadRuntimeWakeupConfig, parseRuntimeWakeupTimeUtc } from "../brain/prompt-loader";
+import type { RuntimeBootstrap } from "./bootstrap";
+import { loadRuntimeWakeupConfig, parseRuntimeWakeupTimeUtc } from "./config/wakeup";
 
 const DAY_MS = 86_400_000;
 export const DEFAULT_WAKEUP_SCHEDULER_POLL_MS = 30_000;
@@ -99,6 +99,10 @@ export const collectDueWakeupRuns = (
 };
 
 export const resolveStartupWakeupRun = (config: RuntimeWakeupConfig): ResolvedWakeupRun | null => {
+  if (!config.enabled) {
+    return null;
+  }
+
   const firstEntry = config.schedule[0];
   if (!firstEntry) {
     return null;
@@ -126,7 +130,7 @@ export const runResolvedWakeup = async (
 ): Promise<void> => {
   const result = await runtime.gateway.runWakeupPass({
     message: run.prompt.prompt,
-    threadTitle: run.prompt.target.threadTitle,
+    title: run.prompt.title,
   });
 
   const notifyTelegramReply = hooks.notifyTelegramReply ?? sendTelegramOperatorNotifications;
@@ -212,6 +216,9 @@ export class DailyWakeupScheduler {
         this.options.workspaceRoot ?? process.cwd(),
       );
       if (!wakeupConfig) {
+        return;
+      }
+      if (!wakeupConfig.enabled) {
         return;
       }
 

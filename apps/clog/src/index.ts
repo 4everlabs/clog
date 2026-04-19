@@ -1,12 +1,12 @@
 import { parseArgs } from "node:util";
-import { bootstrapRuntime } from "./bootstrap";
-import { loadRuntimeWakeupConfig } from "./brain/prompt-loader";
-import { PostHogPerformanceReporter } from "./integrations/posthog/performance-reporter";
+import { bootstrapRuntime } from "./runtime/bootstrap";
+import { loadRuntimeWakeupConfig } from "./runtime/config/wakeup";
 import { DailyWakeupScheduler, resolveStartupWakeupRun, runResolvedWakeup } from "./runtime/wakeup-scheduler";
-import { startRuntimeServer, type RuntimeServerInfo } from "./server";
+import { PostHogPerformanceReporter } from "./integrations/posthog/performance-reporter";
+import { startRuntimeServer, type RuntimeServerInfo } from "./runtime/server";
 import { initializeRuntimeLogCapture } from "./storage/logs";
 import { startTelegramSurface } from "../../frontends/telegram/src";
-import type { RuntimeBootstrap } from "./bootstrap";
+import type { RuntimeBootstrap } from "./runtime/bootstrap";
 
 const writeStdoutLine = (value: string): void => {
   process.stdout.write(`${value}\n`);
@@ -16,10 +16,10 @@ const writeStderrLine = (value: string): void => {
   process.stderr.write(`${value}\n`);
 };
 
-export { bootstrapRuntime } from "./bootstrap";
-export { AgentSurfaceTransport, createRuntimeSurfaceHandler } from "./server";
-export type { RuntimeBootstrap } from "./bootstrap";
-export type { RuntimeServerInfo } from "./server";
+export { bootstrapRuntime } from "./runtime/bootstrap";
+export { AgentSurfaceTransport, createRuntimeSurfaceHandler } from "./runtime/server";
+export type { RuntimeBootstrap } from "./runtime/bootstrap";
+export type { RuntimeServerInfo } from "./runtime/server";
 
 export interface RuntimeStartupOptions {
   readonly wakeup: boolean;

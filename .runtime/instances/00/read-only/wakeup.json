@@ -1,4 +1,15 @@
 {
-  "prompts": {},
-  "schedule": []
+  "enabled": true,
+  "prompts": {
+    "checkIn": {
+      "title": "Check in",
+      "prompt": "Check in."
+    }
+  },
+  "schedule": [
+    {
+      "promptId": "checkIn",
+      "timeUtc": "10:00"
+    }
+  ]
 }
