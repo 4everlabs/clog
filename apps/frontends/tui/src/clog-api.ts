@@ -42,7 +42,18 @@ export interface ClogApiClientOptions {
 
 const normalizeBaseUrl = (value: string): string => value.trim().replace(/\/+$/u, "");
 
-export const resolveBackendBaseUrl = (env: NodeJS.ProcessEnv = process.env): string => {
+const getProcessEnv = (): NodeJS.ProcessEnv => {
+  if (typeof Bun === "undefined") {
+    return process.env;
+  }
+
+  return {
+    ...Bun.env,
+    ...process.env,
+  };
+};
+
+export const resolveBackendBaseUrl = (env: NodeJS.ProcessEnv = getProcessEnv()): string => {
   const explicit = env.CLOG_BACKEND_URL?.trim();
   if (explicit) {
     return normalizeBaseUrl(explicit);

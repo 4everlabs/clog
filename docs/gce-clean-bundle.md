@@ -20,7 +20,9 @@ It excludes:
 - `out`
 - `.runtime/instances/personal-instance/`
 - any runtime instance other than `00`
-- runtime storage under `storage/conversations/`, `storage/logs/`, and `storage/state/`
+- directories named `logs/` anywhere in the tree, including legacy `storage/logs/`
+
+Within the tracked starter instance `00`, the bundle still includes tracked runtime files under `storage/` such as `storage/state/`, `storage/conversations/`, and any tracked `storage/sessions/<utc-timestamp>/system.log` examples.
 
 Create it with:
 

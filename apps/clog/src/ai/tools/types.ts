@@ -48,7 +48,7 @@ type RuntimeConversationThreadView = Pick<
 
 type RuntimeConversationMessageView = Pick<
   ConversationMessage,
-  "id" | "role" | "channel" | "content" | "createdAt"
+  "id" | "role" | "channel" | "content" | "reasoning" | "createdAt"
 >;
 
 export interface PostHogToolServices {

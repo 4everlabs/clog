@@ -116,6 +116,7 @@ export interface ConversationMessage {
   readonly role: "system" | "user" | "agent";
   readonly channel: SurfaceChannelKind;
   readonly content: string;
+  readonly reasoning?: string;
   readonly createdAt: number;
 }
 

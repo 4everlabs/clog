@@ -91,7 +91,10 @@ describe("runtime startup", () => {
         },
       } as unknown as RuntimeBootstrap;
 
-      const triggered = await runStartupWakeup(runtime, process.env, workspaceRoot, {
+      const triggered = await runStartupWakeup(runtime, {
+        ...process.env,
+        CLOG_INSTANCE_ID: "personal-instance",
+      }, workspaceRoot, {
         notifyTelegramReply: async (_runtime, markdown) => {
           telegramNotificationMessage = markdown;
           return 1;

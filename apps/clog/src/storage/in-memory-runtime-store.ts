@@ -123,12 +123,18 @@ export class InMemoryRuntimeStore implements RuntimeStore {
     return next;
   }
 
-  createMessage(role: ConversationMessage["role"], channel: SurfaceChannelKind, content: string): ConversationMessage {
+  createMessage(
+    role: ConversationMessage["role"],
+    channel: SurfaceChannelKind,
+    content: string,
+    reasoning?: string | null,
+  ): ConversationMessage {
     return {
       id: createId("msg"),
       role,
       channel,
       content,
+      ...(reasoning?.trim() ? { reasoning: reasoning.trim() } : {}),
       createdAt: Date.now(),
     };
   }

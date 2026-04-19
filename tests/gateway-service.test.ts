@@ -211,9 +211,9 @@ describe("AgentGateway", () => {
     const store = new InMemoryRuntimeStore();
     store.setStatus("idle");
 
-    const replyPromise = Promise.withResolvers<string>();
+    const replyPromise = Promise.withResolvers<{ readonly text: string; readonly reasoning: string | null }>();
     const brain = {
-      reply: async () => await replyPromise.promise,
+      replyDetailed: async () => await replyPromise.promise,
     } as unknown as BrainService;
 
     let monitorStarted = false;
@@ -265,9 +265,13 @@ describe("AgentGateway", () => {
     await Promise.resolve();
     expect(monitorStarted).toBe(true);
 
-    replyPromise.resolve("All clear.");
+    replyPromise.resolve({
+      text: "All clear.",
+      reasoning: "Checked the latest open findings and nothing looks urgent.",
+    });
     const sendResult = await sendPromise;
     expect(sendResult.replyMessage.content).toBe("All clear.");
+    expect(sendResult.replyMessage.reasoning).toBe("Checked the latest open findings and nothing looks urgent.");
 
     await monitorPromise;
     expect(monitorStarted).toBe(true);
@@ -282,13 +286,19 @@ describe("AgentGateway", () => {
     let replyCallCount = 0;
     let secondReplyStarted = false;
     const brain = {
-      reply: async () => {
+      replyDetailed: async () => {
         replyCallCount += 1;
         if (replyCallCount === 1) {
-          return await firstReply.promise;
+          return {
+            text: await firstReply.promise,
+            reasoning: "Waiting for the first reply to finish.",
+          };
         }
         secondReplyStarted = true;
-        return "Second reply";
+        return {
+          text: "Second reply",
+          reasoning: "Second turn completed after the first one finished.",
+        };
       },
     } as unknown as BrainService;
 
@@ -396,7 +406,10 @@ describe("AgentGateway", () => {
       }),
       bootedAt: 1,
       brain: {
-        reply: async () => "ok",
+        replyDetailed: async () => ({
+          text: "ok",
+          reasoning: null,
+        }),
       } as unknown as BrainService,
       monitorLoop,
       posthog: {} as PostHogIntegrationClient,
@@ -520,7 +533,10 @@ describe("AgentGateway", () => {
       }),
       bootedAt: 1,
       brain: {
-        reply: async () => "ok",
+        replyDetailed: async () => ({
+          text: "ok",
+          reasoning: null,
+        }),
       } as unknown as BrainService,
       monitorLoop,
       posthog: {} as PostHogIntegrationClient,

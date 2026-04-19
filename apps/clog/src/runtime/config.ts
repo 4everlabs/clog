@@ -69,6 +69,30 @@ const resolveWorkspacePath = (value: string | undefined, fallback: string): stri
   return resolve(process.cwd(), target);
 };
 
+export const resolveRuntimeInstanceRoot = (
+  env: NodeJS.ProcessEnv,
+  workspaceRoot = process.cwd(),
+): string => {
+  const instanceId = readOptionalString(env.CLOG_INSTANCE_ID) ?? "personal-instance";
+  const explicitRoot = readOptionalString(env.CLOG_INSTANCE_ROOT);
+  if (explicitRoot) {
+    return resolve(workspaceRoot, explicitRoot);
+  }
+
+  return resolve(workspaceRoot, `.runtime/instances/${instanceId}`);
+};
+
+export const resolveRuntimeStorageRoot = (
+  env: NodeJS.ProcessEnv,
+  workspaceRoot = process.cwd(),
+): string => {
+  const instanceRoot = resolveRuntimeInstanceRoot(env, workspaceRoot);
+  const configuredStorageDir = readOptionalString(env.CLOG_STORAGE_DIR);
+  return configuredStorageDir
+    ? resolve(workspaceRoot, configuredStorageDir)
+    : join(instanceRoot, "storage");
+};
+
 const isWithinRoot = (candidate: string, root: string): boolean => {
   const normalizedCandidate = resolve(candidate);
   const normalizedRoot = resolve(root);
@@ -287,10 +311,10 @@ const createAiConfig = (env: NodeJS.ProcessEnv, settings: RuntimeSettings | null
 
 const createRuntimeStorageConfig = (env: NodeJS.ProcessEnv): RuntimeStorageConfig => {
   const instanceId = readOptionalString(env.CLOG_INSTANCE_ID) ?? "personal-instance";
-  const instanceRoot = resolveWorkspacePath(env.CLOG_INSTANCE_ROOT, `.runtime/instances/${instanceId}`);
+  const instanceRoot = resolveRuntimeInstanceRoot(env);
   const readOnlyDir = join(instanceRoot, "read-only");
   const workspaceDir = join(instanceRoot, "workspace");
-  const storageDir = resolveWorkspacePath(env.CLOG_STORAGE_DIR, join(instanceRoot, "storage"));
+  const storageDir = resolveRuntimeStorageRoot(env);
   const stateDir = resolvePathWithinRoot(
     env.CLOG_RUNTIME_STATE_DIR,
     "state",

@@ -90,7 +90,6 @@ interface InstanceSelectionOption {
 
 const WEB_FRONTEND_DIRECTORY = fileURLToPath(new URL("../../frontends/web/", import.meta.url));
 const WORKSPACE_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
-const REPO_ENV_FILE = fileURLToPath(new URL("../../../.env", import.meta.url));
 const RUNTIME_INSTANCES_DIRECTORY = fileURLToPath(new URL("../../../.runtime/instances/", import.meta.url));
 const STARTER_INSTANCE_ID = "00";
 const DEFAULT_INSTANCE_ID = STARTER_INSTANCE_ID;
@@ -117,8 +116,19 @@ const wait = async (ms: number): Promise<void> => {
   await new Promise((resolve) => setTimeout(resolve, ms));
 };
 
+const getLauncherProcessEnv = (): NodeJS.ProcessEnv => {
+  if (typeof Bun === "undefined") {
+    return process.env;
+  }
+
+  return {
+    ...Bun.env,
+    ...process.env,
+  };
+};
+
 const readOptionalEnvString = (key: string): string | null => {
-  const value = process.env[key]?.trim();
+  const value = getLauncherProcessEnv()[key]?.trim();
   return value ? value : null;
 };
 
@@ -167,7 +177,7 @@ const createNextSequentialInstance = (instanceIds: readonly string[]): string =>
   const instanceId = getNextSequentialInstanceId(instanceIds);
   syncRuntimeInstanceTemplate(
     {
-      ...process.env,
+      ...getLauncherProcessEnv(),
       CLOG_INSTANCE_ID: instanceId,
     },
     WORKSPACE_ROOT,
@@ -215,28 +225,13 @@ export const resolveLauncherAiSettings = (instanceId = resolveSelectedInstanceId
   };
 };
 
-const quoteEnvValue = (value: string): string => {
-  return `"${value.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"")}"`;
-};
-
-export const upsertEnvVariable = (content: string, key: string, value: string): string => {
-  const serializedLine = `${key}=${quoteEnvValue(value)}`;
-  const linePattern = new RegExp(`^\\s*(?:export\\s+)?${key}\\s*=.*$`, "m");
-  if (linePattern.test(content)) {
-    return content.replace(linePattern, serializedLine);
-  }
-
-  const trimmedContent = content.trimEnd();
-  return trimmedContent ? `${trimmedContent}\n\n${serializedLine}\n` : `${serializedLine}\n`;
-};
-
 const writeRuntimeSettingsFile = (instanceId: string, settings: RuntimeSettings): void => {
   const settingsPath = resolveRuntimeSettingsPath(instanceId);
   mkdirSync(dirname(settingsPath), { recursive: true });
   writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf-8");
 };
 
-const persistAiModelSelection = (instanceId: string, settings: LauncherAiSettings, model: string): void => {
+const persistAiModelSelection = (instanceId: string, model: string): void => {
   const trimmedModel = model.trim();
   if (!trimmedModel) {
     return;
@@ -255,14 +250,6 @@ const persistAiModelSelection = (instanceId: string, settings: LauncherAiSetting
   writeRuntimeSettingsFile(instanceId, validated);
   process.env.CLOG_INSTANCE_ID = instanceId;
   process.env.CLOG_MODEL = trimmedModel;
-
-  let envContent = "";
-  try {
-    envContent = readFileSync(REPO_ENV_FILE, "utf-8");
-  } catch {
-    envContent = "";
-  }
-  writeFileSync(REPO_ENV_FILE, upsertEnvVariable(envContent, "CLOG_MODEL", trimmedModel), "utf-8");
 };
 
 const resolveLauncherRuntimeSettingsSummary = (
@@ -725,17 +712,18 @@ const openSystemSettings = async (): Promise<void> => {
       continue;
     }
 
-    persistAiModelSelection(screenState.settings.instanceId, screenState.ai, nextModel);
-    writeLine(colorize(`Saved CLOG_MODEL=${nextModel} to ${screenState.settings.settingsPath}`, ANSI.green, ANSI.bold));
+    persistAiModelSelection(screenState.settings.instanceId, nextModel);
+    writeLine(colorize(`Saved model ${nextModel} to ${screenState.settings.settingsPath}`, ANSI.green, ANSI.bold));
     await waitForEnter();
   }
 };
 
 const getLauncherScreenState = async (): Promise<LauncherScreenState> => {
   const instance = loadLauncherRuntimeSettingsState();
+  const launcherEnv = getLauncherProcessEnv();
   const runtimeBaseUrl = resolveBackendBaseUrl({
-    ...process.env,
-    PORT: String(instance.settings?.runtime?.port ?? process.env.PORT ?? DEFAULT_RUNTIME_PORT),
+    ...launcherEnv,
+    PORT: String(instance.settings?.runtime?.port ?? launcherEnv.PORT ?? DEFAULT_RUNTIME_PORT),
   });
   return {
     runtimeBaseUrl,
@@ -777,7 +765,7 @@ const webDevServerIsReachable = async (): Promise<boolean> => {
 };
 
 const ensureRuntime = async (): Promise<RuntimeSession> => {
-  const requestedBaseUrl = resolveBackendBaseUrl();
+  const requestedBaseUrl = resolveBackendBaseUrl(getLauncherProcessEnv());
   if (await runtimeIsReachable(requestedBaseUrl)) {
     process.env.CLOG_BACKEND_URL = requestedBaseUrl;
     return {
@@ -865,6 +853,7 @@ const waitForShutdownSignal = async (onSignal?: () => void): Promise<void> => {
 };
 
 const startWebDevServer = (session: RuntimeSession): ChildProcess => {
+  const launcherEnv = getLauncherProcessEnv();
   return Bun.spawn({
     cmd: ["bun", "--bun", "vite", "--host", "127.0.0.1", "--port", "4173"],
     cwd: WEB_FRONTEND_DIRECTORY,
@@ -872,7 +861,7 @@ const startWebDevServer = (session: RuntimeSession): ChildProcess => {
     stderr: "inherit",
     stdin: "ignore",
     env: {
-      ...process.env,
+      ...launcherEnv,
       CLOG_BACKEND_URL: session.baseUrl,
     },
   });

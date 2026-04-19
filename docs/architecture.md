@@ -82,7 +82,9 @@ The transport-agnostic typed surface. This is the layer web, Telegram, and CLI s
 - `read-only/settings.json` – runtime-facing settings kept out of model access, including optional pinned PostHog context hints used to scope tool exposure.
 - `read-only/tools.json` – tool visibility and enablement for the model/runtime surface.
 - `read-only/wakeup.json` – per-instance wakeup enabled flag, prompt titles/prompts, and UTC daily schedule.
-- `storage/` – per-instance runtime state such as `storage/state/*.json`.
+- `storage/state/` – per-instance runtime state snapshots such as `status.json`, `threads.json`, and `findings.json`.
+- `storage/conversations/` – per-thread `notes.jsonl` and `chat.jsonl` files.
+- `storage/sessions/<utc-timestamp>/system.log` – one runtime log session per process run.
 - `workspace/` – per-instance workspaces kept outside the tracked runtime contract.
 
 App-owned prompts, knowledge, skills, and MCP references stay in the repo-level `apps/clog/src/ai/brain` tree. `.runtime` is for per-instance state and guidance, with `workspace/` as the only model-targeted writable area, `storage/` as runtime-owned persistence, and `read-only/` reserved for runtime-owned files the model should not browse directly.

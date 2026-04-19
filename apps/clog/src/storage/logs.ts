@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { format } from "node:util";
-import { resolveRuntimeStorageRoot } from "../../../../tests/runtime-instance-template";
+import { getRuntimeProcessEnv, resolveRuntimeStorageRoot } from "../runtime/config";
 import { RuntimeTerminalOutputFormatter, type RuntimeTerminalStreamName } from "./runtime-terminal-output";
 
 const SESSIONS_DIRECTORY_NAME = "sessions";
@@ -197,7 +197,7 @@ const createPatchedConsoleMethod = (
 };
 
 export const initializeRuntimeLogCapture = (
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = getRuntimeProcessEnv(),
   workspaceRoot = process.cwd(),
 ): RuntimeLogSession => {
   const existingCapture = activeCapture;

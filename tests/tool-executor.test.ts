@@ -93,8 +93,8 @@ const createRuntimeServices = (): RuntimeToolServices => ({
   getRecentLogs: () => ({
     generatedAt: 1,
     files: [{
-      fileName: "latest.log",
-      relativePath: "logs/latest.log",
+      fileName: "system.log",
+      relativePath: "sessions/2026-04-19T02-29-45-655Z/system.log",
       totalLines: 10,
       returnedLines: 5,
       truncated: true,
@@ -655,7 +655,8 @@ describe("ToolExecutor", () => {
     const result = await executor.execute("runtime_get_recent_logs", {});
 
     expect(result.ok).toBe(true);
-    expect(result.content).toContain("latest.log");
+    expect(result.content).toContain("system.log");
+    expect(result.content).toContain("sessions/2026-04-19T02-29-45-655Z/system.log");
     expect(result.content).toContain("recent log line");
   });
 

@@ -2,9 +2,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { loadAgentEnvironment } from "../apps/clog/src/runtime/config";
+import { loadAgentEnvironment, resolveRuntimeStorageRoot } from "../apps/clog/src/runtime/config";
 
 const cleanupPaths: string[] = [];
+const stripPrivatePrefix = (value: string): string => value.replace(/^\/private/u, "");
 
 afterEach(() => {
   while (cleanupPaths.length > 0) {
@@ -189,6 +190,28 @@ describe("loadAgentEnvironment", () => {
     expect(env.storage.stateDir.endsWith("custom-runtime-state")).toBe(true);
   });
 
+  test("keeps runtime storage root aligned with CLOG_STORAGE_DIR", () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "clog-config-storage-"));
+    cleanupPaths.push(workspaceRoot);
+
+    const previousCwd = process.cwd();
+    process.chdir(workspaceRoot);
+
+    try {
+      const envInput = {
+        CLOG_INSTANCE_ID: "operator-2",
+        CLOG_STORAGE_DIR: ".runtime/custom-storage",
+      };
+      const env = loadAgentEnvironment(envInput);
+
+      expect(env.storage.storageDir.endsWith("/.runtime/custom-storage")).toBe(true);
+      expect(stripPrivatePrefix(resolveRuntimeStorageRoot(envInput, workspaceRoot)))
+        .toBe(stripPrivatePrefix(env.storage.storageDir));
+    } finally {
+      process.chdir(previousCwd);
+    }
+  });
+
   test("rejects PostHog endpoint directories outside the runtime workspace", () => {
     expect(() => loadAgentEnvironment({
       CLOG_POSTHOG_ENDPOINTS_DIR: "../outside-endpoints",
@@ -237,7 +260,7 @@ describe("loadAgentEnvironment", () => {
         intervalMs: 9000,
       },
       ai: {
-        model: "google/gemma-4-26b-a4b-it:free",
+        model: "google/gemma-4-31b-it:free",
       },
       posthog: {
         host: "https://eu.posthog.com/",
@@ -272,7 +295,7 @@ describe("loadAgentEnvironment", () => {
       expect(env.channels).toEqual(["web", "tui"]);
       expect(env.port).toBe(7777);
       expect(env.monitorIntervalMs).toBe(9000);
-      expect(env.ai.model).toBe("google/gemma-4-26b-a4b-it:free");
+      expect(env.ai.model).toBe("google/gemma-4-31b-it:free");
       expect(env.posthog.host).toBe("https://eu.posthog.com");
       expect(env.posthog.cliTimeoutMs).toBe(45_000);
       expect(env.posthog.requestTimeoutMs).toBe(120_000);

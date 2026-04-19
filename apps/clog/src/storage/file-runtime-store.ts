@@ -156,6 +156,7 @@ const createChatEntries = (thread: ConversationThread, conversationId: string): 
     role: message.role,
     channel: message.channel,
     content: message.content,
+    ...(message.reasoning ? { reasoning: message.reasoning } : {}),
     createdAt: message.createdAt,
   })),
 ];
@@ -231,8 +232,9 @@ export class FileRuntimeStore implements RuntimeStore {
     role: ConversationMessage["role"],
     channel: ConversationMessage["channel"],
     content: string,
+    reasoning?: string | null,
   ): ConversationMessage {
-    return this.memoryStore.createMessage(role, channel, content);
+    return this.memoryStore.createMessage(role, channel, content, reasoning);
   }
 
   listActionResults(): ActionExecutionResult[] {

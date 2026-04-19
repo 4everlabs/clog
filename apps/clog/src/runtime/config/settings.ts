@@ -7,8 +7,6 @@ export const DEFAULT_UI_TIMEZONE = "America/Los_Angeles";
 
 export const DEFAULT_MODEL_CHOICES = [
   DEFAULT_CLOG_MODEL,
-  "google/gemma-4-26b-a4b-it:free",
-  "stepfun/step-3.5-flash",
 ] as const;
 
 const ExecutionModeSchema = z.enum(["observe", "propose", "execute"]);

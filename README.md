@@ -74,7 +74,9 @@ The runtime expects per-instance state under `.runtime/instances/<instance>/`:
 - `read-only/settings.json`: runtime-owned settings.
 - `read-only/tools.json`: tool visibility and enablement.
 - `read-only/wakeup.json`: wakeup enabled flag, prompt titles/prompts, and UTC daily schedule.
-- `storage/`: structured runtime state.
+- `storage/state/`: structured runtime state snapshots and indexes.
+- `storage/conversations/`: per-thread `notes.jsonl` and `chat.jsonl` records.
+- `storage/sessions/<utc-timestamp>/system.log`: one runtime log session per process run, titled by UTC timestamp.
 - `workspace/`: model-targeted writable workspace.
 
 This is a serverful setup and needs to run on a VM or container with a filesystem at minimum. For a serverless version, see [`vercel-claw`](https://github.com/henryoman/vercel-claw).

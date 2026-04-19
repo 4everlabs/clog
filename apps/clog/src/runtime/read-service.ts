@@ -268,6 +268,7 @@ export class RuntimeReadService {
         messages: thread.messages.slice(-messageLimitPerThread).map((message) => ({
           role: message.role,
           content: message.content,
+          ...(message.reasoning ? { reasoning: message.reasoning } : {}),
           createdAt: message.createdAt,
         })),
       })),
@@ -510,6 +511,7 @@ export class RuntimeReadService {
         role: message.role,
         channel: message.channel,
         content: message.content,
+        ...(message.reasoning ? { reasoning: message.reasoning } : {}),
         createdAt: message.createdAt,
       })),
       totalMessages,
@@ -651,7 +653,16 @@ export class RuntimeReadService {
       return [];
     }
 
-    return readdirSync(sessionsDir, { withFileTypes: true })
+    const entries = readdirSync(sessionsDir, { withFileTypes: true });
+    const rootFiles = entries
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".log"))
+      .map((entry) => ({
+        fileName: entry.name,
+        relativePath: join("sessions", entry.name),
+        fullPath: join(sessionsDir, entry.name),
+        sortKey: `0000-root/${entry.name}`,
+      }));
+    const nestedSessionFiles = entries
       .filter((entry) => entry.isDirectory())
       .flatMap((sessionEntry) => {
         const sessionDirPath = join(sessionsDir, sessionEntry.name);
@@ -664,6 +675,11 @@ export class RuntimeReadService {
             sortKey: `${sessionEntry.name}/${entry.name}`,
           }));
       });
+
+    return [
+      ...nestedSessionFiles,
+      ...rootFiles,
+    ];
   }
 
   private listLegacyLogFiles(): RuntimeLogFileDescriptor[] {

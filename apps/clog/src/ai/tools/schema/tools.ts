@@ -935,6 +935,7 @@ const RuntimeSnapshotFindingSchema = z.object({
 const RuntimeSnapshotMessageSchema = z.object({
   role: z.enum(["system", "user", "agent"]),
   content: z.string(),
+  reasoning: z.string().min(1).optional(),
   createdAt: z.number().int().nonnegative(),
 }).strict();
 
@@ -1062,6 +1063,7 @@ export const RuntimeConversationMessageSchema = z.object({
   role: z.enum(["system", "user", "agent"]),
   channel: z.enum(["web", "telegram", "tui", "system"]),
   content: z.string(),
+  reasoning: z.string().min(1).optional(),
   createdAt: z.number().int().nonnegative(),
 }).strict();
 

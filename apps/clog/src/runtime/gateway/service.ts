@@ -219,12 +219,12 @@ export class AgentGateway implements AgentGatewaySurface {
       const threadWithUserMessage = this.deps.store.appendMessages(thread.id, [userMessage]);
 
       const findings = this.deps.store.listFindings();
-      const replyText = await this.deps.brain.reply({
+      const reply = await this.deps.brain.replyDetailed({
         thread: threadWithUserMessage,
         message: input.message,
         findings,
       });
-      const replyMessage = this.deps.store.createMessage("agent", input.channel, replyText);
+      const replyMessage = this.deps.store.createMessage("agent", input.channel, reply.text, reply.reasoning);
       const updatedThread = this.deps.store.appendMessages(thread.id, [replyMessage]);
       const recommendedActions = findings.filter((finding) => finding.state === "open")[0]?.proposedActions ?? [];
 

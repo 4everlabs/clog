@@ -1,8 +1,9 @@
 import { parseArgs } from "node:util";
 import { bootstrapRuntime } from "./runtime/bootstrap";
+import { getRuntimeProcessEnv } from "./runtime/config";
 import { loadRuntimeWakeupConfig } from "./runtime/config/wakeup";
 import { DailyWakeupScheduler, resolveStartupWakeupRun, runResolvedWakeup } from "./runtime/wakeup-scheduler";
-import { PostHogPerformanceReporter } from "./integrations/posthog/performance-reporter";
+import { PostHogPerformanceReporter } from "./ai/integrations/posthog/performance-reporter";
 import { startRuntimeServer, type RuntimeServerInfo } from "./runtime/server";
 import { initializeRuntimeLogCapture } from "./storage/logs";
 import { startTelegramSurface } from "../../frontends/telegram/src";
@@ -50,7 +51,7 @@ export const parseRuntimeStartupOptions = (
 
 export const runStartupWakeup = async (
   runtime: RuntimeBootstrap,
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = getRuntimeProcessEnv(),
   workspaceRoot = process.cwd(),
   hooks: RuntimeStartupWakeupHooks = {},
 ): Promise<boolean> => {
@@ -75,7 +76,7 @@ export const runStartupWakeup = async (
 export const startDefaultRuntimeServer = async (
   options: Partial<RuntimeStartupOptions> = {},
 ): Promise<RuntimeServerInfo> => {
-  initializeRuntimeLogCapture();
+  initializeRuntimeLogCapture(getRuntimeProcessEnv());
   const runtime = bootstrapRuntime();
   const server = startRuntimeServer(runtime);
   if (runtime.env.posthog.projectId && runtime.env.posthog.personalApiKey) {

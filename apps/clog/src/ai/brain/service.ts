@@ -35,6 +35,11 @@ export interface BrainReplyInput {
   readonly findings: readonly AgentFinding[];
 }
 
+export interface BrainReplyResult {
+  readonly text: string;
+  readonly reasoning: string | null;
+}
+
 type BrainFallbackReason = "missing_api_key" | "model_unavailable";
 
 interface BrainModelPayload {
@@ -88,6 +93,11 @@ export class BrainService {
   }
 
   async reply(input: BrainReplyInput): Promise<string> {
+    const result = await this.replyDetailed(input);
+    return result.text;
+  }
+
+  async replyDetailed(input: BrainReplyInput): Promise<BrainReplyResult> {
     if (!this.apiKey) {
       return this.buildFallbackReply(input.findings, "missing_api_key");
     }
@@ -201,7 +211,7 @@ export class BrainService {
     return Math.max(1, Math.ceil(content.length / 4) + 8);
   }
 
-  private async callLlm(systemPrompt: string, messages: readonly ModelMessage[]): Promise<string> {
+  private async callLlm(systemPrompt: string, messages: readonly ModelMessage[]): Promise<BrainReplyResult> {
     if (this.aiConfig?.provider === "openrouter") {
       return await this.callOpenRouter(systemPrompt, messages);
     }
@@ -209,10 +219,13 @@ export class BrainService {
     return await this.callProviderApi(this.toProviderMessages(systemPrompt, messages));
   }
 
-  private async requestLiveReply(payload: BrainModelPayload): Promise<string> {
-    const response = (await this.callLlm(payload.systemPrompt, payload.messages)).trim();
-    if (response) {
-      return response;
+  private async requestLiveReply(payload: BrainModelPayload): Promise<BrainReplyResult> {
+    const response = await this.callLlm(payload.systemPrompt, payload.messages);
+    if (response.text.trim()) {
+      return {
+        text: response.text.trim(),
+        reasoning: response.reasoning,
+      };
     }
 
     throw new Error("Model returned an empty response");
@@ -242,7 +255,43 @@ export class BrainService {
     ) as ToolSet;
   }
 
-  private async callOpenRouter(systemPrompt: string, messages: readonly ModelMessage[]): Promise<string> {
+  private supportsOpenRouterReasoning(): boolean {
+    const modelId = this.modelName.toLowerCase();
+    return modelId.startsWith("openai/gpt-5") || modelId.startsWith("gpt-5");
+  }
+
+  private buildOpenRouterProviderOptions():
+    | {
+      readonly openrouter: {
+        readonly reasoning: {
+          readonly effort: "minimal";
+          readonly exclude: false;
+        };
+      };
+    }
+    | undefined {
+    if (!this.supportsOpenRouterReasoning()) {
+      return undefined;
+    }
+
+    return {
+      openrouter: {
+        reasoning: {
+          effort: "minimal",
+          exclude: false,
+        },
+      },
+    };
+  }
+
+  private async readReasoningText(value: unknown): Promise<string | null> {
+    const text = await Promise.resolve(value);
+    return typeof text === "string" && text.trim()
+      ? text.trim()
+      : null;
+  }
+
+  private async callOpenRouter(systemPrompt: string, messages: readonly ModelMessage[]): Promise<BrainReplyResult> {
     const openrouter = createOpenRouter({
       apiKey: this.apiKey,
       compatibility: "strict",
@@ -259,17 +308,25 @@ export class BrainService {
       messages: [...messages],
       temperature: this.temperature,
       maxOutputTokens: this.maxOutputTokens,
+      providerOptions: this.buildOpenRouterProviderOptions(),
       tools,
       stopWhen: tools ? stepCountIs(this.maxToolRounds) : undefined,
     });
+    const primaryReasoning = await this.readReasoningText(result.reasoningText);
+    const primaryText = (await Promise.resolve(result.text)).trim();
 
-    const primaryText = result.text.trim();
     if (primaryText) {
-      return primaryText;
+      return {
+        text: primaryText,
+        reasoning: primaryReasoning,
+      };
     }
 
     if (result.toolResults.length === 0) {
-      return "";
+      return {
+        text: "",
+        reasoning: primaryReasoning,
+      };
     }
 
     const followup = await generateText({
@@ -285,9 +342,15 @@ export class BrainService {
       ],
       temperature: this.temperature,
       maxOutputTokens: this.maxOutputTokens,
+      providerOptions: this.buildOpenRouterProviderOptions(),
     });
+    const followupText = (await Promise.resolve(followup.text)).trim();
+    const followupReasoning = await this.readReasoningText(followup.reasoningText);
 
-    return followup.text.trim();
+    return {
+      text: followupText,
+      reasoning: followupReasoning ?? primaryReasoning,
+    };
   }
 
   private toProviderMessages(
@@ -309,7 +372,7 @@ export class BrainService {
     ];
   }
 
-  private async callProviderApi(messages: ProviderRequestMessage[]): Promise<string> {
+  private async callProviderApi(messages: ProviderRequestMessage[]): Promise<BrainReplyResult> {
     const conversation = [...messages];
 
     for (let round = 0; round < this.maxToolRounds; round += 1) {
@@ -318,7 +381,10 @@ export class BrainService {
       const assistantContent = assistantMessage.content?.trim() ?? "";
 
       if (toolCalls.length === 0) {
-        return assistantContent;
+        return {
+          text: assistantContent,
+          reasoning: null,
+        };
       }
 
       conversation.push({
@@ -376,7 +442,7 @@ export class BrainService {
   private buildFallbackReply(
     findings: readonly AgentFinding[],
     reason: BrainFallbackReason,
-  ): string {
+  ): BrainReplyResult {
     const openFindings = findings.filter((finding) => finding.state === "open");
     const highestPriority = openFindings[0];
     const lead = reason === "missing_api_key"
@@ -384,9 +450,15 @@ export class BrainService {
       : "I couldn't get a live model answer just now.";
 
     if (!highestPriority) {
-      return `${lead} There are no active findings right now. Ask me to inspect runtime health or run another monitoring cycle if you want a fresh check.`;
+      return {
+        text: `${lead} There are no active findings right now. Ask me to inspect runtime health or run another monitoring cycle if you want a fresh check.`,
+        reasoning: null,
+      };
     }
 
-    return `${lead} The highest-priority open finding is "${highestPriority.title}". The safest next step is to review that finding and decide whether to investigate, notify, or prepare a follow-up action.`;
+    return {
+      text: `${lead} The highest-priority open finding is "${highestPriority.title}". The safest next step is to review that finding and decide whether to investigate, notify, or prepare a follow-up action.`,
+      reasoning: null,
+    };
   }
 }

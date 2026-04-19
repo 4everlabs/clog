@@ -119,7 +119,13 @@ describe("FileRuntimeStore", () => {
 
     const telegramThread = store.seedOperatorThread("telegram");
     const telegramUserMessage = store.createMessage("user", "telegram", "hello from telegram");
-    store.appendMessages(telegramThread.id, [telegramUserMessage]);
+    const telegramReplyMessage = store.createMessage(
+      "agent",
+      "telegram",
+      "hello from clog",
+      "Checked the most recent thread context before replying.",
+    );
+    store.appendMessages(telegramThread.id, [telegramUserMessage, telegramReplyMessage]);
     store.close();
 
     const tuiConversationDir = getConversationDirectoryForThread(store.config.storageDir, tuiThread.id);
@@ -157,5 +163,10 @@ describe("FileRuntimeStore", () => {
       channel: "telegram",
     });
     expect(telegramChatEntries.some((entry) => entry.type === "message" && entry.content === "hello from telegram")).toBe(true);
+    expect(telegramChatEntries.some((entry) => (
+      entry.type === "message"
+      && entry.content === "hello from clog"
+      && entry.reasoning === "Checked the most recent thread context before replying."
+    ))).toBe(true);
   });
 });

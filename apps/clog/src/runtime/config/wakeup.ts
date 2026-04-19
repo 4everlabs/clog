@@ -5,6 +5,7 @@ import type {
   RuntimeWakeupPromptDefinition,
   RuntimeWakeupScheduleEntry,
 } from "@clog/types";
+import { getRuntimeProcessEnv } from "../config";
 import { resolveRuntimeWakeupPath } from "../../../../../tests/runtime-instance-template";
 
 const WAKEUP_TIME_UTC_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -177,7 +178,7 @@ export const buildRuntimeWakeupPrompt = (
 };
 
 export const resolveRuntimeWakeupConfigPath = (
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = getRuntimeProcessEnv(),
   workspaceRoot = process.cwd(),
 ): string => {
   return resolveRuntimeWakeupPath(env, workspaceRoot);
@@ -188,7 +189,7 @@ export const resolveRuntimeWakeupStoragePath = (readOnlyDir: string): string => 
 };
 
 export const loadRuntimeWakeupConfig = (
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = getRuntimeProcessEnv(),
   workspaceRoot = process.cwd(),
 ): RuntimeWakeupConfig | null => {
   return normalizeRuntimeWakeupConfig(
@@ -198,7 +199,7 @@ export const loadRuntimeWakeupConfig = (
 
 export const loadRuntimeWakeupPrompt = (
   sharedWakeupPrompt: string | null,
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = getRuntimeProcessEnv(),
   workspaceRoot = process.cwd(),
 ): string | null => {
   return buildRuntimeWakeupPrompt(sharedWakeupPrompt, loadRuntimeWakeupConfig(env, workspaceRoot));

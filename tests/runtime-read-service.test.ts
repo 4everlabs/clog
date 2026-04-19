@@ -30,12 +30,14 @@ describe("RuntimeReadService", () => {
 
     const newestSessionDir = join(storageDir, "sessions", "2026-04-19T02-29-45-655Z");
     const olderSessionDir = join(storageDir, "sessions", "2026-04-18T22-34-18-530Z");
+    const rootSessionLogPath = join(storageDir, "sessions", "system.log");
     const legacyLogsDir = join(storageDir, "logs");
     mkdirSync(newestSessionDir, { recursive: true });
     mkdirSync(olderSessionDir, { recursive: true });
     mkdirSync(legacyLogsDir, { recursive: true });
     writeFileSync(join(newestSessionDir, "system.log"), "first\nsecond\nthird\n");
     writeFileSync(join(olderSessionDir, "system.log"), "older one\nolder two\n");
+    writeFileSync(rootSessionLogPath, "root one\nroot two\n");
     writeFileSync(join(legacyLogsDir, "2026-04-17T00-00-00-000Z.log"), "legacy one\nlegacy two\n");
 
     const service = new RuntimeReadService({
@@ -51,7 +53,7 @@ describe("RuntimeReadService", () => {
     });
 
     const recentLogs = service.getRecentLogs({
-      fileLimit: 3,
+      fileLimit: 4,
       lineLimit: 2,
     });
 
@@ -79,6 +81,14 @@ describe("RuntimeReadService", () => {
         returnedLines: 2,
         truncated: false,
         content: "legacy one\nlegacy two",
+      },
+      {
+        fileName: "system.log",
+        relativePath: "sessions/system.log",
+        totalLines: 2,
+        returnedLines: 2,
+        truncated: false,
+        content: "root one\nroot two",
       },
     ]);
 
@@ -392,6 +402,7 @@ describe("RuntimeReadService", () => {
       messageLimit: 10,
     });
     expect(recentPage.totalMessages).toBe(2);
+    expect(recentPage.messages.find((message) => message.role === "agent")?.reasoning).toBeUndefined();
     expect(recentPage.nextMessageOffset).toBeNull();
     expect(recentPage.nextRequest).toBeNull();
 
@@ -420,5 +431,57 @@ describe("RuntimeReadService", () => {
     const capped = service.searchMessages({ query: "token-", threadId: alpha.id, limit: 3 });
     expect(capped.matches).toHaveLength(3);
     expect(capped.truncated).toBe(true);
+  });
+
+  test("includes optional reasoning when reading conversations and snapshots", () => {
+    const instanceRoot = mkdtempSync(join(tmpdir(), "clog-runtime-reasoning-"));
+    cleanupPaths.push(instanceRoot);
+    const storageDir = join(instanceRoot, "storage");
+    const stateDir = join(storageDir, "state");
+    const workspaceDir = join(instanceRoot, "workspace");
+    const readOnlyDir = join(instanceRoot, "read-only");
+    mkdirSync(stateDir, { recursive: true });
+    mkdirSync(workspaceDir, { recursive: true });
+    mkdirSync(readOnlyDir, { recursive: true });
+
+    const store = new InMemoryRuntimeStore();
+    const thread = store.createThread("web", "Reasoning thread");
+    store.appendMessages(thread.id, [
+      store.createMessage("user", "web", "What changed?"),
+      store.createMessage(
+        "agent",
+        "web",
+        "The latest deploy looks healthy.",
+        "Checked the deploy health first, then confirmed there are no active alerts.",
+      ),
+    ]);
+
+    const service = new RuntimeReadService({
+      storage: {
+        instanceId: "test",
+        instanceRoot,
+        readOnlyDir,
+        workspaceDir,
+        storageDir,
+        stateDir,
+      },
+      store,
+    });
+
+    const conversation = service.getConversation({
+      threadId: thread.id,
+      messageLimit: 10,
+    });
+    expect(conversation.messages[1]?.reasoning).toBe(
+      "Checked the deploy health first, then confirmed there are no active alerts.",
+    );
+
+    const snapshot = service.getStateSnapshot({
+      threadLimit: 10,
+      messageLimitPerThread: 10,
+    });
+    expect(snapshot.recentThreads[0]?.messages[1]?.reasoning).toBe(
+      "Checked the deploy health first, then confirmed there are no active alerts.",
+    );
   });
 });
