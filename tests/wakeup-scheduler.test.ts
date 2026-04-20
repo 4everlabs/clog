@@ -126,6 +126,7 @@ describe("wakeup scheduler", () => {
       runtime,
       workspaceRoot,
       pollIntervalMs: 10,
+      env: {},
       now: () => now,
     });
 

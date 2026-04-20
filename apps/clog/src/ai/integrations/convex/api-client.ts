@@ -1,5 +1,5 @@
 import type { ConvexQuerySummary, ConvexQueryRequest, SurfaceConvexQueryResponse } from "@clog/types";
-import type { ConvexRuntimeConfig } from "../../runtime/config";
+import type { ConvexRuntimeConfig } from "../../../runtime/config";
 
 type FetchFn = (input: URL | RequestInfo, init?: RequestInit) => Promise<Response>;
 

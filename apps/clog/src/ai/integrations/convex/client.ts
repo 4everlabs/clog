@@ -1,5 +1,5 @@
 import type { IntegrationHealthView } from "@clog/types";
-import type { ConvexRuntimeConfig } from "../../runtime/config";
+import type { ConvexRuntimeConfig } from "../../../runtime/config";
 
 export class ConvexIntegrationClient {
   constructor(private readonly config: ConvexRuntimeConfig) {}

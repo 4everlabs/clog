@@ -1,5 +1,5 @@
 import type { PostHogInsightQueryResult, PostHogOrganizationSummary, PostHogProjectSummary } from "@clog/types";
-import type { PostHogRuntimeConfig } from "../../runtime/config";
+import type { PostHogRuntimeConfig } from "../../../runtime/config";
 import { PostHogMcpClient } from "./mcp-client";
 
 type FetchFn = (input: URL | RequestInfo, init?: RequestInit) => Promise<Response>;

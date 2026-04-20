@@ -1,5 +1,5 @@
 import type { IntegrationHealthView, RuntimeObservation } from "@clog/types";
-import type { PostHogRuntimeConfig } from "../../runtime/config";
+import type { PostHogRuntimeConfig } from "../../../runtime/config";
 import type { PostHogApiClient } from "./api-client";
 
 export interface PostHogIntegrationClientConfig {
@@ -137,7 +137,9 @@ export class PostHogIntegrationClient {
       return [];
     }
 
-    const results: Array<RuntimeObservation | null> = await Promise.all(this.deps.config.insightMonitors.map(async (monitor) => {
+    const results: Array<RuntimeObservation | null> = await Promise.all(this.deps.config.insightMonitors.map(async (
+      monitor: PostHogRuntimeConfig["insightMonitors"][number],
+    ) => {
       const response = await this.deps.api.runQuery(`monitor_${sanitizeId(monitor.name)}`, monitor.query);
       const row = response.results[0];
       if (!row) {

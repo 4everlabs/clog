@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { isAbsolute, resolve, sep } from "node:path";
 import type { PostHogEndpointRunRequest, PostHogCliCommandResponse } from "@clog/types";
-import type { PostHogRuntimeConfig } from "../../runtime/config";
+import type { PostHogRuntimeConfig } from "../../../runtime/config";
 
 const DEFAULT_CLI_PACKAGE = "@posthog/cli";
 
