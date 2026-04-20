@@ -8,3 +8,59 @@ storage=/Volumes/T9/cursor/clog/.runtime/instances/verify-disabled-integrations/
 [clog] runtime ready on http://127.0.0.1:6901
 [posthog-mcp] calling error-tracking-issues-list
 [posthog-mcp] initialized {"endpoint":"https://mcp.posthog.com/mcp","protocolVersion":"2025-06-18","sessionId":"8468a1fd01614f778f49f82b12c17494c8d0ae6c10e5fc755cd3c68b480490dd"}
+[posthog-mcp] calling error-tracking-issues-list
+[posthog-mcp] calling error-tracking-issues-list
+[brain] dispatching model payload {
+  "provider": "openrouter",
+  "model": "openai/gpt-5.4-nano",
+  "toolNames": [
+    "posthog_list_errors",
+    "posthog_get_documented_tool_catalog",
+    "posthog_list_mcp_tools",
+    "posthog_call_mcp_tool",
+    "posthog_get_dashboard_snapshot",
+    "posthog_get_info",
+    "posthog_get_health_summary",
+    "posthog_get_asset_summary",
+    "posthog_get_release_summary",
+    "notion_get_todo_list",
+    "runtime_get_info",
+    "runtime_list_conversations",
+    "runtime_get_conversation",
+    "runtime_search_messages",
+    "runtime_read_knowledge",
+    "runtime_read_json",
+    "runtime_write_workspace_file"
+  ],
+  "systemPromptChars": 7264,
+  "systemPromptEstimatedTokens": 1824,
+  "messageCount": 2,
+  "messageRoles": [
+    "system",
+    "user"
+  ],
+  "messageEstimatedTokens": 86,
+  "latestMessageChars": 176
+}
+[posthog-mcp] calling query-run
+[posthog-mcp] calling query-run
+[posthog-mcp] calling query-run
+[posthog-mcp] calling query-run
+[posthog-mcp] calling query-run
+[posthog-mcp] calling query-run
+[posthog-mcp] calling query-run
+[posthog-mcp] calling query-run
+[clog] scheduled wakeup schedulerSmoke @ 04:49 UTC checked 5 integrations and 10 findings
+[clog] scheduled wakeup schedulerSmoke @ 04:49 UTC reply: ✅ Scheduled wakeup fired for **04:49 UTC** (this scheduler smoke test thread is active and responding).
+
+Highest-priority runtime signal: **Critical slow LCP on profile-related pages** — **/profile**, **/profile/my-family**, and **/profile/
+[posthog-mcp] calling error-tracking-issues-list
+[posthog-mcp] calling query-run
+[posthog-mcp] calling query-run
+[posthog-mcp] calling query-run
+[posthog-mcp] calling query-run
+[posthog-mcp] calling query-run
+[posthog-mcp] calling query-run
+[posthog-mcp] calling query-run
+[posthog-mcp] calling query-run
+[posthog-performance] wrote report 2026-04-20T05:00:00.000Z

@@ -1,0 +1,451 @@
+{
+  "updatedAt": 1776660562510,
+  "operations": {
+    "dashboardSnapshot": {
+      "lastRecordedAt": 1776660562510,
+      "history": [
+        {
+          "recordedAt": 1776660562510,
+          "data": {
+            "generatedAt": 1776660560449,
+            "windowMinutes": 720,
+            "windowStartAt": 1776617360449,
+            "windowEndAt": 1776660560449,
+            "summary": {
+              "pageviews": 525,
+              "uniqueVisitors": 21,
+              "webVitalsEvents": 95,
+              "exceptionEvents": 7,
+              "distinctExceptionIssues": 4,
+              "webVitalsCoverageRatio": 0.181,
+              "errorRatePer1kPageviews": 13.3,
+              "slowLcpPages": 9,
+              "slowInpPages": 0,
+              "slowFcpPages": 3,
+              "slowClsPages": 0,
+              "productionReadinessScore": 0,
+              "anomalyCount": 8
+            },
+            "previousWindow": {
+              "pageviews": 212,
+              "uniqueVisitors": 139,
+              "webVitalsEvents": 89,
+              "exceptionEvents": 1,
+              "distinctExceptionIssues": 1,
+              "pageviewsDeltaPercent": 147.6,
+              "uniqueVisitorsDeltaPercent": -84.9,
+              "webVitalsDeltaPercent": 6.7,
+              "exceptionDeltaPercent": 600,
+              "distinctExceptionIssuesDeltaPercent": 300
+            },
+            "topPaths": [
+              {
+                "path": "/profiles/select",
+                "pageviews": 77
+              },
+              {
+                "path": "/pricing",
+                "pageviews": 77
+              },
+              {
+                "path": "/eve-chat",
+                "pageviews": 49
+              },
+              {
+                "path": "/profile",
+                "pageviews": 47
+              },
+              {
+                "path": "/",
+                "pageviews": 40
+              },
+              {
+                "path": "/profile/my-family",
+                "pageviews": 31
+              },
+              {
+                "path": "/profile/timeline",
+                "pageviews": 27
+              },
+              {
+                "path": "/onboarding/intro/profile-roots",
+                "pageviews": 19
+              },
+              {
+                "path": "/profile/collection",
+                "pageviews": 18
+              },
+              {
+                "path": "/onboarding/intro/parents-names",
+                "pageviews": 14
+              },
+              {
+                "path": "/onboarding/intro/relationship",
+                "pageviews": 14
+              },
+              {
+                "path": "/onboarding/intro/display-name-birthday",
+                "pageviews": 13
+              },
+              {
+                "path": "/dashboard",
+                "pageviews": 12
+              },
+              {
+                "path": "/onboarding/intro/siblings",
+                "pageviews": 10
+              },
+              {
+                "path": "/onboarding/intro/birthplace-current-city",
+                "pageviews": 9
+              },
+              {
+                "path": "/onboarding/intro/profile-photo",
+                "pageviews": 9
+              },
+              {
+                "path": "/onboarding/intro/children",
+                "pageviews": 8
+              },
+              {
+                "path": "/onboarding/intro/family-members",
+                "pageviews": 8
+              },
+              {
+                "path": "/onboarding/intro/welcome",
+                "pageviews": 7
+              },
+              {
+                "path": "/onboarding/intro/visibility",
+                "pageviews": 5
+              }
+            ],
+            "lcp": [
+              {
+                "path": "/profile",
+                "value": 12196,
+                "unit": "ms",
+                "samples": 5,
+                "status": "slow"
+              },
+              {
+                "path": "/profile/my-family",
+                "value": 12036,
+                "unit": "ms",
+                "samples": 1,
+                "status": "slow"
+              },
+              {
+                "path": "/profile/collection",
+                "value": 4996,
+                "unit": "ms",
+                "samples": 1,
+                "status": "slow"
+              },
+              {
+                "path": "/onboarding/intro/display-name-birthday",
+                "value": 4268,
+                "unit": "ms",
+                "samples": 3,
+                "status": "slow"
+              },
+              {
+                "path": "/onboarding/intro/profile-roots",
+                "value": 3928,
+                "unit": "ms",
+                "samples": 1,
+                "status": "slow"
+              },
+              {
+                "path": "/onboarding/intro/family-members",
+                "value": 3832,
+                "unit": "ms",
+                "samples": 1,
+                "status": "slow"
+              },
+              {
+                "path": "/dashboard",
+                "value": 3745,
+                "unit": "ms",
+                "samples": 2,
+                "status": "slow"
+              },
+              {
+                "path": "/onboarding/intro/profile-photo",
+                "value": 2932,
+                "unit": "ms",
+                "samples": 1,
+                "status": "slow"
+              },
+              {
+                "path": "/eve-chat",
+                "value": 2892,
+                "unit": "ms",
+                "samples": 7,
+                "status": "slow"
+              },
+              {
+                "path": "/",
+                "value": 1432,
+                "unit": "ms",
+                "samples": 13,
+                "status": "good"
+              },
+              {
+                "path": "/profile/karter-taylor/my-family",
+                "value": 1000,
+                "unit": "ms",
+                "samples": 1,
+                "status": "good"
+              }
+            ],
+            "inp": [
+              {
+                "path": "/profile",
+                "value": 72,
+                "unit": "ms",
+                "samples": 1,
+                "status": "good"
+              },
+              {
+                "path": "/eve-chat",
+                "value": 60,
+                "unit": "ms",
+                "samples": 2,
+                "status": "good"
+              },
+              {
+                "path": "/profile/karter-taylor/my-family",
+                "value": 56,
+                "unit": "ms",
+                "samples": 1,
+                "status": "good"
+              },
+              {
+                "path": "/onboarding/intro/payment",
+                "value": 48,
+                "unit": "ms",
+                "samples": 1,
+                "status": "good"
+              },
+              {
+                "path": "/",
+                "value": 48,
+                "unit": "ms",
+                "samples": 4,
+                "status": "good"
+              },
+              {
+                "path": "/profile/gio-mancuso-7",
+                "value": 48,
+                "unit": "ms",
+                "samples": 1,
+                "status": "good"
+              }
+            ],
+            "fcp": [
+              {
+                "path": "/profile",
+                "value": 6520,
+                "unit": "ms",
+                "samples": 7,
+                "status": "slow"
+              },
+              {
+                "path": "/profile/my-family",
+                "value": 2195,
+                "unit": "ms",
+                "samples": 2,
+                "status": "slow"
+              },
+              {
+                "path": "/eve-chat",
+                "value": 1852,
+                "unit": "ms",
+                "samples": 9,
+                "status": "slow"
+              },
+              {
+                "path": "/",
+                "value": 1776,
+                "unit": "ms",
+                "samples": 31,
+                "status": "good"
+              },
+              {
+                "path": "/onboarding/intro/profile-roots",
+                "value": 1740,
+                "unit": "ms",
+                "samples": 1,
+                "status": "good"
+              },
+              {
+                "path": "/onboarding/intro/display-name-birthday",
+                "value": 1571,
+                "unit": "ms",
+                "samples": 2,
+                "status": "good"
+              },
+              {
+                "path": "/onboarding/intro/profile-photo",
+                "value": 1160,
+                "unit": "ms",
+                "samples": 1,
+                "status": "good"
+              },
+              {
+                "path": "/profile/karter-taylor",
+                "value": 1000,
+                "unit": "ms",
+                "samples": 1,
+                "status": "good"
+              },
+              {
+                "path": "/profile/collection",
+                "value": 868,
+                "unit": "ms",
+                "samples": 1,
+                "status": "good"
+              },
+              {
+                "path": "/onboarding/intro/welcome",
+                "value": 660,
+                "unit": "ms",
+                "samples": 1,
+                "status": "good"
+              }
+            ],
+            "cls": [
+              {
+                "path": "/",
+                "value": 0.039,
+                "unit": "score",
+                "samples": 8,
+                "status": "good"
+              },
+              {
+                "path": "/profile/karter-taylor/my-family",
+                "value": 0.005,
+                "unit": "score",
+                "samples": 1,
+                "status": "good"
+              },
+              {
+                "path": "/profile",
+                "value": 0.001,
+                "unit": "score",
+                "samples": 1,
+                "status": "good"
+              },
+              {
+                "path": "/onboarding/intro/payment",
+                "value": 0,
+                "unit": "score",
+                "samples": 1,
+                "status": "good"
+              }
+            ],
+            "anomalies": [
+              {
+                "id": "exception-spike",
+                "kind": "exception-spike",
+                "severity": "warning",
+                "title": "Exceptions are spiking",
+                "summary": "Exception volume rose to 7 from 1.",
+                "metric": "exception_events",
+                "currentValue": 7,
+                "previousValue": 1,
+                "threshold": 2,
+                "path": null
+              },
+              {
+                "id": "weak-web-vitals-coverage",
+                "kind": "weak-web-vitals-coverage",
+                "severity": "warning",
+                "title": "Web vitals coverage is thin",
+                "summary": "Only 18.1% of pageviews included web vitals events.",
+                "metric": "web_vitals_coverage_ratio",
+                "currentValue": 18.1,
+                "previousValue": null,
+                "threshold": 30,
+                "path": null
+              },
+              {
+                "id": "slow-lcp-/profile",
+                "kind": "slow-lcp",
+                "severity": "critical",
+                "title": "Slow LCP on /profile",
+                "summary": "LCP p75 is 12196ms across 5 samples.",
+                "metric": "lcp_p75_ms",
+                "currentValue": 12196,
+                "previousValue": null,
+                "threshold": 2500,
+                "path": "/profile"
+              },
+              {
+                "id": "slow-lcp-/profile/my-family",
+                "kind": "slow-lcp",
+                "severity": "critical",
+                "title": "Slow LCP on /profile/my-family",
+                "summary": "LCP p75 is 12036ms across 1 samples.",
+                "metric": "lcp_p75_ms",
+                "currentValue": 12036,
+                "previousValue": null,
+                "threshold": 2500,
+                "path": "/profile/my-family"
+              },
+              {
+                "id": "slow-lcp-/profile/collection",
+                "kind": "slow-lcp",
+                "severity": "critical",
+                "title": "Slow LCP on /profile/collection",
+                "summary": "LCP p75 is 4996ms across 1 samples.",
+                "metric": "lcp_p75_ms",
+                "currentValue": 4996,
+                "previousValue": null,
+                "threshold": 2500,
+                "path": "/profile/collection"
+              },
+              {
+                "id": "slow-fcp-/profile",
+                "kind": "slow-fcp",
+                "severity": "critical",
+                "title": "Slow FCP on /profile",
+                "summary": "FCP p75 is 6520ms across 7 samples.",
+                "metric": "fcp_p75_ms",
+                "currentValue": 6520,
+                "previousValue": null,
+                "threshold": 1800,
+                "path": "/profile"
+              },
+              {
+                "id": "slow-fcp-/profile/my-family",
+                "kind": "slow-fcp",
+                "severity": "warning",
+                "title": "Slow FCP on /profile/my-family",
+                "summary": "FCP p75 is 2195ms across 2 samples.",
+                "metric": "fcp_p75_ms",
+                "currentValue": 2195,
+                "previousValue": null,
+                "threshold": 1800,
+                "path": "/profile/my-family"
+              },
+              {
+                "id": "slow-fcp-/eve-chat",
+                "kind": "slow-fcp",
+                "severity": "warning",
+                "title": "Slow FCP on /eve-chat",
+                "summary": "FCP p75 is 1852ms across 9 samples.",
+                "metric": "fcp_p75_ms",
+                "currentValue": 1852,
+                "previousValue": null,
+                "threshold": 1800,
+                "path": "/eve-chat"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

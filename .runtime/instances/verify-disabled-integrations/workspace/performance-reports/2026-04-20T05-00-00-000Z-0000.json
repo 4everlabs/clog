@@ -1,0 +1,139 @@
+{
+  "kind": "posthog-performance-report",
+  "status": "ok",
+  "createdAt": 1776661200000,
+  "generatedAt": 1776661200000,
+  "windowMinutes": 60,
+  "windowStartAt": 1776657600000,
+  "windowEndAt": 1776661200000,
+  "summary": {
+    "pageviews": 16,
+    "uniqueVisitors": 2,
+    "webVitalsEvents": 3,
+    "exceptionEvents": 0,
+    "distinctExceptionIssues": 0,
+    "webVitalsCoverageRatio": 0.188,
+    "errorRatePer1kPageviews": 0,
+    "slowLcpPages": 0,
+    "slowInpPages": 0,
+    "slowFcpPages": 2,
+    "slowClsPages": 0,
+    "productionReadinessScore": 48,
+    "anomalyCount": 3
+  },
+  "previousWindow": {
+    "pageviews": 32,
+    "uniqueVisitors": 4,
+    "webVitalsEvents": 8,
+    "exceptionEvents": 0,
+    "distinctExceptionIssues": 0,
+    "pageviewsDeltaPercent": -50,
+    "uniqueVisitorsDeltaPercent": -50,
+    "webVitalsDeltaPercent": -62.5,
+    "exceptionDeltaPercent": null,
+    "distinctExceptionIssuesDeltaPercent": null
+  },
+  "topPaths": [
+    {
+      "path": "/eve-chat",
+      "pageviews": 7
+    },
+    {
+      "path": "/profile",
+      "pageviews": 3
+    },
+    {
+      "path": "/stats",
+      "pageviews": 2
+    },
+    {
+      "path": "/profile/timeline",
+      "pageviews": 1
+    },
+    {
+      "path": "/profile/my-family",
+      "pageviews": 1
+    },
+    {
+      "path": "/",
+      "pageviews": 1
+    },
+    {
+      "path": "/profile/collection",
+      "pageviews": 1
+    }
+  ],
+  "lcp": [
+    {
+      "path": "/",
+      "value": 2328,
+      "unit": "ms",
+      "samples": 1,
+      "status": "good"
+    }
+  ],
+  "inp": [],
+  "fcp": [
+    {
+      "path": "/profile",
+      "value": 4792,
+      "unit": "ms",
+      "samples": 1,
+      "status": "slow"
+    },
+    {
+      "path": "/",
+      "value": 1940,
+      "unit": "ms",
+      "samples": 1,
+      "status": "slow"
+    }
+  ],
+  "cls": [
+    {
+      "path": "/",
+      "value": 0.087,
+      "unit": "score",
+      "samples": 1,
+      "status": "good"
+    }
+  ],
+  "anomalies": [
+    {
+      "id": "traffic-drop",
+      "kind": "traffic-drop",
+      "severity": "critical",
+      "title": "Traffic dropped materially",
+      "summary": "Pageviews fell from 32 to 16 in the latest window.",
+      "metric": "pageviews",
+      "currentValue": 16,
+      "previousValue": 32,
+      "threshold": 30,
+      "path": null
+    },
+    {
+      "id": "slow-fcp-/profile",
+      "kind": "slow-fcp",
+      "severity": "critical",
+      "title": "Slow FCP on /profile",
+      "summary": "FCP p75 is 4792ms across 1 samples.",
+      "metric": "fcp_p75_ms",
+      "currentValue": 4792,
+      "previousValue": null,
+      "threshold": 1800,
+      "path": "/profile"
+    },
+    {
+      "id": "slow-fcp-/",
+      "kind": "slow-fcp",
+      "severity": "warning",
+      "title": "Slow FCP on /",
+      "summary": "FCP p75 is 1940ms across 1 samples.",
+      "metric": "fcp_p75_ms",
+      "currentValue": 1940,
+      "previousValue": null,
+      "threshold": 1800,
+      "path": "/"
+    }
+  ]
+}
