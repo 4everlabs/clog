@@ -5,6 +5,7 @@ import type { PostHogApiClient } from "./api-client";
 export interface PostHogIntegrationClientConfig {
   readonly api: Pick<PostHogApiClient, "callMcpTool" | "runQuery">;
   readonly config: PostHogRuntimeConfig;
+  readonly enabled: boolean;
   readonly capabilities: {
     readonly canReadErrors: boolean;
     readonly canReadInsights: boolean;
@@ -184,6 +185,15 @@ export class PostHogIntegrationClient {
   }
 
   async getHealth(): Promise<IntegrationHealthView> {
+    if (!this.deps.enabled) {
+      return {
+        kind: "posthog",
+        status: "disabled",
+        summary: "PostHog integration is disabled.",
+        lastCheckedAt: Date.now(),
+      };
+    }
+
     const ready = Boolean(this.deps.config.projectId && this.deps.config.personalApiKey);
     return {
       kind: "posthog",

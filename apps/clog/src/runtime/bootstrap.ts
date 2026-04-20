@@ -24,6 +24,14 @@ import { ToolExecutor } from "../ai/tools/tool-executor";
 import { ShellExecutor } from "../ai/tools/shell-executor";
 import { buildProviderTools, resolveAdvertisedTools } from "../ai/tools/registry";
 
+const hasPostHogIntegrationEnabled = (env: AgentEnvironment): boolean => (
+  Object.values(env.capabilities.posthog).some(Boolean)
+);
+
+const hasGitHubIntegrationEnabled = (env: AgentEnvironment): boolean => (
+  Object.values(env.capabilities.github).some(Boolean)
+);
+
 export interface RuntimeBootstrap {
   readonly env: AgentEnvironment;
   readonly bootedAt: number;
@@ -54,10 +62,17 @@ export const bootstrapRuntime = (): RuntimeBootstrap => {
   const posthog = new PostHogIntegrationClient({
     api: posthogApi,
     config: env.posthog,
+    enabled: hasPostHogIntegrationEnabled(env),
     capabilities: env.capabilities.posthog,
   });
-  const convex = new ConvexIntegrationClient(env.convex);
-  const notion = new NotionIntegrationClient(env.notion);
+  const convex = new ConvexIntegrationClient({
+    config: env.convex,
+    enabled: env.capabilities.convex.canReadData,
+  });
+  const notion = new NotionIntegrationClient({
+    config: env.notion,
+    enabled: env.capabilities.notion.canReadTodo,
+  });
   let toolExecutor: ToolExecutor | null = null;
   const posthogServices = createPostHogToolServices({
     posthogApi,
@@ -122,8 +137,12 @@ export const bootstrapRuntime = (): RuntimeBootstrap => {
     toolExecutor,
     loadWakeupPrompt: (sharedWakeupPrompt) => loadRuntimeWakeupPrompt(sharedWakeupPrompt),
   });
-  const github = new GitHubIntegrationClient();
-  const vercel = new VercelIntegrationClient();
+  const github = new GitHubIntegrationClient({
+    enabled: hasGitHubIntegrationEnabled(env),
+  });
+  const vercel = new VercelIntegrationClient({
+    enabled: env.capabilities.vercel.canTriggerDeploy,
+  });
   const monitorLoop = new MonitoringLoop({
     store,
     posthog,
@@ -165,10 +184,10 @@ export const bootstrapRuntime = (): RuntimeBootstrap => {
       monitorIntervalMs: env.monitorIntervalMs,
       bootedAt,
       activeIntegrations: [
-        "posthog",
+        ...(hasPostHogIntegrationEnabled(env) ? ["posthog"] as const : []),
         ...(env.capabilities.convex.canReadData ? ["convex"] as const : []),
-        "github",
-        "vercel",
+        ...(hasGitHubIntegrationEnabled(env) ? ["github"] as const : []),
+        ...(env.capabilities.vercel.canTriggerDeploy ? ["vercel"] as const : []),
         "chat",
         ...(env.capabilities.notion.canReadTodo ? ["notion"] as const : []),
       ],

@@ -450,7 +450,7 @@ export const loadAgentEnvironment = (env: NodeJS.ProcessEnv = getRuntimeProcessE
     convex: {
       canReadData: Boolean(convex.deploymentUrl) && readToolFlag(
         runtimeTools?.convex?.readData,
-        readBoolean(env.CLOG_CONVEX_READ_DATA, true),
+        readBoolean(env.CLOG_CONVEX_READ_DATA, false),
       ),
     },
     github: {

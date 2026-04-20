@@ -4,7 +4,7 @@ export type AgentStatus = "booting" | "idle" | "monitoring" | "degraded";
 
 export type IntegrationKind = "posthog" | "convex" | "github" | "vercel" | "chat" | "notion";
 
-export type IntegrationStatus = "ready" | "degraded" | "missing-config";
+export type IntegrationStatus = "ready" | "degraded" | "missing-config" | "disabled";
 
 export type SurfaceChannelKind = "web" | "telegram" | "tui" | "system";
 

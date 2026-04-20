@@ -15,9 +15,18 @@ const writeStderrLine = (value: string): void => {
   process.stderr.write(`${value}\n`);
 };
 
-const PERFORMANCE_REPORT_INTERVAL_MS = 15 * 60_000;
+const PERFORMANCE_REPORT_INTERVAL_MS = 60 * 60_000;
 const PERFORMANCE_REPORT_RETENTION_LIMIT = 48;
 export const POSTHOG_PERFORMANCE_REPORT_DIRECTORY_NAME = "performance-reports";
+
+const alignTimestampToIntervalBoundary = (timestampMs: number, intervalMs: number): number => (
+  Math.floor(timestampMs / intervalMs) * intervalMs
+);
+
+const getDelayUntilNextIntervalBoundary = (timestampMs: number, intervalMs: number): number => {
+  const remainder = timestampMs % intervalMs;
+  return remainder === 0 ? 0 : intervalMs - remainder;
+};
 
 interface PerformanceReportSuccess extends PostHogDashboardSnapshot {
   readonly kind: "posthog-performance-report";
@@ -70,7 +79,7 @@ export class PostHogPerformanceReporter {
   private readonly reportDirectory: string;
   private readonly intervalMs: number;
   private readonly retentionLimit: number;
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private timer: ReturnType<typeof setTimeout> | null = null;
   private inFlight: Promise<void> | null = null;
   private sequence = 0;
 
@@ -81,25 +90,18 @@ export class PostHogPerformanceReporter {
   }
 
   start(): void {
-    void this.captureNow();
-    this.timer = setInterval(() => {
-      void this.captureNow();
-    }, this.intervalMs);
-
-    if (typeof this.timer?.unref === "function") {
-      this.timer.unref();
-    }
+    this.scheduleNextCapture();
   }
 
-  async captureNow(): Promise<void> {
+  async captureNow(windowEndAt = alignTimestampToIntervalBoundary(Date.now(), this.intervalMs)): Promise<void> {
     if (this.inFlight) {
       return await this.inFlight;
     }
 
     const execute = async () => {
-      const createdAt = Date.now();
+      const createdAt = windowEndAt;
       try {
-        const report = await this.buildReport(createdAt);
+        const report = await this.buildReport(createdAt, windowEndAt);
         this.writeReport(report);
         writeStdoutLine(`[posthog-performance] wrote report ${new Date(createdAt).toISOString()}`);
       } catch (error) {
@@ -128,9 +130,23 @@ export class PostHogPerformanceReporter {
     return await this.inFlight;
   }
 
-  private async buildReport(createdAt: number): Promise<PerformanceReportSuccess> {
+  private scheduleNextCapture(): void {
+    const delayMs = getDelayUntilNextIntervalBoundary(Date.now(), this.intervalMs);
+    this.timer = setTimeout(() => {
+      const windowEndAt = alignTimestampToIntervalBoundary(Date.now(), this.intervalMs);
+      this.scheduleNextCapture();
+      void this.captureNow(windowEndAt);
+    }, delayMs);
+
+    if (typeof this.timer?.unref === "function") {
+      this.timer.unref();
+    }
+  }
+
+  private async buildReport(createdAt: number, windowEndAt: number): Promise<PerformanceReportSuccess> {
     const snapshot = await buildPostHogDashboardSnapshot({
       generatedAt: createdAt,
+      windowEndAt,
       runQuery: this.config.runQuery,
     });
 

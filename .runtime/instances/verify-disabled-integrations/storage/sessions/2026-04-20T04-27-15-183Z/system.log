@@ -1,0 +1,10 @@
+=== clog runtime log started 2026-04-20T04:27:15.183Z ===
+session=2026-04-20T04:27:15.183Z
+pid=68383
+cwd=/Volumes/T9/cursor/clog
+storage=/Volumes/T9/cursor/clog/.runtime/instances/verify-disabled-integrations/storage
+[clog] posthog performance reporter enabled
+[clog] daily wakeup scheduler enabled
+[clog] runtime ready on http://127.0.0.1:6901
+[posthog-mcp] calling error-tracking-issues-list
+[posthog-mcp] initialized {"endpoint":"https://mcp.posthog.com/mcp","protocolVersion":"2025-06-18","sessionId":"8468a1fd01614f778f49f82b12c17494c8d0ae6c10e5fc755cd3c68b480490dd"}

@@ -267,7 +267,8 @@ export const PostHogRunQueryInputSchema = z.object({
 
 const PostHogDashboardPerformanceRowSchema = z.object({
   path: z.string().min(1),
-  valueMs: z.number(),
+  value: z.number(),
+  unit: z.enum(["ms", "score"]),
   samples: z.number().int().nonnegative(),
   status: z.enum(["good", "slow"]),
 }).strict();
@@ -284,6 +285,8 @@ const PostHogDashboardAnomalySchema = z.object({
     "exception-spike",
     "slow-lcp",
     "slow-inp",
+    "slow-fcp",
+    "slow-cls",
     "weak-web-vitals-coverage",
   ]),
   severity: z.enum(["warning", "critical"]),
@@ -305,6 +308,8 @@ export const PostHogGetDashboardSnapshotInputSchema = z.object({
 export const PostHogGetDashboardSnapshotResultSchema = z.object({
   generatedAt: z.number().int().nonnegative(),
   windowMinutes: z.number().int().positive(),
+  windowStartAt: z.number().int().nonnegative(),
+  windowEndAt: z.number().int().nonnegative(),
   summary: z.object({
     pageviews: z.number().int().nonnegative(),
     uniqueVisitors: z.number().int().nonnegative(),
@@ -315,20 +320,28 @@ export const PostHogGetDashboardSnapshotResultSchema = z.object({
     errorRatePer1kPageviews: z.number(),
     slowLcpPages: z.number().int().nonnegative(),
     slowInpPages: z.number().int().nonnegative(),
+    slowFcpPages: z.number().int().nonnegative(),
+    slowClsPages: z.number().int().nonnegative(),
     productionReadinessScore: z.number().int().min(0).max(100),
     anomalyCount: z.number().int().nonnegative(),
   }).strict(),
   previousWindow: z.object({
     pageviews: z.number().int().nonnegative(),
+    uniqueVisitors: z.number().int().nonnegative(),
     webVitalsEvents: z.number().int().nonnegative(),
     exceptionEvents: z.number().int().nonnegative(),
+    distinctExceptionIssues: z.number().int().nonnegative(),
     pageviewsDeltaPercent: z.number().nullable(),
+    uniqueVisitorsDeltaPercent: z.number().nullable(),
     webVitalsDeltaPercent: z.number().nullable(),
     exceptionDeltaPercent: z.number().nullable(),
+    distinctExceptionIssuesDeltaPercent: z.number().nullable(),
   }).strict(),
   topPaths: z.array(PostHogDashboardTopPathSchema),
   lcp: z.array(PostHogDashboardPerformanceRowSchema),
   inp: z.array(PostHogDashboardPerformanceRowSchema),
+  fcp: z.array(PostHogDashboardPerformanceRowSchema),
+  cls: z.array(PostHogDashboardPerformanceRowSchema),
   anomalies: z.array(PostHogDashboardAnomalySchema),
 }).strict();
 

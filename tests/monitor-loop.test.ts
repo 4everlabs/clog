@@ -71,4 +71,29 @@ describe("MonitoringLoop", () => {
       "posthog-error-checkout",
     ]);
   });
+
+  test("ignores disabled integrations when creating health findings", async () => {
+    const store = new InMemoryRuntimeStore();
+    const loop = new MonitoringLoop({
+      store,
+      posthog: {
+        getHealth: async () => createHealth("posthog", "ready"),
+      },
+      convex: {
+        getHealth: async () => createHealth("convex", "disabled"),
+      },
+      github: {
+        getHealth: async () => createHealth("github", "disabled"),
+      },
+      vercel: {
+        getHealth: async () => createHealth("vercel", "disabled"),
+      },
+      notion: {
+        getHealth: async () => createHealth("notion", "ready"),
+      },
+    });
+
+    const tick = await loop.tick();
+    expect(tick.findings).toEqual([]);
+  });
 });

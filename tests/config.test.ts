@@ -98,7 +98,7 @@ describe("loadAgentEnvironment", () => {
       expect(env.capabilities.posthog.canReadFlags).toBe(true);
       expect(env.capabilities.posthog.canManageEndpoints).toBe(true);
       expect(env.capabilities.posthog.canUploadSourcemaps).toBe(true);
-      expect(env.capabilities.convex.canReadData).toBe(true);
+      expect(env.capabilities.convex.canReadData).toBe(false);
       expect(env.capabilities.notion.canReadTodo).toBe(true);
       expect(env.availableTools.map((tool) => tool.name)).toEqual([
         "posthog_list_errors",
@@ -110,7 +110,6 @@ describe("loadAgentEnvironment", () => {
         "posthog_get_health_summary",
         "posthog_get_asset_summary",
         "posthog_get_release_summary",
-        "convex_run_query",
         "notion_get_todo_list",
         "runtime_get_info",
         "runtime_list_conversations",
@@ -374,6 +373,9 @@ describe("loadAgentEnvironment", () => {
         readErrors: true,
         readLogs: false,
       },
+      convex: {
+        readData: true,
+      },
       github: {
         readRepository: false,
         createPullRequests: false,
@@ -401,6 +403,7 @@ describe("loadAgentEnvironment", () => {
         CLOG_GITHUB_READ: "true",
         CLOG_GITHUB_PR: "true",
         CLOG_GITHUB_PUSH: "true",
+        CLOG_CONVEX_URL: "https://happy-otter-123.convex.cloud",
         NOTION_SECRET: "ntn_test",
         CLOG_NOTION_READ_TODO: "true",
         CLOG_VERCEL_DEPLOY: "true",
@@ -410,6 +413,7 @@ describe("loadAgentEnvironment", () => {
       expect(env.capabilities.posthog.canReadInsights).toBe(true);
       expect(env.capabilities.posthog.canReadErrors).toBe(true);
       expect(env.capabilities.posthog.canReadLogs).toBe(false);
+      expect(env.capabilities.convex.canReadData).toBe(true);
       expect(env.capabilities.github.canReadRepository).toBe(false);
       expect(env.capabilities.github.canCreatePullRequest).toBe(false);
       expect(env.capabilities.github.canPushBranch).toBe(false);
@@ -426,6 +430,7 @@ describe("loadAgentEnvironment", () => {
         "posthog_get_health_summary",
         "posthog_get_asset_summary",
         "posthog_get_release_summary",
+        "convex_run_query",
         "runtime_get_info",
         "runtime_list_conversations",
         "runtime_get_conversation",

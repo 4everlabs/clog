@@ -106,7 +106,7 @@ const createFindingFromObservation = (
 };
 
 const createHealthObservation = (health: IntegrationHealthView, detectedAt: number): RuntimeObservation | null => {
-  if (health.status === "ready") {
+  if (health.status === "ready" || health.status === "disabled") {
     return null;
   }
 

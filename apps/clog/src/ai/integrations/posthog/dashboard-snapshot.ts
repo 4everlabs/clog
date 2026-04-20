@@ -1,15 +1,23 @@
 import type { PostHogInsightQueryResult } from "@clog/types";
 
-export const POSTHOG_DASHBOARD_DEFAULT_WINDOW_MINUTES = 15;
+export const POSTHOG_DASHBOARD_DEFAULT_WINDOW_MINUTES = 60;
 export const POSTHOG_DASHBOARD_DEFAULT_TOP_PATHS_LIMIT = 10;
 export const POSTHOG_PERFORMANCE_LCP_SLOW_THRESHOLD_MS = 2_500;
 export const POSTHOG_PERFORMANCE_INP_SLOW_THRESHOLD_MS = 200;
+export const POSTHOG_PERFORMANCE_FCP_SLOW_THRESHOLD_MS = 1_800;
+export const POSTHOG_PERFORMANCE_CLS_SLOW_THRESHOLD = 0.1;
+const POSTHOG_PERFORMANCE_LCP_CRITICAL_THRESHOLD_MS = 4_000;
+const POSTHOG_PERFORMANCE_INP_CRITICAL_THRESHOLD_MS = 500;
+const POSTHOG_PERFORMANCE_FCP_CRITICAL_THRESHOLD_MS = 3_000;
+const POSTHOG_PERFORMANCE_CLS_CRITICAL_THRESHOLD = 0.25;
+const MINUTE_IN_MS = 60_000;
 
 const PATH_EXPRESSION = "coalesce(nullIf(properties.$pathname, ''), nullIf(properties.$current_url, ''), '<unknown>')";
 
 export interface PostHogDashboardPerformanceRow {
   readonly path: string;
-  readonly valueMs: number;
+  readonly value: number;
+  readonly unit: "ms" | "score";
   readonly samples: number;
   readonly status: "good" | "slow";
 }
@@ -21,7 +29,14 @@ export interface PostHogDashboardTopPathRow {
 
 export interface PostHogDashboardAnomaly {
   readonly id: string;
-  readonly kind: "traffic-drop" | "exception-spike" | "slow-lcp" | "slow-inp" | "weak-web-vitals-coverage";
+  readonly kind:
+    | "traffic-drop"
+    | "exception-spike"
+    | "slow-lcp"
+    | "slow-inp"
+    | "slow-fcp"
+    | "slow-cls"
+    | "weak-web-vitals-coverage";
   readonly severity: "warning" | "critical";
   readonly title: string;
   readonly summary: string;
@@ -35,6 +50,8 @@ export interface PostHogDashboardAnomaly {
 export interface PostHogDashboardSnapshot {
   readonly generatedAt: number;
   readonly windowMinutes: number;
+  readonly windowStartAt: number;
+  readonly windowEndAt: number;
   readonly summary: {
     readonly pageviews: number;
     readonly uniqueVisitors: number;
@@ -45,20 +62,28 @@ export interface PostHogDashboardSnapshot {
     readonly errorRatePer1kPageviews: number;
     readonly slowLcpPages: number;
     readonly slowInpPages: number;
+    readonly slowFcpPages: number;
+    readonly slowClsPages: number;
     readonly productionReadinessScore: number;
     readonly anomalyCount: number;
   };
   readonly previousWindow: {
     readonly pageviews: number;
+    readonly uniqueVisitors: number;
     readonly webVitalsEvents: number;
     readonly exceptionEvents: number;
+    readonly distinctExceptionIssues: number;
     readonly pageviewsDeltaPercent: number | null;
+    readonly uniqueVisitorsDeltaPercent: number | null;
     readonly webVitalsDeltaPercent: number | null;
     readonly exceptionDeltaPercent: number | null;
+    readonly distinctExceptionIssuesDeltaPercent: number | null;
   };
   readonly topPaths: readonly PostHogDashboardTopPathRow[];
   readonly lcp: readonly PostHogDashboardPerformanceRow[];
   readonly inp: readonly PostHogDashboardPerformanceRow[];
+  readonly fcp: readonly PostHogDashboardPerformanceRow[];
+  readonly cls: readonly PostHogDashboardPerformanceRow[];
   readonly anomalies: readonly PostHogDashboardAnomaly[];
 }
 
@@ -76,14 +101,19 @@ interface ErrorSummaryRow {
 interface ComparisonRow {
   readonly currentPageviews: number;
   readonly previousPageviews: number;
+  readonly currentUniqueVisitors: number;
+  readonly previousUniqueVisitors: number;
   readonly currentWebVitalsEvents: number;
   readonly previousWebVitalsEvents: number;
   readonly currentExceptionEvents: number;
   readonly previousExceptionEvents: number;
+  readonly currentDistinctExceptionIssues: number;
+  readonly previousDistinctExceptionIssues: number;
 }
 
 export interface BuildPostHogDashboardSnapshotInput {
   readonly generatedAt?: number;
+  readonly windowEndAt?: number;
   readonly windowMinutes?: number;
   readonly topPathsLimit?: number;
   readonly runQuery: (name: string, query: string) => Promise<PostHogInsightQueryResult>;
@@ -120,86 +150,98 @@ const classifyMetric = (valueMs: number, slowThresholdMs: number): "good" | "slo
   valueMs > slowThresholdMs ? "slow" : "good"
 );
 
-const formatWindow = (minutes: number): string => `${Math.max(1, Math.trunc(minutes))} MINUTE`;
+const formatTimestampExpression = (timestampMs: number): string => `toDateTime(${Math.trunc(timestampMs / 1_000)})`;
 
-const buildSummaryQuery = (windowMinutes: number): string => `
+const buildTimeRangePredicate = (startAt: number, endAt: number): string => (
+  `timestamp >= ${formatTimestampExpression(startAt)} AND timestamp < ${formatTimestampExpression(endAt)}`
+);
+
+const buildSummaryQuery = (windowStartAt: number, windowEndAt: number): string => `
 SELECT
   countIf(event = '$pageview') AS pageviews,
   uniqIf(person_id, event = '$pageview') AS unique_visitors,
   countIf(event = '$web_vitals') AS web_vitals_events
 FROM events
-WHERE timestamp >= now() - INTERVAL ${formatWindow(windowMinutes)}
+WHERE ${buildTimeRangePredicate(windowStartAt, windowEndAt)}
 `;
 
-const buildTopPathsQuery = (windowMinutes: number, limit: number): string => `
+const buildTopPathsQuery = (windowStartAt: number, windowEndAt: number, limit: number): string => `
 SELECT
   ${PATH_EXPRESSION} AS path,
   count() AS pageviews
 FROM events
 WHERE event = '$pageview'
-  AND timestamp >= now() - INTERVAL ${formatWindow(windowMinutes)}
+  AND ${buildTimeRangePredicate(windowStartAt, windowEndAt)}
 GROUP BY path
 ORDER BY pageviews DESC
 LIMIT ${Math.max(1, Math.trunc(limit))}
 `;
 
 const buildWebVitalsQuery = (
-  metricProperty: "$performance_lcp" | "$performance_inp",
-  alias: "lcp_p75_ms" | "inp_p75_ms",
-  windowMinutes: number,
+  metricProperty:
+    | "$web_vitals_LCP_value"
+    | "$web_vitals_INP_value"
+    | "$web_vitals_FCP_value"
+    | "$web_vitals_CLS_value",
+  alias: "lcp_value" | "inp_value" | "fcp_value" | "cls_value",
+  windowStartAt: number,
+  windowEndAt: number,
   limit: number,
 ): string => `
 SELECT
   ${PATH_EXPRESSION} AS path,
-  round(quantileIf(0.75)(toFloat(properties.${metricProperty}), properties.${metricProperty} IS NOT NULL), 1) AS ${alias},
+  round(quantileIf(0.75)(toFloat(properties.${metricProperty}), properties.${metricProperty} IS NOT NULL), 3) AS ${alias},
   countIf(properties.${metricProperty} IS NOT NULL) AS samples
 FROM events
 WHERE event = '$web_vitals'
-  AND timestamp >= now() - INTERVAL ${formatWindow(windowMinutes)}
+  AND ${buildTimeRangePredicate(windowStartAt, windowEndAt)}
 GROUP BY path
 HAVING samples > 0
 ORDER BY ${alias} DESC
 LIMIT ${Math.max(1, Math.trunc(limit))}
 `;
 
-const buildErrorSummaryQuery = (windowMinutes: number): string => `
+const buildExceptionIssueExpression = (): string => `
+coalesce(
+  nullIf(toString(properties.$exception_issue_id), ''),
+  nullIf(toString(properties.$exception_type), ''),
+  nullIf(toString(properties.$exception_message), '')
+)
+`;
+
+const buildErrorSummaryQuery = (windowStartAt: number, windowEndAt: number): string => `
 SELECT
   countIf(event = '$exception') AS exception_events,
   uniqIf(
-    coalesce(
-      nullIf(toString(properties.$exception_issue_id), ''),
-      nullIf(toString(properties.$exception_type), ''),
-      nullIf(toString(properties.$exception_message), '')
-    ),
+    ${buildExceptionIssueExpression()},
     event = '$exception'
   ) AS distinct_exception_issues
 FROM events
-WHERE timestamp >= now() - INTERVAL ${formatWindow(windowMinutes)}
+WHERE ${buildTimeRangePredicate(windowStartAt, windowEndAt)}
 `;
 
-const buildComparisonQuery = (windowMinutes: number): string => `
+const buildComparisonQuery = (windowStartAt: number, windowEndAt: number): string => {
+  const windowDurationMs = Math.max(MINUTE_IN_MS, windowEndAt - windowStartAt);
+  const previousWindowStartAt = windowStartAt - windowDurationMs;
+  const currentRange = buildTimeRangePredicate(windowStartAt, windowEndAt);
+  const previousRange = buildTimeRangePredicate(previousWindowStartAt, windowStartAt);
+
+  return `
 SELECT
-  countIf(event = '$pageview' AND timestamp >= now() - INTERVAL ${formatWindow(windowMinutes)}) AS current_pageviews,
-  countIf(
-    event = '$pageview'
-    AND timestamp < now() - INTERVAL ${formatWindow(windowMinutes)}
-    AND timestamp >= now() - INTERVAL ${formatWindow(windowMinutes * 2)}
-  ) AS previous_pageviews,
-  countIf(event = '$web_vitals' AND timestamp >= now() - INTERVAL ${formatWindow(windowMinutes)}) AS current_web_vitals_events,
-  countIf(
-    event = '$web_vitals'
-    AND timestamp < now() - INTERVAL ${formatWindow(windowMinutes)}
-    AND timestamp >= now() - INTERVAL ${formatWindow(windowMinutes * 2)}
-  ) AS previous_web_vitals_events,
-  countIf(event = '$exception' AND timestamp >= now() - INTERVAL ${formatWindow(windowMinutes)}) AS current_exception_events,
-  countIf(
-    event = '$exception'
-    AND timestamp < now() - INTERVAL ${formatWindow(windowMinutes)}
-    AND timestamp >= now() - INTERVAL ${formatWindow(windowMinutes * 2)}
-  ) AS previous_exception_events
+  countIf(event = '$pageview' AND ${currentRange}) AS current_pageviews,
+  countIf(event = '$pageview' AND ${previousRange}) AS previous_pageviews,
+  uniqIf(person_id, event = '$pageview' AND ${currentRange}) AS current_unique_visitors,
+  uniqIf(person_id, event = '$pageview' AND ${previousRange}) AS previous_unique_visitors,
+  countIf(event = '$web_vitals' AND ${currentRange}) AS current_web_vitals_events,
+  countIf(event = '$web_vitals' AND ${previousRange}) AS previous_web_vitals_events,
+  countIf(event = '$exception' AND ${currentRange}) AS current_exception_events,
+  countIf(event = '$exception' AND ${previousRange}) AS previous_exception_events,
+  uniqIf(${buildExceptionIssueExpression()}, event = '$exception' AND ${currentRange}) AS current_distinct_exception_issues,
+  uniqIf(${buildExceptionIssueExpression()}, event = '$exception' AND ${previousRange}) AS previous_distinct_exception_issues
 FROM events
-WHERE timestamp >= now() - INTERVAL ${formatWindow(windowMinutes * 2)}
+WHERE ${buildTimeRangePredicate(previousWindowStartAt, windowEndAt)}
 `;
+};
 
 const readSummary = (row: Record<string, unknown> | undefined): PerformanceSummaryRow => ({
   pageviews: toNumber(row?.pageviews),
@@ -215,10 +257,14 @@ const readErrorSummary = (row: Record<string, unknown> | undefined): ErrorSummar
 const readComparison = (row: Record<string, unknown> | undefined): ComparisonRow => ({
   currentPageviews: toNumber(row?.current_pageviews),
   previousPageviews: toNumber(row?.previous_pageviews),
+  currentUniqueVisitors: toNumber(row?.current_unique_visitors),
+  previousUniqueVisitors: toNumber(row?.previous_unique_visitors),
   currentWebVitalsEvents: toNumber(row?.current_web_vitals_events),
   previousWebVitalsEvents: toNumber(row?.previous_web_vitals_events),
   currentExceptionEvents: toNumber(row?.current_exception_events),
   previousExceptionEvents: toNumber(row?.previous_exception_events),
+  currentDistinctExceptionIssues: toNumber(row?.current_distinct_exception_issues),
+  previousDistinctExceptionIssues: toNumber(row?.previous_distinct_exception_issues),
 });
 
 const readTopPaths = (rows: readonly Record<string, unknown>[]): PostHogDashboardTopPathRow[] => (
@@ -230,16 +276,18 @@ const readTopPaths = (rows: readonly Record<string, unknown>[]): PostHogDashboar
 
 const readPerformanceRows = (
   rows: readonly Record<string, unknown>[],
-  metricKey: "lcp_p75_ms" | "inp_p75_ms",
+  metricKey: "lcp_value" | "inp_value" | "fcp_value" | "cls_value",
   slowThresholdMs: number,
+  unit: "ms" | "score",
 ): PostHogDashboardPerformanceRow[] => (
   rows.map((row) => {
-    const valueMs = toNumber(row[metricKey]);
+    const value = toNumber(row[metricKey]);
     return {
       path: toString(row.path),
-      valueMs,
+      value,
+      unit,
       samples: toNumber(row.samples),
-      status: classifyMetric(valueMs, slowThresholdMs),
+      status: classifyMetric(value, slowThresholdMs),
     };
   })
 );
@@ -261,10 +309,14 @@ const buildAnomalies = (snapshot: {
   readonly previousExceptionEvents: number;
   readonly lcp: readonly PostHogDashboardPerformanceRow[];
   readonly inp: readonly PostHogDashboardPerformanceRow[];
+  readonly fcp: readonly PostHogDashboardPerformanceRow[];
+  readonly cls: readonly PostHogDashboardPerformanceRow[];
 }): PostHogDashboardAnomaly[] => {
   const anomalies: PostHogDashboardAnomaly[] = [];
   const slowLcpRows = snapshot.lcp.filter((row) => row.status === "slow").slice(0, 3);
   const slowInpRows = snapshot.inp.filter((row) => row.status === "slow").slice(0, 3);
+  const slowFcpRows = snapshot.fcp.filter((row) => row.status === "slow").slice(0, 3);
+  const slowClsRows = snapshot.cls.filter((row) => row.status === "slow").slice(0, 3);
 
   if (snapshot.previousPageviews >= 20 && snapshot.pageviews <= snapshot.previousPageviews * 0.7) {
     anomalies.push({
@@ -321,11 +373,11 @@ const buildAnomalies = (snapshot: {
     anomalies.push({
       id: `slow-lcp-${row.path}`,
       kind: "slow-lcp",
-      severity: row.valueMs >= 4_000 ? "critical" : "warning",
+      severity: row.value >= POSTHOG_PERFORMANCE_LCP_CRITICAL_THRESHOLD_MS ? "critical" : "warning",
       title: `Slow LCP on ${row.path}`,
-      summary: `LCP p75 is ${row.valueMs}ms across ${row.samples} samples.`,
+      summary: `LCP p75 is ${row.value}ms across ${row.samples} samples.`,
       metric: "lcp_p75_ms",
-      currentValue: row.valueMs,
+      currentValue: row.value,
       previousValue: null,
       threshold: POSTHOG_PERFORMANCE_LCP_SLOW_THRESHOLD_MS,
       path: row.path,
@@ -336,13 +388,43 @@ const buildAnomalies = (snapshot: {
     anomalies.push({
       id: `slow-inp-${row.path}`,
       kind: "slow-inp",
-      severity: row.valueMs >= 350 ? "critical" : "warning",
+      severity: row.value >= POSTHOG_PERFORMANCE_INP_CRITICAL_THRESHOLD_MS ? "critical" : "warning",
       title: `Slow INP on ${row.path}`,
-      summary: `INP p75 is ${row.valueMs}ms across ${row.samples} samples.`,
+      summary: `INP p75 is ${row.value}ms across ${row.samples} samples.`,
       metric: "inp_p75_ms",
-      currentValue: row.valueMs,
+      currentValue: row.value,
       previousValue: null,
       threshold: POSTHOG_PERFORMANCE_INP_SLOW_THRESHOLD_MS,
+      path: row.path,
+    });
+  }
+
+  for (const row of slowFcpRows) {
+    anomalies.push({
+      id: `slow-fcp-${row.path}`,
+      kind: "slow-fcp",
+      severity: row.value >= POSTHOG_PERFORMANCE_FCP_CRITICAL_THRESHOLD_MS ? "critical" : "warning",
+      title: `Slow FCP on ${row.path}`,
+      summary: `FCP p75 is ${row.value}ms across ${row.samples} samples.`,
+      metric: "fcp_p75_ms",
+      currentValue: row.value,
+      previousValue: null,
+      threshold: POSTHOG_PERFORMANCE_FCP_SLOW_THRESHOLD_MS,
+      path: row.path,
+    });
+  }
+
+  for (const row of slowClsRows) {
+    anomalies.push({
+      id: `slow-cls-${row.path}`,
+      kind: "slow-cls",
+      severity: row.value >= POSTHOG_PERFORMANCE_CLS_CRITICAL_THRESHOLD ? "critical" : "warning",
+      title: `High CLS on ${row.path}`,
+      summary: `CLS p75 is ${row.value} across ${row.samples} samples.`,
+      metric: "cls_p75_score",
+      currentValue: row.value,
+      previousValue: null,
+      threshold: POSTHOG_PERFORMANCE_CLS_SLOW_THRESHOLD,
       path: row.path,
     });
   }
@@ -354,12 +436,16 @@ const computeProductionReadinessScore = (input: {
   readonly anomalies: readonly PostHogDashboardAnomaly[];
   readonly slowLcpPages: number;
   readonly slowInpPages: number;
+  readonly slowFcpPages: number;
+  readonly slowClsPages: number;
   readonly coverageRatio: number;
   readonly pageviews: number;
 }): number => {
   let score = 100;
   score -= input.slowLcpPages * 8;
   score -= input.slowInpPages * 8;
+  score -= input.slowFcpPages * 6;
+  score -= input.slowClsPages * 6;
 
   for (const anomaly of input.anomalies) {
     score -= anomaly.severity === "critical" ? 16 : 8;
@@ -385,27 +471,40 @@ export const buildPostHogDashboardSnapshot = async (
     1,
     20,
   );
+  const generatedAt = input.generatedAt ?? Date.now();
+  const windowEndAt = input.windowEndAt ?? generatedAt;
+  const windowStartAt = windowEndAt - (windowMinutes * MINUTE_IN_MS);
 
   const [
     summaryResult,
     topPathsResult,
     lcpResult,
     inpResult,
+    fcpResult,
+    clsResult,
     errorSummaryResult,
     comparisonResult,
   ] = await Promise.all([
-    input.runQuery(`performance_summary_${windowMinutes}m`, buildSummaryQuery(windowMinutes)),
-    input.runQuery(`performance_top_paths_${windowMinutes}m`, buildTopPathsQuery(windowMinutes, topPathsLimit)),
+    input.runQuery(`performance_summary_${windowMinutes}m`, buildSummaryQuery(windowStartAt, windowEndAt)),
+    input.runQuery(`performance_top_paths_${windowMinutes}m`, buildTopPathsQuery(windowStartAt, windowEndAt, topPathsLimit)),
     input.runQuery(
       `performance_lcp_${windowMinutes}m`,
-      buildWebVitalsQuery("$performance_lcp", "lcp_p75_ms", windowMinutes, topPathsLimit),
+      buildWebVitalsQuery("$web_vitals_LCP_value", "lcp_value", windowStartAt, windowEndAt, topPathsLimit),
     ),
     input.runQuery(
       `performance_inp_${windowMinutes}m`,
-      buildWebVitalsQuery("$performance_inp", "inp_p75_ms", windowMinutes, topPathsLimit),
+      buildWebVitalsQuery("$web_vitals_INP_value", "inp_value", windowStartAt, windowEndAt, topPathsLimit),
     ),
-    input.runQuery(`performance_errors_${windowMinutes}m`, buildErrorSummaryQuery(windowMinutes)),
-    input.runQuery(`performance_comparison_${windowMinutes}m`, buildComparisonQuery(windowMinutes)),
+    input.runQuery(
+      `performance_fcp_${windowMinutes}m`,
+      buildWebVitalsQuery("$web_vitals_FCP_value", "fcp_value", windowStartAt, windowEndAt, topPathsLimit),
+    ),
+    input.runQuery(
+      `performance_cls_${windowMinutes}m`,
+      buildWebVitalsQuery("$web_vitals_CLS_value", "cls_value", windowStartAt, windowEndAt, topPathsLimit),
+    ),
+    input.runQuery(`performance_errors_${windowMinutes}m`, buildErrorSummaryQuery(windowStartAt, windowEndAt)),
+    input.runQuery(`performance_comparison_${windowMinutes}m`, buildComparisonQuery(windowStartAt, windowEndAt)),
   ]);
 
   const summary = readSummary(summaryResult.results[0]);
@@ -414,13 +513,27 @@ export const buildPostHogDashboardSnapshot = async (
   const topPaths = readTopPaths(topPathsResult.results);
   const lcp = readPerformanceRows(
     lcpResult.results,
-    "lcp_p75_ms",
+    "lcp_value",
     POSTHOG_PERFORMANCE_LCP_SLOW_THRESHOLD_MS,
+    "ms",
   );
   const inp = readPerformanceRows(
     inpResult.results,
-    "inp_p75_ms",
+    "inp_value",
     POSTHOG_PERFORMANCE_INP_SLOW_THRESHOLD_MS,
+    "ms",
+  );
+  const fcp = readPerformanceRows(
+    fcpResult.results,
+    "fcp_value",
+    POSTHOG_PERFORMANCE_FCP_SLOW_THRESHOLD_MS,
+    "ms",
+  );
+  const cls = readPerformanceRows(
+    clsResult.results,
+    "cls_value",
+    POSTHOG_PERFORMANCE_CLS_SLOW_THRESHOLD,
+    "score",
   );
   const coverageRatio = summary.pageviews > 0 ? round(summary.webVitalsEvents / summary.pageviews, 3) : 0;
   const errorRatePer1kPageviews = summary.pageviews > 0
@@ -428,6 +541,8 @@ export const buildPostHogDashboardSnapshot = async (
     : 0;
   const slowLcpPages = lcp.filter((row) => row.status === "slow").length;
   const slowInpPages = inp.filter((row) => row.status === "slow").length;
+  const slowFcpPages = fcp.filter((row) => row.status === "slow").length;
+  const slowClsPages = cls.filter((row) => row.status === "slow").length;
   const anomalies = buildAnomalies({
     pageviews: summary.pageviews,
     webVitalsEvents: summary.webVitalsEvents,
@@ -437,11 +552,15 @@ export const buildPostHogDashboardSnapshot = async (
     previousExceptionEvents: comparison.previousExceptionEvents,
     lcp,
     inp,
+    fcp,
+    cls,
   });
 
   return {
-    generatedAt: input.generatedAt ?? Date.now(),
+    generatedAt,
     windowMinutes,
+    windowStartAt,
+    windowEndAt,
     summary: {
       pageviews: summary.pageviews,
       uniqueVisitors: summary.uniqueVisitors,
@@ -452,10 +571,14 @@ export const buildPostHogDashboardSnapshot = async (
       errorRatePer1kPageviews,
       slowLcpPages,
       slowInpPages,
+      slowFcpPages,
+      slowClsPages,
       productionReadinessScore: computeProductionReadinessScore({
         anomalies,
         slowLcpPages,
         slowInpPages,
+        slowFcpPages,
+        slowClsPages,
         coverageRatio,
         pageviews: summary.pageviews,
       }),
@@ -463,15 +586,24 @@ export const buildPostHogDashboardSnapshot = async (
     },
     previousWindow: {
       pageviews: comparison.previousPageviews,
+      uniqueVisitors: comparison.previousUniqueVisitors,
       webVitalsEvents: comparison.previousWebVitalsEvents,
       exceptionEvents: comparison.previousExceptionEvents,
+      distinctExceptionIssues: comparison.previousDistinctExceptionIssues,
       pageviewsDeltaPercent: computeDeltaPercent(summary.pageviews, comparison.previousPageviews),
+      uniqueVisitorsDeltaPercent: computeDeltaPercent(summary.uniqueVisitors, comparison.previousUniqueVisitors),
       webVitalsDeltaPercent: computeDeltaPercent(summary.webVitalsEvents, comparison.previousWebVitalsEvents),
       exceptionDeltaPercent: computeDeltaPercent(errors.exceptionEvents, comparison.previousExceptionEvents),
+      distinctExceptionIssuesDeltaPercent: computeDeltaPercent(
+        errors.distinctExceptionIssues,
+        comparison.previousDistinctExceptionIssues,
+      ),
     },
     topPaths,
     lcp,
     inp,
+    fcp,
+    cls,
     anomalies,
   };
 };

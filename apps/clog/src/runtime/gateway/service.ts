@@ -168,7 +168,9 @@ export class AgentGateway implements AgentGatewaySurface {
       executionMode: this.deps.env.executionMode,
       monitorIntervalMs: this.deps.env.monitorIntervalMs,
       bootedAt: this.deps.bootedAt,
-      activeIntegrations: tick.integrationHealth.map((integration) => integration.kind),
+      activeIntegrations: tick.integrationHealth
+        .filter((integration) => integration.status !== "disabled")
+        .map((integration) => integration.kind),
     };
 
     return {
