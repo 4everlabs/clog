@@ -64,3 +64,13 @@ Highest-priority runtime signal: **Critical slow LCP on profile-related pages** 
 [posthog-mcp] calling query-run
 [posthog-mcp] calling query-run
 [posthog-performance] wrote report 2026-04-20T05:00:00.000Z
+[posthog-mcp] calling query-run
+[posthog-mcp] calling query-run
+[posthog-mcp] calling query-run
+[posthog-mcp] calling query-run
+[posthog-mcp] calling query-run
+[posthog-mcp] calling query-run
+[posthog-mcp] calling query-run
+[posthog-mcp] calling query-run
+
+=== clog runtime log ended 2026-04-20T06:00:00.024Z ===
