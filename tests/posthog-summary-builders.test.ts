@@ -4,7 +4,9 @@ import {
   buildPostHogAssetSummary,
   buildPostHogHealthSummary,
   buildPostHogReleaseSummary,
+  buildPostHogUserFunnelSummary,
 } from "../apps/clog/src/ai/integrations/posthog/summary-builders";
+import type { PostHogUserFunnelSnapshot } from "../apps/clog/src/ai/integrations/posthog/user-funnel-snapshot";
 
 const dashboardFixture = (): PostHogDashboardSnapshot => ({
   generatedAt: 1_700_000_000_000,
@@ -55,6 +57,73 @@ const dashboardFixture = (): PostHogDashboardSnapshot => ({
     threshold: 10,
     path: "/",
   }],
+});
+
+const userFunnelFixture = (): PostHogUserFunnelSnapshot => ({
+  generatedAt: 1_700_000_000_000,
+  toplineWindowMinutes: 60,
+  funnelWindowDays: 7,
+  topline: {
+    homepageUniqueVisitors: 12,
+    newProfilesStarted: 4,
+  },
+  funnel: {
+    steps: [
+      {
+        id: "homepage",
+        label: "Homepage visited",
+        count: 12,
+        conversionFromPreviousRatio: null,
+        dropoffFromPreviousCount: null,
+        dropoffFromPreviousRatio: null,
+      },
+      {
+        id: "auth",
+        label: "Auth completed",
+        count: 6,
+        conversionFromPreviousRatio: 50,
+        dropoffFromPreviousCount: 6,
+        dropoffFromPreviousRatio: 50,
+      },
+    ],
+    biggestDropoff: {
+      fromStepId: "homepage",
+      fromLabel: "Homepage visited",
+      toStepId: "auth",
+      toLabel: "Auth completed",
+      dropoffUsers: 6,
+      dropoffRatio: 50,
+    },
+    paymentStepUsers: 3,
+    checkoutStartedUsers: 2,
+    paidConversionUsers: 1,
+    branches: {
+      freeTier: {
+        label: "Free tier picked",
+        count: null,
+        conversionFromPaymentStepRatio: null,
+        instrumented: false,
+        note: "Missing source-of-truth signal.",
+      },
+      core: {
+        label: "Core checkout started",
+        count: 2,
+        conversionFromPaymentStepRatio: 66.7,
+        instrumented: true,
+        note: "Core maps to planKey='pro'.",
+      },
+      pro: {
+        label: "Pro checkout started",
+        count: 0,
+        conversionFromPaymentStepRatio: 0,
+        instrumented: true,
+        note: "Pro maps to planKey='ultra'.",
+      },
+    },
+  },
+  instrumentationWarnings: [
+    "No canonical free-tier pick signal is currently instrumented in PostHog.",
+  ],
 });
 
 describe("PostHog summary builders", () => {
@@ -152,5 +221,28 @@ describe("PostHog summary builders", () => {
     expect(summary.flags[0]?.key).toBe("checkout");
     expect(summary.printout).toContain("Pricing test");
     expect(summary.printout).toContain("Elevated errors");
+  });
+
+  test("buildPostHogUserFunnelSummary formats topline, drop-off, and instrumentation warnings", () => {
+    const summary = buildPostHogUserFunnelSummary(userFunnelFixture(), {
+      context: "landing-to-paid",
+      toplineTimeRange: {
+        preset: "last_hour",
+        windowMinutes: 60,
+        label: "last hour",
+      },
+      funnelTimeRange: {
+        preset: null,
+        windowMinutes: 10_080,
+        label: "last 7 days",
+      },
+    });
+
+    expect(summary.context).toBe("landing-to-paid");
+    expect(summary.topline.homepageUniqueVisitors).toBe(12);
+    expect(summary.funnel.biggestDropoff?.dropoffUsers).toBe(6);
+    expect(summary.printout).toContain("Topline (last hour): 12 homepage visitors, 4 profile starts");
+    expect(summary.printout).toContain("Biggest drop-off: Homepage visited -> Auth completed lost 6 users");
+    expect(summary.printout).toContain("Free tier missing instrumentation");
   });
 });

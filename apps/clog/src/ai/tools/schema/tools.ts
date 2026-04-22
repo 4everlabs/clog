@@ -105,6 +105,7 @@ export const AgentToolNameSchema = z.enum([
   "posthog_get_dashboard_snapshot",
   "posthog_get_info",
   "posthog_get_health_summary",
+  "posthog_get_user_funnel_summary",
   "posthog_get_asset_summary",
   "posthog_get_release_summary",
   "posthog_get_documented_tool_catalog",
@@ -380,6 +381,64 @@ export const PostHogGetHealthSummaryResultSchema = z.object({
       lastRecordedAt: z.number().int().nonnegative(),
     }).strict()),
   }).strict(),
+  printout: z.string().min(1),
+}).strict();
+
+export const PostHogGetUserFunnelSummaryInputSchema = z.object({
+  context: z.string().min(1).optional(),
+  toplineTimePreset: TimeRangePresetSchema.optional(),
+  toplineWindowMinutes: z.number().int().positive().max(1_440).optional(),
+  funnelWindowDays: z.number().int().positive().max(90).optional(),
+}).strict();
+
+const PostHogUserFunnelStepSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  count: z.number().int().nonnegative(),
+  conversionFromPreviousRatio: z.number().nullable(),
+  dropoffFromPreviousCount: z.number().int().nonnegative().nullable(),
+  dropoffFromPreviousRatio: z.number().nullable(),
+}).strict();
+
+const PostHogUserFunnelBiggestDropoffSchema = z.object({
+  fromStepId: z.string().min(1),
+  fromLabel: z.string().min(1),
+  toStepId: z.string().min(1),
+  toLabel: z.string().min(1),
+  dropoffUsers: z.number().int().nonnegative(),
+  dropoffRatio: z.number(),
+}).strict();
+
+const PostHogUserFunnelBranchSchema = z.object({
+  label: z.string().min(1),
+  count: z.number().int().nonnegative().nullable(),
+  conversionFromPaymentStepRatio: z.number().nullable(),
+  instrumented: z.boolean(),
+  note: z.string().min(1).nullable(),
+}).strict();
+
+export const PostHogGetUserFunnelSummaryResultSchema = z.object({
+  generatedAt: z.number().int().nonnegative(),
+  context: z.string().min(1).nullable(),
+  toplineTimeRange: TimeRangeDescriptorSchema,
+  funnelTimeRange: TimeRangeDescriptorSchema,
+  topline: z.object({
+    homepageUniqueVisitors: z.number().int().nonnegative(),
+    newProfilesStarted: z.number().int().nonnegative(),
+  }).strict(),
+  funnel: z.object({
+    steps: z.array(PostHogUserFunnelStepSchema),
+    biggestDropoff: PostHogUserFunnelBiggestDropoffSchema.nullable(),
+    paymentStepUsers: z.number().int().nonnegative(),
+    checkoutStartedUsers: z.number().int().nonnegative(),
+    paidConversionUsers: z.number().int().nonnegative(),
+    branches: z.object({
+      freeTier: PostHogUserFunnelBranchSchema,
+      core: PostHogUserFunnelBranchSchema,
+      pro: PostHogUserFunnelBranchSchema,
+    }).strict(),
+  }).strict(),
+  instrumentationWarnings: z.array(z.string().min(1)),
   printout: z.string().min(1),
 }).strict();
 

@@ -363,6 +363,7 @@ describe("BrainService tool loop", () => {
       "posthog_get_dashboard_snapshot",
       "posthog_get_info",
       "posthog_get_health_summary",
+      "posthog_get_user_funnel_summary",
       "posthog_get_asset_summary",
       "posthog_get_release_summary",
       "runtime_get_info",

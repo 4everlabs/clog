@@ -24,6 +24,8 @@ import {
   PostHogGetFeatureFlagStatusResultSchema,
   PostHogGetHealthSummaryInputSchema,
   PostHogGetHealthSummaryResultSchema,
+  PostHogGetUserFunnelSummaryInputSchema,
+  PostHogGetUserFunnelSummaryResultSchema,
   PostHogGetInfoInputSchema,
   PostHogGetInfoResultSchema,
   PostHogGetInsightInputSchema,
@@ -105,6 +107,7 @@ const posthogToolMetadata: Record<
   | "posthog_get_dashboard_snapshot"
   | "posthog_get_info"
   | "posthog_get_health_summary"
+  | "posthog_get_user_funnel_summary"
   | "posthog_get_asset_summary"
   | "posthog_get_release_summary"
   | "posthog_list_dashboards"
@@ -140,6 +143,7 @@ const posthogToolMetadata: Record<
   posthog_get_dashboard_snapshot: { exposureTier: "core", capabilityGroup: "investigation" },
   posthog_get_info: { exposureTier: "core", capabilityGroup: "investigation" },
   posthog_get_health_summary: { exposureTier: "core", capabilityGroup: "investigation" },
+  posthog_get_user_funnel_summary: { exposureTier: "core", capabilityGroup: "investigation" },
   posthog_get_asset_summary: { exposureTier: "core", capabilityGroup: "investigation" },
   posthog_get_release_summary: { exposureTier: "core", capabilityGroup: "release_safety" },
   posthog_list_dashboards: { exposureTier: "internal", capabilityGroup: "investigation" },
@@ -212,6 +216,36 @@ const buildPostHogHealthSummaryData = async (
     context: input.context ?? null,
     timeRange,
   });
+};
+
+const buildPostHogUserFunnelSummaryData = async (
+  services: Parameters<NonNullable<RegisteredTool["execute"]>>[0],
+  input: {
+    readonly context?: string;
+    readonly toplineTimePreset?: "last_hour" | "last_12_hours" | "last_24_hours";
+    readonly toplineWindowMinutes?: number;
+    readonly funnelWindowDays?: number;
+  },
+) => {
+  if (!services.posthog?.getUserFunnelSummary) {
+    throw new Error("PostHog user funnel summary is unavailable");
+  }
+
+  const toplineWindowMinutes = resolveTimeRangeWindowMinutes(input.toplineTimePreset, input.toplineWindowMinutes);
+  const summary = await services.posthog.getUserFunnelSummary({
+    context: input.context,
+    toplineWindowMinutes,
+    funnelWindowDays: input.funnelWindowDays,
+  });
+
+  return {
+    ...summary,
+    context: input.context?.trim() || null,
+    toplineTimeRange: buildTimeRangeDescriptor(
+      input.toplineTimePreset,
+      toplineWindowMinutes ?? summary.toplineTimeRange.windowMinutes ?? undefined,
+    ),
+  };
 };
 
 const buildPostHogAssetSummaryData = async (
@@ -605,7 +639,7 @@ const basePosthogTools = [
     },
     async execute(services, input) {
       const suggestedTools = input.kind === "health"
-        ? ["posthog_get_health_summary", "posthog_get_dashboard_snapshot", "posthog_list_errors"]
+        ? ["posthog_get_health_summary", "posthog_get_user_funnel_summary", "posthog_get_dashboard_snapshot", "posthog_list_errors"]
         : input.kind === "assets"
           ? ["posthog_get_asset_summary", "posthog_get_documented_tool_catalog", "posthog_call_mcp_tool"]
           : ["posthog_get_release_summary", "posthog_get_documented_tool_catalog", "posthog_call_mcp_tool"];
@@ -641,6 +675,22 @@ const basePosthogTools = [
     },
     async execute(services, input) {
       return await buildPostHogHealthSummaryData(services, input);
+    },
+  },
+  {
+    name: "posthog_get_user_funnel_summary",
+    title: "PostHog User Funnel Summary",
+    description: "Homepage uniques, profile starts, end-to-end funnel drop-off, and Core/Pro plan branch counts with an explicit free-tier instrumentation warning when missing.",
+    integration: "posthog",
+    approvalRequired: false,
+    implemented: true,
+    inputSchema: PostHogGetUserFunnelSummaryInputSchema,
+    outputSchema: PostHogGetUserFunnelSummaryResultSchema,
+    isEnabled(capabilities) {
+      return capabilities.posthog.canReadInsights;
+    },
+    async execute(services, input) {
+      return await buildPostHogUserFunnelSummaryData(services, input);
     },
   },
   {

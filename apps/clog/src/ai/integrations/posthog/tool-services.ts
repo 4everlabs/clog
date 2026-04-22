@@ -1,8 +1,13 @@
 import { buildPostHogDashboardSnapshot } from "./dashboard-snapshot";
 import { getPostHogDocumentedToolCatalog } from "./documented-tool-catalog";
+import { buildPostHogUserFunnelSummary } from "./summary-builders";
 import type { PostHogApiClient } from "./api-client";
 import type { PostHogIntegrationClient } from "./client";
 import type { PostHogCliTool } from "./cli-tool";
+import {
+  buildPostHogUserFunnelSnapshot,
+  normalizeStructuredPostHogQueryRows,
+} from "./user-funnel-snapshot";
 import type { PostHogWorkspaceReporter } from "./workspace-reporter";
 import type { PostHogToolServices } from "../../tools/types";
 
@@ -80,6 +85,24 @@ export const createPostHogToolServices = ({
       topPathsLimit: input.topPathsLimit,
       runQuery: async (name, query) => await posthogApi.runQuery(name, query),
     }),
+  ),
+  getUserFunnelSummary: async (input = {}) => await recordAsync(
+    posthogWorkspaceReporter,
+    "userFunnelSummary",
+    async () => {
+      const snapshot = await buildPostHogUserFunnelSnapshot({
+        toplineWindowMinutes: input.toplineWindowMinutes,
+        funnelWindowDays: input.funnelWindowDays,
+        runQueryRows: async (_name, query) => {
+          const result = await posthogApi.callMcpTool("query-run", { query });
+          return normalizeStructuredPostHogQueryRows(result);
+        },
+      });
+
+      return buildPostHogUserFunnelSummary(snapshot, {
+        context: input.context ?? null,
+      });
+    },
   ),
   getDocumentedToolCatalog: async (input = {}) => await recordAsync(
     posthogWorkspaceReporter,

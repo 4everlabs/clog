@@ -1,4 +1,5 @@
 import type { PostHogDashboardSnapshot } from "./dashboard-snapshot";
+import type { PostHogUserFunnelSnapshot } from "./user-funnel-snapshot";
 
 interface SummaryMetadata {
   readonly context?: string | null;
@@ -89,6 +90,104 @@ export const buildPostHogHealthSummary = (
       latestProductionReadinessScore: latestScore,
       operations,
     },
+    printout: lines.join("\n"),
+  };
+};
+
+interface UserFunnelSummaryMetadata {
+  readonly context?: string | null;
+  readonly toplineTimeRange?: {
+    readonly preset: "last_hour" | "last_12_hours" | "last_24_hours" | null;
+    readonly windowMinutes: number | null;
+    readonly label: string | null;
+  };
+  readonly funnelTimeRange?: {
+    readonly preset: "last_hour" | "last_12_hours" | "last_24_hours" | null;
+    readonly windowMinutes: number | null;
+    readonly label: string | null;
+  };
+}
+
+export interface PostHogUserFunnelSummary {
+  readonly generatedAt: number;
+  readonly context: string | null;
+  readonly toplineTimeRange: {
+    readonly preset: "last_hour" | "last_12_hours" | "last_24_hours" | null;
+    readonly windowMinutes: number | null;
+    readonly label: string | null;
+  };
+  readonly funnelTimeRange: {
+    readonly preset: "last_hour" | "last_12_hours" | "last_24_hours" | null;
+    readonly windowMinutes: number | null;
+    readonly label: string | null;
+  };
+  readonly topline: {
+    readonly homepageUniqueVisitors: number;
+    readonly newProfilesStarted: number;
+  };
+  readonly funnel: {
+    readonly steps: PostHogUserFunnelSnapshot["funnel"]["steps"];
+    readonly biggestDropoff: PostHogUserFunnelSnapshot["funnel"]["biggestDropoff"];
+    readonly paymentStepUsers: number;
+    readonly checkoutStartedUsers: number;
+    readonly paidConversionUsers: number;
+    readonly branches: PostHogUserFunnelSnapshot["funnel"]["branches"];
+  };
+  readonly instrumentationWarnings: readonly string[];
+  readonly printout: string;
+}
+
+export const buildPostHogUserFunnelSummary = (
+  snapshot: PostHogUserFunnelSnapshot,
+  metadata: UserFunnelSummaryMetadata = {},
+): PostHogUserFunnelSummary => {
+  const lines = [
+    "PostHog user funnel summary",
+    `- Topline (${metadata.toplineTimeRange?.label ?? `last ${snapshot.toplineWindowMinutes} minutes`}): ${snapshot.topline.homepageUniqueVisitors} homepage visitors, ${snapshot.topline.newProfilesStarted} profile starts`,
+    `- Funnel window: ${metadata.funnelTimeRange?.label ?? `last ${snapshot.funnelWindowDays} days`}`,
+    ...snapshot.funnel.steps.map((step, index) => (
+      index === 0
+        ? `- Step ${index + 1}: ${step.label} = ${step.count} users`
+        : `- Step ${index + 1}: ${step.label} = ${step.count} users (${step.conversionFromPreviousRatio?.toFixed(1) ?? "n/a"}% from previous, ${step.dropoffFromPreviousCount ?? 0} dropped)`
+    )),
+    snapshot.funnel.biggestDropoff
+      ? `- Biggest drop-off: ${snapshot.funnel.biggestDropoff.fromLabel} -> ${snapshot.funnel.biggestDropoff.toLabel} lost ${snapshot.funnel.biggestDropoff.dropoffUsers} users (${snapshot.funnel.biggestDropoff.dropoffRatio.toFixed(1)}%)`
+      : "- Biggest drop-off: n/a",
+    `- Branches from payment step (${snapshot.funnel.paymentStepUsers} users): ${snapshot.funnel.branches.freeTier.instrumented
+      ? `Free ${snapshot.funnel.branches.freeTier.count ?? 0} (${snapshot.funnel.branches.freeTier.conversionFromPaymentStepRatio?.toFixed(1) ?? "n/a"}%)`
+      : "Free tier missing instrumentation"}; Core ${snapshot.funnel.branches.core.count ?? 0} (${snapshot.funnel.branches.core.conversionFromPaymentStepRatio?.toFixed(1) ?? "n/a"}%); Pro ${snapshot.funnel.branches.pro.count ?? 0} (${snapshot.funnel.branches.pro.conversionFromPaymentStepRatio?.toFixed(1) ?? "n/a"}%)`,
+    `- Paid confirmations: ${snapshot.funnel.paidConversionUsers}`,
+    snapshot.instrumentationWarnings.length === 0
+      ? "- Instrumentation warnings: none"
+      : `- Instrumentation warnings: ${snapshot.instrumentationWarnings.join("; ")}`,
+  ];
+
+  return {
+    generatedAt: snapshot.generatedAt,
+    context: metadata.context ?? null,
+    toplineTimeRange: metadata.toplineTimeRange ?? {
+      preset: null,
+      windowMinutes: snapshot.toplineWindowMinutes,
+      label: snapshot.toplineWindowMinutes === 60 ? "last hour" : `last ${snapshot.toplineWindowMinutes} minutes`,
+    },
+    funnelTimeRange: metadata.funnelTimeRange ?? {
+      preset: null,
+      windowMinutes: snapshot.funnelWindowDays * 24 * 60,
+      label: snapshot.funnelWindowDays === 1 ? "last day" : `last ${snapshot.funnelWindowDays} days`,
+    },
+    topline: {
+      homepageUniqueVisitors: snapshot.topline.homepageUniqueVisitors,
+      newProfilesStarted: snapshot.topline.newProfilesStarted,
+    },
+    funnel: {
+      steps: [...snapshot.funnel.steps],
+      biggestDropoff: snapshot.funnel.biggestDropoff,
+      paymentStepUsers: snapshot.funnel.paymentStepUsers,
+      checkoutStartedUsers: snapshot.funnel.checkoutStartedUsers,
+      paidConversionUsers: snapshot.funnel.paidConversionUsers,
+      branches: snapshot.funnel.branches,
+    },
+    instrumentationWarnings: [...snapshot.instrumentationWarnings],
     printout: lines.join("\n"),
   };
 };

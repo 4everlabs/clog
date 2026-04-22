@@ -17,6 +17,7 @@ import type {
 import type { z, ZodTypeAny } from "zod";
 import type { PostHogDashboardSnapshot } from "../integrations/posthog/dashboard-snapshot";
 import type { PostHogDocumentedToolCatalog } from "../integrations/posthog/documented-tool-catalog";
+import type { PostHogUserFunnelSummary } from "../integrations/posthog/summary-builders";
 import type {
   AgentToolName,
   ToolCapabilityGroup,
@@ -82,6 +83,11 @@ export interface PostHogToolServices {
     readonly windowMinutes?: number;
     readonly topPathsLimit?: number;
   }): Promise<PostHogDashboardSnapshot>;
+  getUserFunnelSummary?(input?: {
+    readonly context?: string;
+    readonly toplineWindowMinutes?: number;
+    readonly funnelWindowDays?: number;
+  }): Promise<PostHogUserFunnelSummary>;
   getDocumentedToolCatalog(input?: {
     readonly feature?: string;
     readonly priority?: "core" | "high" | "extended";

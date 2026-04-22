@@ -1043,6 +1043,185 @@ describe("ToolExecutor", () => {
     expect(result.content).toContain("\"label\": \"last hour\"");
   });
 
+  test("executes the PostHog user funnel summary tool", async () => {
+    const executor = new ToolExecutor({
+      capabilities: createCapabilities(),
+      services: {
+        posthog: {
+          getOrganizations: async () => [],
+          getProjects: async () => ({
+            organizationId: "org_1",
+            projects: [],
+          }),
+          listMcpTools: async () => ({
+            total: 0,
+            returned: 0,
+            tools: [],
+          }),
+          callMcpTool: async (toolName) => ({
+            toolName,
+            text: "mcp ok",
+          }),
+          runQuery: async (name) => ({
+            name,
+            columns: [],
+            results: [],
+          }),
+          listErrors: async () => [],
+          getDashboardSnapshot: async () => ({
+            generatedAt: 1,
+            windowMinutes: 60,
+            windowStartAt: 0,
+            windowEndAt: 1,
+            summary: {
+              pageviews: 10,
+              uniqueVisitors: 5,
+              webVitalsEvents: 4,
+              exceptionEvents: 0,
+              distinctExceptionIssues: 0,
+              webVitalsCoverageRatio: 0.4,
+              errorRatePer1kPageviews: 0,
+              slowLcpPages: 0,
+              slowInpPages: 0,
+              slowFcpPages: 0,
+              slowClsPages: 0,
+              productionReadinessScore: 100,
+              anomalyCount: 0,
+            },
+            previousWindow: {
+              pageviews: 12,
+              uniqueVisitors: 6,
+              webVitalsEvents: 5,
+              exceptionEvents: 0,
+              distinctExceptionIssues: 0,
+              pageviewsDeltaPercent: -16.7,
+              uniqueVisitorsDeltaPercent: -16.7,
+              webVitalsDeltaPercent: -20,
+              exceptionDeltaPercent: null,
+              distinctExceptionIssuesDeltaPercent: null,
+            },
+            topPaths: [],
+            lcp: [],
+            inp: [],
+            fcp: [],
+            cls: [],
+            anomalies: [],
+          }),
+          getUserFunnelSummary: async () => ({
+            generatedAt: 1,
+            context: "users",
+            toplineTimeRange: {
+              preset: "last_hour",
+              windowMinutes: 60,
+              label: "last hour",
+            },
+            funnelTimeRange: {
+              preset: null,
+              windowMinutes: 10_080,
+              label: "last 7 days",
+            },
+            topline: {
+              homepageUniqueVisitors: 12,
+              newProfilesStarted: 4,
+            },
+            funnel: {
+              steps: [{
+                id: "homepage",
+                label: "Homepage visited",
+                count: 12,
+                conversionFromPreviousRatio: null,
+                dropoffFromPreviousCount: null,
+                dropoffFromPreviousRatio: null,
+              }],
+              biggestDropoff: null,
+              paymentStepUsers: 3,
+              checkoutStartedUsers: 2,
+              paidConversionUsers: 1,
+              branches: {
+                freeTier: {
+                  label: "Free tier picked",
+                  count: null,
+                  conversionFromPaymentStepRatio: null,
+                  instrumented: false,
+                  note: "Missing source-of-truth signal.",
+                },
+                core: {
+                  label: "Core checkout started",
+                  count: 2,
+                  conversionFromPaymentStepRatio: 66.7,
+                  instrumented: true,
+                  note: "Core maps to planKey='pro'.",
+                },
+                pro: {
+                  label: "Pro checkout started",
+                  count: 0,
+                  conversionFromPaymentStepRatio: 0,
+                  instrumented: true,
+                  note: "Pro maps to planKey='ultra'.",
+                },
+              },
+            },
+            instrumentationWarnings: ["No canonical free-tier pick signal is currently instrumented in PostHog."],
+            printout: "user funnel ok",
+          }),
+          getDocumentedToolCatalog: async () => createDocumentedCatalog(),
+          queryInsight: async (name) => ({
+            name,
+            columns: [],
+            results: [],
+          }),
+          listEndpoints: () => ({
+            ok: true,
+            command: "posthog-cli",
+            args: ["list"],
+            stdout: "list ok",
+            stderr: "",
+            exitCode: 0,
+            durationMs: 1,
+            workingDirectory: "/workspace",
+          }),
+          diffEndpoints: () => ({
+            ok: true,
+            command: "posthog-cli",
+            args: ["diff"],
+            stdout: "diff ok",
+            stderr: "",
+            exitCode: 0,
+            durationMs: 1,
+            workingDirectory: "/workspace",
+          }),
+          runEndpoint: () => ({
+            ok: true,
+            command: "posthog-cli",
+            args: ["run"],
+            stdout: "run ok",
+            stderr: "",
+            exitCode: 0,
+            durationMs: 1,
+            workingDirectory: "/workspace",
+          }),
+        },
+        notion: null,
+        runtime: createRuntimeServices(),
+        shell: null,
+        github: null,
+        vercel: null,
+      },
+    });
+
+    const result = await executor.execute("posthog_get_user_funnel_summary", {
+      context: "users",
+      toplineTimePreset: "last_hour",
+      funnelWindowDays: 7,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.content).toContain("\"homepageUniqueVisitors\": 12");
+    expect(result.content).toContain("\"newProfilesStarted\": 4");
+    expect(result.content).toContain("\"instrumented\": false");
+    expect(result.content).toContain("\"label\": \"last 7 days\"");
+  });
+
   test("executes a first-class PostHog SQL wrapper tool", async () => {
     const executor = new ToolExecutor({
       capabilities: createCapabilities(),
